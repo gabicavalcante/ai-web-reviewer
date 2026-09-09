@@ -61,6 +61,13 @@ every thread anchored to it. The page surfaces orphans in their own section rath
 hiding them, but the anchor is still lost. Do not amend mid-review unless asked, and say
 what it will cost when you do.
 
+## The build checks itself
+
+`review.py build` runs the page's script against a minimal DOM (`tool/smoke.js`) when
+`node` is available, and refuses to serve a page whose script throws. A page that throws
+draws its header and then stops, which looks like missing data rather than broken code.
+Without node the check is skipped with a message, so read the page before trusting it.
+
 ## Write the copy for a person
 
 Before you build the page, run the `deslop` skill over every string you wrote: the

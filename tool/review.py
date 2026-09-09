@@ -11,6 +11,7 @@ asked for is taken, and prints the URL it settled on.
 import argparse
 import os
 import pathlib
+import shutil
 import socket
 import subprocess
 import sys
@@ -68,7 +69,25 @@ def build(rng, narrative):
     target = state / "index.html"
     target.write_text(out)
     print(f"built {target} ({len(out):,} bytes)")
+    smoke(target)
     return target
+
+
+def smoke(page):
+    """Run the page's script against a minimal DOM, when node is available.
+
+    A page whose script throws renders a masthead and nothing else, which looks like
+    a data problem rather than a code one. Better to refuse to serve it.
+    """
+    if not shutil.which("node"):
+        print("node not found, skipping the smoke check")
+        return
+    result = subprocess.run(
+        ["node", str(HERE / "smoke.js"), str(page)], capture_output=True, text=True
+    )
+    if result.returncode != 0:
+        raise SystemExit(result.stderr.strip() or "the page script failed its smoke check")
+    print(result.stdout.strip())
 
 
 def free_port(preferred):
