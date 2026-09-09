@@ -202,11 +202,18 @@
   /* ---------- diff ---------- */
   /* A follow-up is a fixup that git will squash into the commit above it. It is drawn
      inside its target rather than beside it, so a review is as long as the change is. */
-  .followup { display: flex; align-items: baseline; flex-wrap: wrap; gap: 10px; padding: 16px 26px 8px; border-top: 1px solid var(--line-soft); font-family: var(--sans); }
-  .followup .tag { font-family: var(--mono); font-size: 10.5px; letter-spacing: .06em; text-transform: uppercase; color: var(--accent); }
-  .followup .sha { font-family: var(--mono); font-size: 11.5px; color: var(--ink-faint); }
-  .followup .sub { font-size: 13px; color: var(--ink-soft); }
-  .followup .stat { margin-left: auto; font-family: var(--mono); font-size: 11px; color: var(--ink-faint); }
+  /* A fixup is a separate commit that amends the one above it, and a hairline between
+     the two diffs was not enough to say so: the pane read as one commit. The block is
+     inset behind its own bar and on its own ground, so the break is visible before any
+     of the words are. */
+  .followup { margin: 20px 0 0; border-top: 1px solid var(--line); border-left: 3px solid var(--accent); background: var(--ground); }
+  .followup-head { display: flex; align-items: baseline; flex-wrap: wrap; gap: 10px; padding: 13px 22px 5px; font-family: var(--sans); }
+  .followup-head .tag { font-family: var(--mono); font-size: 10.5px; font-weight: 600; letter-spacing: .07em; text-transform: uppercase; color: var(--accent); flex: none; }
+  .followup-head .sha { font-family: var(--mono); font-size: 11.5px; color: var(--ink-faint); flex: none; }
+  .followup-head .sub { font-size: 13px; color: var(--ink); }
+  .followup-head .stat { margin-left: auto; flex: none; font-family: var(--mono); font-size: 11px; color: var(--ink-faint); }
+  .followup-note { padding: 0 22px 12px; font-family: var(--sans); font-size: 12px; line-height: 1.5; color: var(--ink-soft); }
+  .followup .file:last-child { border-bottom: none; }
   .difftools { display: flex; align-items: center; gap: 14px; padding: 12px 26px; border-bottom: 1px solid var(--line); font-family: var(--mono); font-size: 11px; color: var(--ink-faint); letter-spacing: .05em; text-transform: uppercase; }
   .difftools .spacer { margin-left: auto; }
   .toggle { display: inline-flex; align-items: center; gap: 7px; cursor: pointer; color: var(--ink-soft); text-transform: none; letter-spacing: 0; font-size: 12px; }
@@ -717,14 +724,24 @@
 
     const files = el("div", "files");
     c.files.forEach(f => files.appendChild(renderFile(f, c.short)));
-    (c.followups || []).forEach(fu => {
-      const mark = el("div", "followup");
-      mark.appendChild(el("span", "tag", "follow-up"));
+    const fixups = c.followups || [];
+    fixups.forEach((fu, i) => {
+      const block = el("div", "followup");
+      const mark = el("div", "followup-head");
+      mark.appendChild(el("span", "tag",
+        fixups.length === 1 ? "fixup" : "fixup " + (i + 1) + " of " + fixups.length));
       mark.appendChild(el("span", "sha", fu.short));
       mark.appendChild(el("span", "sub", fu.headline || fu.subject));
-      mark.appendChild(el("span", "stat", "+" + fu.additions + " -" + fu.deletions));
-      files.appendChild(mark);
-      fu.files.forEach(f => files.appendChild(renderFile(f, fu.short)));
+      mark.appendChild(el("span", "stat", "+" + fu.additions + " −" + fu.deletions));
+      block.appendChild(mark);
+      // Said once per commit, not once per fixup, since three of them repeat it three times.
+      if (i === 0) {
+        block.appendChild(el("div", "followup-note",
+          "A later commit that amends " + c.short + ". Its diff is separate here, and stays "
+          + "separate until git squashes it into " + c.short + "."));
+      }
+      fu.files.forEach(f => block.appendChild(renderFile(f, fu.short)));
+      files.appendChild(block);
     });
     pane.appendChild(files);
 
