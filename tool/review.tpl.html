@@ -1,0 +1,933 @@
+<title>__TITLE__</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,500;0,6..72,600;1,6..72,400&family=IBM+Plex+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+  :root {
+    --ground: #F4F6FA;
+    --surface: #FFFFFF;
+    --surface-2: #EDF1F7;
+    --ink: #141C28;
+    --ink-soft: #5C6B80;
+    --ink-faint: #8794A6;
+    --line: #D7DEE8;
+    --line-soft: #E6EBF2;
+    --accent: #1F4B99;
+    --accent-ink: #12315F;
+    --accent-soft: #E4EBF7;
+    --on-accent: #FFFFFF;
+    --add: #1B6E42;
+    --add-bg: #E6F3EB;
+    --add-gutter: #CBE6D6;
+    --del: #A81F2A;
+    --del-bg: #FBEAEB;
+    --del-gutter: #F2CFD2;
+    --shadow: 0 1px 2px rgba(20, 28, 40, .06), 0 8px 24px -16px rgba(20, 28, 40, .18);
+    --mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    --sans: "IBM Plex Sans", system-ui, -apple-system, Segoe UI, sans-serif;
+    --serif: "Newsreader", Georgia, "Times New Roman", serif;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --ground: #0E131A;
+      --surface: #151C25;
+      --surface-2: #1D2632;
+      --ink: #E3EAF3;
+      --ink-soft: #8B9BB0;
+      --ink-faint: #6B7B90;
+      --line: #28323F;
+      --line-soft: #1F2833;
+      --accent: #84AAFF;
+      --accent-ink: #B9CEFF;
+      --accent-soft: #1A2740;
+      --on-accent: #0E131A;
+      --add: #5FD08C;
+      --add-bg: #12271C;
+      --add-gutter: #1D4531;
+      --del: #F0868F;
+      --del-bg: #2B1417;
+      --del-gutter: #4A2126;
+      --shadow: 0 1px 2px rgba(0, 0, 0, .4), 0 8px 24px -16px rgba(0, 0, 0, .7);
+    }
+  }
+  :root[data-theme="dark"] {
+    --ground: #0E131A;
+    --surface: #151C25;
+    --surface-2: #1D2632;
+    --ink: #E3EAF3;
+    --ink-soft: #8B9BB0;
+    --ink-faint: #6B7B90;
+    --line: #28323F;
+    --line-soft: #1F2833;
+    --accent: #84AAFF;
+    --accent-ink: #B9CEFF;
+    --accent-soft: #1A2740;
+    --on-accent: #0E131A;
+    --add: #5FD08C;
+    --add-bg: #12271C;
+    --add-gutter: #1D4531;
+    --del: #F0868F;
+    --del-bg: #2B1417;
+    --del-gutter: #4A2126;
+    --shadow: 0 1px 2px rgba(0, 0, 0, .4), 0 8px 24px -16px rgba(0, 0, 0, .7);
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    background: var(--ground);
+    color: var(--ink);
+    font-family: var(--sans);
+    font-size: 15px;
+    line-height: 1.55;
+    -webkit-font-smoothing: antialiased;
+  }
+  .shell { max-width: 1320px; margin: 0 auto; padding: 32px 24px 72px; }
+
+  /* ---------- header ---------- */
+  .masthead { display: flex; flex-direction: column; gap: 14px; padding-bottom: 26px; border-bottom: 1px solid var(--line); }
+  .eyebrow { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; font-family: var(--mono); font-size: 11.5px; letter-spacing: .06em; text-transform: uppercase; color: var(--ink-faint); }
+  .eyebrow .branch { color: var(--accent); }
+  .eyebrow .sep { color: var(--line); }
+  h1 { font-family: var(--serif); font-size: clamp(30px, 4.4vw, 44px); font-weight: 600; line-height: 1.08; letter-spacing: -.015em; margin: 0; text-wrap: balance; }
+  .dek { max-width: 62ch; color: var(--ink-soft); font-size: 16.5px; margin: 0; }
+  .figures { display: flex; flex-wrap: wrap; gap: 0; margin-top: 6px; }
+  .figure { padding: 0 22px 0 0; margin-right: 22px; border-right: 1px solid var(--line); }
+  .figure:last-child { border-right: 0; margin-right: 0; padding-right: 0; }
+  .figure .v { font-family: var(--mono); font-size: 17px; font-weight: 500; font-variant-numeric: tabular-nums; display: block; }
+  .figure .k { font-size: 12px; color: var(--ink-faint); letter-spacing: .02em; }
+  .figure .was { color: var(--ink-faint); text-decoration: line-through; font-weight: 400; }
+
+  /* ---------- flow strip ---------- */
+  .flow { margin: 30px 0 34px; }
+  .flow h2, .rail h2, .openq h2, .orphans h2 { font-family: var(--mono); font-size: 11.5px; font-weight: 500; letter-spacing: .09em; text-transform: uppercase; color: var(--ink-faint); margin: 0 0 12px; }
+  .stages { display: flex; align-items: stretch; gap: 0; overflow-x: auto; padding-bottom: 4px; }
+  .stage { flex: 1 1 0; min-width: 148px; padding: 12px 16px; background: var(--surface); border: 1px solid var(--line); border-right-width: 0; display: flex; flex-direction: column; gap: 7px; }
+  .stage:first-child { border-radius: 3px 0 0 3px; }
+  .stage:last-child { border-right-width: 1px; border-radius: 0 3px 3px 0; }
+  .stage .where { font-family: var(--mono); font-size: 10.5px; letter-spacing: .05em; text-transform: uppercase; color: var(--ink-faint); }
+  .stage .what { font-size: 14px; font-weight: 500; line-height: 1.3; }
+  .stage .marks { display: flex; gap: 4px; margin-top: auto; }
+  .mark { font-family: var(--mono); font-size: 11px; font-weight: 500; width: 19px; height: 19px; display: grid; place-items: center; border-radius: 50%; background: var(--accent-soft); color: var(--accent-ink); }
+  .mark.none { background: var(--surface-2); color: var(--ink-faint); }
+
+  /* ---------- layout ---------- */
+  .board { display: grid; grid-template-columns: 340px minmax(0, 1fr); gap: 28px; align-items: start; }
+  @media (max-width: 940px) { .board { grid-template-columns: 1fr; } }
+
+  .rail { position: sticky; top: 20px; }
+  @media (max-width: 940px) { .rail { position: static; } }
+  .commits { display: flex; flex-direction: column; gap: 8px; }
+  .commit-btn { display: grid; grid-template-columns: 26px minmax(0, 1fr); gap: 12px; text-align: left; padding: 13px 14px; background: var(--surface); border: 1px solid var(--line); border-radius: 3px; color: inherit; font: inherit; cursor: pointer; transition: border-color .12s, background .12s; }
+  .commit-btn:hover { border-color: var(--accent); }
+  .commit-btn[aria-current="true"] { border-color: var(--accent); background: var(--accent-soft); box-shadow: inset 3px 0 0 var(--accent); }
+  .commit-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .cb-num { font-family: var(--mono); font-size: 12px; font-weight: 500; color: var(--ink-faint); padding-top: 2px; font-variant-numeric: tabular-nums; }
+  .commit-btn[aria-current="true"] .cb-num { color: var(--accent-ink); }
+  .cb-body { min-width: 0; display: flex; flex-direction: column; gap: 5px; }
+  .cb-head { font-size: 14px; font-weight: 500; line-height: 1.32; }
+  .cb-meta { display: flex; align-items: center; gap: 9px; font-family: var(--mono); font-size: 11px; color: var(--ink-faint); }
+  .cb-meta .plus { color: var(--add); }
+  .cb-meta .minus { color: var(--del); }
+  .cb-meta .done { color: var(--accent); }
+  .bar { display: flex; height: 3px; width: 46px; border-radius: 2px; overflow: hidden; background: var(--line-soft); }
+  .bar i { display: block; height: 100%; }
+  .bar .a { background: var(--add); }
+  .bar .d { background: var(--del); }
+  .progress { margin-top: 14px; font-family: var(--mono); font-size: 11px; color: var(--ink-faint); display: flex; align-items: center; gap: 8px; }
+  .progress .track { flex: 1; height: 3px; background: var(--line-soft); border-radius: 2px; overflow: hidden; }
+  .progress .track i { display: block; height: 100%; background: var(--accent); transition: width .18s; }
+
+  /* ---------- detail ---------- */
+  .pane { background: var(--surface); border: 1px solid var(--line); border-radius: 3px; box-shadow: var(--shadow); overflow: hidden; }
+  .pane-head { padding: 24px 26px; border-bottom: 1px solid var(--line); display: flex; flex-direction: column; gap: 12px; }
+  .kindrow { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  .kind { font-family: var(--mono); font-size: 11px; letter-spacing: .05em; padding: 3px 8px; border-radius: 2px; background: var(--accent-soft); color: var(--accent-ink); }
+  .sha { font-family: var(--mono); font-size: 11.5px; color: var(--ink-faint); }
+  .stagetag { font-family: var(--mono); font-size: 11px; letter-spacing: .04em; text-transform: uppercase; color: var(--ink-faint); margin-left: auto; }
+  .pane-head h3 { font-family: var(--serif); font-size: clamp(21px, 2.6vw, 27px); font-weight: 600; line-height: 1.18; margin: 0; letter-spacing: -.01em; text-wrap: balance; }
+  .why { margin: 0; color: var(--ink-soft); max-width: 68ch; }
+  .points { margin: 4px 0 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 9px; max-width: 72ch; }
+  .points li { position: relative; padding-left: 18px; font-size: 14.5px; }
+  .points li::before { content: ""; position: absolute; left: 0; top: .62em; width: 7px; height: 1px; background: var(--accent); }
+  .points code, .why code, .openq code { font-family: var(--mono); font-size: .88em; background: var(--surface-2); padding: 1px 5px; border-radius: 2px; }
+
+  /* verified matrix */
+  .verified { padding: 22px 26px; border-bottom: 1px solid var(--line); background: var(--surface-2); }
+  .verified h4 { font-family: var(--mono); font-size: 11px; font-weight: 500; letter-spacing: .08em; text-transform: uppercase; color: var(--ink-faint); margin: 0 0 12px; }
+  .vwrap { overflow-x: auto; }
+  table.matrix { border-collapse: collapse; width: 100%; font-size: 13.5px; }
+  table.matrix th { text-align: left; font-family: var(--mono); font-size: 10.5px; font-weight: 500; letter-spacing: .06em; text-transform: uppercase; color: var(--ink-faint); padding: 0 12px 8px 0; border-bottom: 1px solid var(--line); }
+  table.matrix td { padding: 8px 12px 8px 0; border-bottom: 1px solid var(--line-soft); vertical-align: baseline; }
+  table.matrix tr:last-child td { border-bottom: 0; }
+  table.matrix .num { font-family: var(--mono); font-variant-numeric: tabular-nums; width: 1%; white-space: nowrap; }
+  .ok { color: var(--add); font-family: var(--mono); font-size: 12px; white-space: nowrap; }
+
+  /* ---------- diff ---------- */
+  .difftools { display: flex; align-items: center; gap: 14px; padding: 12px 26px; border-bottom: 1px solid var(--line); font-family: var(--mono); font-size: 11px; color: var(--ink-faint); letter-spacing: .05em; text-transform: uppercase; }
+  .difftools .spacer { margin-left: auto; }
+  .toggle { display: inline-flex; align-items: center; gap: 7px; cursor: pointer; color: var(--ink-soft); text-transform: none; letter-spacing: 0; font-size: 12px; }
+  .toggle input { accent-color: var(--accent); margin: 0; }
+  .files { display: flex; flex-direction: column; }
+  .file { border-bottom: 1px solid var(--line); }
+  .file:last-child { border-bottom: 0; }
+  .file-head { width: 100%; display: flex; align-items: center; gap: 12px; padding: 12px 26px; background: var(--surface-2); border: 0; border-bottom: 1px solid var(--line); font: inherit; color: inherit; cursor: pointer; text-align: left; }
+  .file-head:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+  .chev { font-family: var(--mono); font-size: 10px; color: var(--ink-faint); width: 10px; flex: none; transition: transform .14s; }
+  .file[data-open="false"] .chev { transform: rotate(-90deg); }
+  .fpath { font-family: var(--mono); font-size: 12.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .status { font-family: var(--mono); font-size: 10px; letter-spacing: .06em; text-transform: uppercase; padding: 2px 7px; border-radius: 2px; flex: none; }
+  .status.added { background: var(--add-bg); color: var(--add); }
+  .status.deleted { background: var(--del-bg); color: var(--del); }
+  .status.modified { background: var(--accent-soft); color: var(--accent-ink); }
+  .fstat { margin-left: auto; font-family: var(--mono); font-size: 11.5px; flex: none; font-variant-numeric: tabular-nums; }
+  .fstat .plus { color: var(--add); }
+  .fstat .minus { color: var(--del); }
+  .file[data-open="false"] .diffwrap { display: none; }
+  .diffwrap { overflow-x: auto; }
+  table.diff { border-collapse: collapse; width: 100%; font-family: var(--mono); font-size: 12.5px; line-height: 1.65; }
+  table.diff td { padding: 0; vertical-align: top; }
+  .gut { width: 1%; white-space: nowrap; text-align: right; padding: 0 10px 0 14px !important; color: var(--ink-faint); font-variant-numeric: tabular-nums; user-select: none; font-size: 11.5px; }
+  .sign { width: 1%; padding: 0 6px !important; user-select: none; text-align: center; color: var(--ink-faint); }
+  .code { white-space: pre; padding-right: 24px !important; }
+  body.wrap .code { white-space: pre-wrap; overflow-wrap: anywhere; }
+  tr.add { background: var(--add-bg); }
+  tr.add .gut { background: var(--add-gutter); color: var(--add); }
+  tr.add .sign { color: var(--add); }
+  tr.del { background: var(--del-bg); }
+  tr.del .gut { background: var(--del-gutter); color: var(--del); }
+  tr.del .sign { color: var(--del); }
+  tr.hunk td { background: var(--surface-2); color: var(--ink-faint); padding: 5px 14px !important; font-size: 11.5px; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+  body.only-changes tr.ctx { display: none; }
+
+  .msg { padding: 20px 26px; border-top: 1px solid var(--line); }
+  .msg summary { font-family: var(--mono); font-size: 11px; letter-spacing: .07em; text-transform: uppercase; color: var(--ink-faint); cursor: pointer; }
+  .msg summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+  .msg pre { font-family: var(--mono); font-size: 12.5px; line-height: 1.62; white-space: pre-wrap; color: var(--ink-soft); margin: 14px 0 0; overflow-x: auto; }
+
+  /* ---------- open questions ---------- */
+  .openq { margin-top: 40px; padding-top: 26px; border-top: 1px solid var(--line); }
+  .qgrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(258px, 1fr)); gap: 1px; background: var(--line); border: 1px solid var(--line); border-radius: 3px; overflow: hidden; }
+  .q { background: var(--surface); padding: 17px 19px; display: flex; flex-direction: column; gap: 7px; }
+  .q .qk { font-family: var(--mono); font-size: 10.5px; letter-spacing: .06em; text-transform: uppercase; color: var(--del); }
+  .q.info .qk { color: var(--accent); }
+  .q .qt { font-size: 14.5px; font-weight: 500; line-height: 1.35; }
+  .q p { margin: 0; font-size: 13.5px; color: var(--ink-soft); }
+  footer { margin-top: 34px; font-family: var(--mono); font-size: 11px; color: var(--ink-faint); display: flex; flex-wrap: wrap; gap: 8px; }
+  footer .sep { color: var(--line); }
+
+  /* ---------- inline Q&A ---------- */
+  .gut { cursor: pointer; position: relative; }
+  table.diff tr:hover .gut::after { content: "?"; position: absolute; right: 2px; top: 0; font-size: 10px; color: var(--accent); }
+  table.diff tr[data-asked="true"] .gut::before { content: ""; position: absolute; left: 4px; top: .62em; width: 5px; height: 5px; border-radius: 50%; background: var(--accent); }
+  tr.thread-row > td, tr.composer-row > td { padding: 0 !important; background: var(--surface); border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+  .thread { margin: 0 24px 0 52px; padding: 14px 0; display: flex; flex-direction: column; gap: 11px; font-family: var(--sans); white-space: normal; }
+  .turn { display: grid; grid-template-columns: 62px minmax(0, 1fr); gap: 12px; align-items: baseline; }
+  .turn .who { font-family: var(--mono); font-size: 10.5px; letter-spacing: .06em; text-transform: uppercase; color: var(--ink-faint); }
+  .turn.claude .who { color: var(--accent); }
+  .turn .said { font-size: 14px; line-height: 1.55; white-space: pre-wrap; max-width: 76ch; }
+  .turn .said code { font-family: var(--mono); font-size: .88em; background: var(--surface-2); padding: 1px 5px; border-radius: 2px; }
+  .pending { font-family: var(--mono); font-size: 11.5px; color: var(--ink-faint); display: flex; align-items: center; gap: 8px; }
+  .pending .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--accent); animation: pulse 1.4s ease-in-out infinite; }
+  @keyframes pulse { 0%, 100% { opacity: .25; } 50% { opacity: 1; } }
+  .composer { margin: 0 24px 0 52px; padding: 14px 0; display: flex; flex-direction: column; gap: 9px; font-family: var(--sans); white-space: normal; }
+  .composer .anchor { font-family: var(--mono); font-size: 11px; color: var(--ink-faint); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .composer textarea { font-family: var(--sans); font-size: 14px; line-height: 1.5; color: var(--ink); background: var(--ground); border: 1px solid var(--line); border-radius: 3px; padding: 9px 11px; resize: vertical; min-height: 68px; width: 100%; max-width: 76ch; }
+  .composer textarea:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+  .composer .row { display: flex; align-items: center; gap: 10px; }
+  .btn { font-family: var(--sans); font-size: 13px; font-weight: 500; padding: 6px 14px; border-radius: 3px; border: 1px solid var(--accent); background: var(--accent); color: var(--on-accent); cursor: pointer; }
+  .btn.ghost { background: transparent; color: var(--accent); border-color: var(--accent); }
+  .btn.ghost:hover { background: var(--accent-soft); }
+  .btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .composer .hint { font-family: var(--mono); font-size: 10.5px; color: var(--ink-faint); }
+  .thread.done { opacity: .58; }
+  .thread .acts { display: flex; align-items: center; gap: 10px; }
+  .btn.small { font-size: 12px; padding: 4px 10px; }
+  .resolved-line { display: flex; align-items: baseline; gap: 10px; font-family: var(--sans); white-space: normal; margin: 0 24px 0 52px; padding: 11px 0; }
+  .resolved-line .tick { font-family: var(--mono); font-size: 11px; letter-spacing: .05em; text-transform: uppercase; color: var(--add); flex: none; }
+  .resolved-line .q { font-size: 13.5px; color: var(--ink-soft); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .resolved-line .btn { margin-left: auto; flex: none; }
+  table.diff tr[data-asked="resolved"] .gut::before { background: transparent; box-shadow: inset 0 0 0 1px var(--ink-faint); }
+  body.hide-resolved tr.thread-row[data-resolved="true"] { display: none; }
+  body.hide-resolved table.diff tr[data-asked="resolved"] .gut::before { display: none; }
+  .turn.ask .said { border-left: 2px solid var(--accent); padding-left: 12px; }
+  .yourcall { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; font-family: var(--mono); font-size: 11px; letter-spacing: .05em; text-transform: uppercase; color: var(--accent); }
+  .did { border-left: 2px solid var(--add); padding: 2px 0 2px 12px; display: flex; flex-direction: column; gap: 4px; }
+  .did .landed { font-family: var(--mono); font-size: 11px; letter-spacing: .04em; text-transform: uppercase; color: var(--add); }
+  .did .sha { font-family: var(--mono); font-size: 12px; color: var(--ink); }
+  .did .stat { font-family: var(--mono); font-size: 11px; color: var(--ink-faint); }
+  .orphans { margin-top: 40px; padding-top: 26px; border-top: 1px solid var(--line); }
+  .orphan { background: var(--surface); border: 1px solid var(--line); border-left: 2px solid var(--del); border-radius: 3px; padding: 15px 18px; display: flex; flex-direction: column; gap: 9px; }
+  .orphan-list { display: flex; flex-direction: column; gap: 10px; }
+  .orphan .where { font-family: var(--mono); font-size: 11px; color: var(--ink-faint); }
+  .orphan .snippet { font-family: var(--mono); font-size: 12px; background: var(--surface-2); padding: 7px 10px; border-radius: 2px; overflow-x: auto; white-space: pre; }
+  .reply { display: flex; flex-direction: column; gap: 8px; max-width: 76ch; }
+  .reply textarea { font-family: var(--sans); font-size: 13.5px; line-height: 1.5; color: var(--ink); background: var(--ground); border: 1px solid var(--line); border-radius: 3px; padding: 8px 10px; resize: vertical; min-height: 52px; width: 100%; }
+  .reply textarea:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+  .qna { display: flex; align-items: center; gap: 7px; }
+  .qna .live { width: 6px; height: 6px; border-radius: 50%; background: var(--add); }
+  .qna .live.down { background: var(--del); }
+  @media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
+</style>
+
+<div class="shell">
+  <header class="masthead">
+    <div class="eyebrow">
+      <span class="branch" id="branch"></span>
+      <span class="sep">/</span>
+      <span id="pageRange"></span>
+      <span class="sep">/</span>
+      <span id="pageEyebrow" hidden></span>
+    </div>
+    <h1 id="pageTitle"></h1>
+    <p class="dek" id="pageDek"></p>
+    <div class="figures" id="figures"></div>
+  </header>
+
+  <section class="flow" id="flowSection" hidden>
+    <h2>How the check runs, and which commit touches each stage</h2>
+    <div class="stages" id="stages"></div>
+  </section>
+
+  <div class="board">
+    <nav class="rail" aria-label="Commits">
+      <h2>Review in order</h2>
+      <div class="commits" id="commits"></div>
+      <div class="progress">
+        <span id="progressText">0 of 5 reviewed</span>
+        <span class="track"><i id="progressBar" style="width:0%"></i></span>
+      </div>
+    </nav>
+
+    <main class="pane" id="pane" aria-live="polite"></main>
+  </div>
+
+  <section class="orphans" id="orphans" hidden>
+    <h2>Threads whose line is no longer in this range</h2>
+    <div class="orphan-list" id="orphanList"></div>
+  </section>
+
+  <section class="openq" id="notesSection" hidden>
+    <h2>Before you push</h2>
+    <div class="qgrid" id="notesList"></div>
+    <footer>
+      <span>Nothing pushed</span><span class="sep">/</span>
+      <span>working tree clean</span><span class="sep">/</span>
+      <span id="footTotals"></span><span class="sep">/</span>
+      <span class="qna"><i class="live" id="qnaLive"></i><span id="qnaStatus">Q&amp;A starting</span></span>
+    </footer>
+  </section>
+</div>
+
+<script>
+  const DATA = /*__DATA__*/;
+
+  const STAGES = DATA.stages || [];
+
+  const STORE = "migration-guard-cleanup/reviewed";
+  const reviewed = new Set();
+  try {
+    const saved = JSON.parse(localStorage.getItem(STORE) || "[]");
+    if (Array.isArray(saved)) saved.forEach(s => reviewed.add(s));
+  } catch (e) { /* private window or blocked storage: start empty */ }
+
+  const save = () => {
+    try { localStorage.setItem(STORE, JSON.stringify([...reviewed])); } catch (e) { /* nothing to do */ }
+  };
+
+  const el = (tag, cls, text) => {
+    const n = document.createElement(tag);
+    if (cls) n.className = cls;
+    if (text !== undefined) n.textContent = text;
+    return n;
+  };
+  const rich = (tag, cls, html) => {
+    const n = document.createElement(tag);
+    if (cls) n.className = cls;
+    n.innerHTML = html;
+    return n;
+  };
+
+  let selected = 0;
+
+  /* ---------- masthead ---------- */
+  document.title = DATA.title;
+  document.getElementById("pageTitle").textContent = DATA.title;
+  document.getElementById("pageDek").textContent = DATA.dek;
+  document.getElementById("branch").textContent = DATA.branch;
+  document.getElementById("pageRange").textContent =
+    `${DATA.commits.length} commit${DATA.commits.length === 1 ? "" : "s"} · ${DATA.range}`;
+  if (DATA.eyebrow) {
+    const brow = document.getElementById("pageEyebrow");
+    brow.textContent = DATA.eyebrow;
+    brow.hidden = false;
+  }
+  document.getElementById("footTotals").textContent = DATA.totals || DATA.range;
+  document.getElementById("flowSection").hidden = !(DATA.stages || []).length;
+
+  const figures = DATA.figures || [];
+  const figWrap = document.getElementById("figures");
+  figures.forEach(f => {
+    const box = el("div", "figure");
+    const v = el("span", "v");
+    if (f.was) { v.appendChild(el("span", "was", f.was)); v.appendChild(document.createTextNode(" " + f.v)); }
+    else { v.textContent = f.v; }
+    box.appendChild(v);
+    box.appendChild(el("span", "k", f.k));
+    figWrap.appendChild(box);
+  });
+
+  /* ---------- flow strip ---------- */
+  const stageWrap = document.getElementById("stages");
+  STAGES.forEach(s => {
+    const box = el("div", "stage");
+    box.appendChild(el("span", "where", s.where));
+    box.appendChild(el("span", "what", s.what));
+    const marks = el("div", "marks");
+    s.marks.forEach(m => marks.appendChild(el("span", "mark", m)));
+    box.appendChild(marks);
+    stageWrap.appendChild(box);
+  });
+
+  const notes = DATA.notes || [];
+  if (notes.length) {
+    const list = document.getElementById("notesList");
+    notes.forEach(n => {
+      const card = el("div", "q" + (n.tone === "info" ? " info" : ""));
+      card.appendChild(el("span", "qk", n.kind || "note"));
+      card.appendChild(el("span", "qt", n.title || ""));
+      card.appendChild(rich("p", null, code(escapeHtml(n.body || ""))));
+      list.appendChild(card);
+    });
+    document.getElementById("notesSection").hidden = false;
+  }
+
+  /* ---------- rail ---------- */
+  const railWrap = document.getElementById("commits");
+  DATA.commits.forEach((c, i) => {
+    const btn = el("button", "commit-btn");
+    btn.type = "button";
+    btn.appendChild(el("span", "cb-num", String(i + 1)));
+    const body = el("div", "cb-body");
+    body.appendChild(el("span", "cb-head", c.headline));
+    const meta = el("div", "cb-meta");
+    const total = Math.max(c.additions + c.deletions, 1);
+    const bar = el("span", "bar");
+    const a = el("i", "a"); a.style.width = (c.additions / total * 100) + "%";
+    const d = el("i", "d"); d.style.width = (c.deletions / total * 100) + "%";
+    bar.appendChild(a); bar.appendChild(d);
+    meta.appendChild(bar);
+    meta.appendChild(el("span", "plus", "+" + c.additions));
+    meta.appendChild(el("span", "minus", "−" + c.deletions));
+    const doneTag = el("span", "done", "reviewed");
+    doneTag.hidden = !reviewed.has(c.short);
+    meta.appendChild(doneTag);
+    body.appendChild(meta);
+    btn.appendChild(body);
+    btn.addEventListener("click", () => select(i));
+    railWrap.appendChild(btn);
+    c._btn = btn; c._doneTag = doneTag;
+  });
+
+  function refreshProgress() {
+    const n = DATA.commits.filter(c => reviewed.has(c.short)).length;
+    document.getElementById("progressText").textContent = n + " of " + DATA.commits.length + " reviewed";
+    document.getElementById("progressBar").style.width = (n / DATA.commits.length * 100) + "%";
+    DATA.commits.forEach(c => { c._doneTag.hidden = !reviewed.has(c.short); });
+  }
+
+  /* ---------- diff rendering ---------- */
+  function renderFile(f, commitShort) {
+    const box = el("section", "file");
+    box.dataset.file = f.path;
+    box.dataset.commit = commitShort;
+    box.dataset.open = f.collapsed ? "false" : "true";
+
+    const head = el("button", "file-head");
+    head.type = "button";
+    head.appendChild(el("span", "chev", "▾"));
+    head.appendChild(el("span", "fpath", f.path));
+    head.appendChild(el("span", "status " + f.status, f.status));
+    const stat = el("span", "fstat");
+    stat.appendChild(el("span", "plus", "+" + f.additions));
+    stat.appendChild(document.createTextNode(" "));
+    stat.appendChild(el("span", "minus", "−" + f.deletions));
+    head.appendChild(stat);
+    head.addEventListener("click", () => {
+      box.dataset.open = box.dataset.open === "true" ? "false" : "true";
+    });
+    box.appendChild(head);
+
+    const wrap = el("div", "diffwrap");
+    const table = el("table", "diff");
+    const tbody = el("tbody");
+    f.rows.forEach(r => {
+      const tr = el("tr", r.t);
+      if (r.t === "hunk") {
+        const td = el("td", "code");
+        td.colSpan = 3;
+        td.textContent = r.text;
+        tr.appendChild(td);
+      } else {
+        const lineNo = r.t === "del" ? r.o : r.n;
+        tr.dataset.commit = commitShort;
+        tr.dataset.file = f.path;
+        tr.dataset.side = r.t;
+        tr.dataset.line = String(lineNo);
+        tr.dataset.code = r.text;
+        tr.appendChild(el("td", "gut", String(lineNo)));
+        tr.appendChild(el("td", "sign", r.t === "add" ? "+" : r.t === "del" ? "−" : ""));
+        tr.appendChild(el("td", "code", r.text));
+      }
+      tbody.appendChild(tr);
+    });
+    table.appendChild(tbody);
+    wrap.appendChild(table);
+    box.appendChild(wrap);
+    return box;
+  }
+
+  function renderMatrix(matrix) {
+    const sec = el("section", "verified");
+    sec.appendChild(el("h4", null, "Run in the local container under api.settings.test, guard armed only by the assignment"));
+    const wrap = el("div", "vwrap");
+    const table = el("table", "matrix");
+    const thead = el("thead");
+    const hr = el("tr");
+    ["Case", "Exit", "Expected", ""].forEach(h => hr.appendChild(el("th", null, h)));
+    thead.appendChild(hr);
+    table.appendChild(thead);
+    const tbody = el("tbody");
+    matrix.forEach(([label, got, want, ok]) => {
+      const tr = el("tr");
+      tr.appendChild(el("td", null, label));
+      tr.appendChild(el("td", "num", got));
+      tr.appendChild(el("td", "num", want));
+      tr.appendChild(el("td", "ok", ok ? "✓ match" : "✗ differs"));
+      tbody.appendChild(tr);
+    });
+    table.appendChild(tbody);
+    wrap.appendChild(table);
+    sec.appendChild(wrap);
+    return sec;
+  }
+
+  const code = s => s.replace(/`([^`]+)`/g, "<code>$1</code>");
+
+  function select(i) {
+    selected = i;
+    const c = DATA.commits[i];
+    DATA.commits.forEach((o, j) => o._btn.setAttribute("aria-current", String(j === i)));
+
+    const pane = document.getElementById("pane");
+    pane.replaceChildren();
+
+    const head = el("header", "pane-head");
+    const kindrow = el("div", "kindrow");
+    if (c.kind) kindrow.appendChild(el("span", "kind", c.kind));
+    kindrow.appendChild(el("span", "sha", c.short));
+    if (c.flow) kindrow.appendChild(el("span", "stagetag", c.flow));
+    head.appendChild(kindrow);
+    head.appendChild(el("h3", null, c.headline));
+    if (c.why) head.appendChild(rich("p", "why", code(escapeHtml(c.why))));
+    const ul = el("ul", "points");
+    c.points.forEach(p => ul.appendChild(rich("li", null, code(p))));
+    head.appendChild(ul);
+    pane.appendChild(head);
+
+    if (c.matrix) pane.appendChild(renderMatrix(c.matrix));
+
+    const tools = el("div", "difftools");
+    tools.appendChild(el("span", null, c.files.length === 1 ? "1 file" : c.files.length + " files"));
+    const spacer = el("span", "spacer");
+    tools.appendChild(spacer);
+
+    const mkToggle = (label, cls, initial) => {
+      const lab = el("label", "toggle");
+      const cb = el("input");
+      cb.type = "checkbox";
+      cb.checked = initial;
+      cb.addEventListener("change", () => document.body.classList.toggle(cls, cb.checked));
+      lab.appendChild(cb);
+      lab.appendChild(document.createTextNode(label));
+      return lab;
+    };
+    tools.appendChild(mkToggle("Changes only", "only-changes", document.body.classList.contains("only-changes")));
+    tools.appendChild(mkToggle("Wrap lines", "wrap", document.body.classList.contains("wrap")));
+    tools.appendChild(mkToggle("Hide resolved", "hide-resolved", document.body.classList.contains("hide-resolved")));
+
+    const done = el("label", "toggle");
+    const donecb = el("input");
+    donecb.type = "checkbox";
+    donecb.checked = reviewed.has(c.short);
+    donecb.addEventListener("change", () => {
+      if (donecb.checked) reviewed.add(c.short); else reviewed.delete(c.short);
+      save();
+      refreshProgress();
+    });
+    done.appendChild(donecb);
+    done.appendChild(document.createTextNode("Mark reviewed"));
+    tools.appendChild(done);
+    pane.appendChild(tools);
+
+    const files = el("div", "files");
+    c.files.forEach(f => files.appendChild(renderFile(f, c.short)));
+    pane.appendChild(files);
+
+    const msg = el("details", "msg");
+    msg.appendChild(el("summary", null, "Full commit message"));
+    msg.appendChild(el("pre", null, c.subject + "\n\n" + c.body));
+    pane.appendChild(msg);
+  }
+
+  select(0);
+  refreshProgress();
+
+
+  /* ---------- inline Q&A with Claude ---------- */
+  let THREADS = [];
+
+  /* Every anchor the loaded range can still render. A thread outside it is orphaned,
+     which happens when a commit is amended or rebased away. */
+  const VALID_ANCHORS = new Set();
+  DATA.commits.forEach(c => c.files.forEach(f => f.rows.forEach(r => {
+    if (r.t === "hunk") return;
+    VALID_ANCHORS.add([c.short, f.path, r.t, String(r.t === "del" ? r.o : r.n)].join("\u0000"));
+  })));
+  let composerOpen = false;
+  const anchorKey = d => [d.commit, d.file, d.side, d.line].join("\u0000");
+
+  function threadsByAnchor() {
+    const map = new Map();
+    THREADS.forEach(t => {
+      const key = anchorKey(t);
+      if (!map.has(key)) map.set(key, []);
+      map.get(key).push(t);
+    });
+    return map;
+  }
+
+  function paintOrphans() {
+    const orphans = THREADS.filter(t => !VALID_ANCHORS.has(anchorKey(t)));
+    const section = document.getElementById("orphans");
+    const list = document.getElementById("orphanList");
+    section.hidden = orphans.length === 0;
+    list.replaceChildren();
+    orphans.forEach(t => {
+      const box = el("div", "orphan");
+      box.appendChild(el("div", "where",
+        (t.commit || "?") + " · " + (t.file || "?") + ":" + (t.line || "?") +
+        " · that commit is not in the range this page was built from"));
+      if (t.code) box.appendChild(el("div", "snippet", t.code));
+      const q = el("div", "turn you");
+      q.appendChild(el("span", "who", "you"));
+      q.appendChild(el("div", "said", t.question));
+      box.appendChild(q);
+      (t.turns || []).forEach(turn => box.appendChild(renderTurn(turn)));
+      if (!t.resolved) {
+        box.appendChild(replyBox(t.id));
+        const acts = el("div", "acts");
+        const resolve = el("button", "btn ghost small", "Resolve");
+        resolve.type = "button";
+        resolve.addEventListener("click", () => setResolved(t.id, true));
+        acts.appendChild(resolve);
+        box.appendChild(acts);
+      } else {
+        box.appendChild(el("div", "where", "resolved"));
+      }
+      list.appendChild(box);
+    });
+  }
+
+  function paintThreads() {
+    if (composerOpen || typingIn) { repaintPending = true; return; }
+    document.querySelectorAll("tr.thread-row").forEach(n => n.remove());
+    document.querySelectorAll("table.diff tr[data-asked]").forEach(n => delete n.dataset.asked);
+
+    const byAnchor = threadsByAnchor();
+    document.querySelectorAll("table.diff tr[data-line]").forEach(tr => {
+      const list = byAnchor.get(anchorKey(tr.dataset));
+      if (!list) return;
+      tr.dataset.asked = "true";
+      const row = el("tr", "thread-row");
+      const allResolved = list.every(t => t.resolved);
+      row.dataset.resolved = String(allResolved);
+      tr.dataset.asked = allResolved ? "resolved" : "true";
+      const cell = el("td");
+      cell.colSpan = 3;
+      const thread = el("div", "thread" + (allResolved ? " done" : ""));
+      list.forEach(t => {
+        if (t.resolved) {
+          const line = el("div", "resolved-line");
+          line.appendChild(el("span", "tick", "resolved"));
+          line.appendChild(el("span", "q", t.question));
+          const reopen = el("button", "btn ghost small", "Reopen");
+          reopen.type = "button";
+          reopen.addEventListener("click", () => setResolved(t.id, false));
+          line.appendChild(reopen);
+          thread.appendChild(line);
+          return;
+        }
+        const q = el("div", "turn you");
+        q.appendChild(el("span", "who", "you"));
+        q.appendChild(el("div", "said", t.question));
+        thread.appendChild(q);
+
+        (t.turns || []).forEach(turn => thread.appendChild(renderTurn(turn)));
+
+        const turns = t.turns || [];
+        const lastTurn = turns[turns.length - 1];
+        if (lastTurn && lastTurn.role === "claude" && lastTurn.kind === "ask") {
+          const call = el("div", "yourcall");
+          call.appendChild(document.createTextNode("your call"));
+          const go = el("button", "btn small", "Yes, investigate");
+          go.type = "button";
+          go.addEventListener("click", () => sendReply(t.id, "Yes, run the deep investigation."));
+          call.appendChild(go);
+          const no = el("button", "btn ghost small", "No, skip it");
+          no.type = "button";
+          no.addEventListener("click", () => sendReply(t.id, "No, skip the investigation."));
+          call.appendChild(no);
+          thread.appendChild(call);
+        } else if (!lastTurn || lastTurn.role !== "claude") {
+          const wait = el("div", "pending");
+          wait.appendChild(el("i", "dot"));
+          wait.appendChild(document.createTextNode("waiting for Claude"));
+          thread.appendChild(wait);
+        }
+
+        thread.appendChild(replyBox(t.id));
+
+        const acts = el("div", "acts");
+        const resolve = el("button", "btn ghost small", "Resolve");
+        resolve.type = "button";
+        resolve.addEventListener("click", () => setResolved(t.id, true));
+        acts.appendChild(resolve);
+        thread.appendChild(acts);
+      });
+      cell.appendChild(thread);
+      row.appendChild(cell);
+      tr.after(row);
+    });
+  }
+
+  function renderTurn(turn) {
+    const isClaude = turn.role === "claude";
+    const row = el("div", "turn " + (isClaude ? "claude" : "you") +
+      (turn.kind === "ask" ? " ask" : ""));
+    row.appendChild(el("span", "who", isClaude ? "claude" : "you"));
+    if (turn.kind === "did") {
+      const box = el("div", "said");
+      const did = el("div", "did");
+      did.appendChild(el("span", "landed", "changed"));
+      if (turn.commit) did.appendChild(el("span", "sha", turn.commit));
+      if (turn.stat) did.appendChild(el("span", "stat", turn.stat));
+      box.appendChild(did);
+      box.appendChild(rich("div", null, code(escapeHtml(turn.text))));
+      row.appendChild(box);
+      return row;
+    }
+    row.appendChild(rich("div", "said", code(escapeHtml(turn.text))));
+    return row;
+  }
+
+  const escapeHtml = s => String(s)
+    .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+
+  /* A repaint would discard a half-typed reply, so it waits until the box is empty again. */
+  let typingIn = null;
+  let repaintPending = false;
+
+  async function sendReply(threadId, text) {
+    try {
+      const res = await fetch("/reply", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ thread_id: threadId, text })
+      });
+      if (!res.ok) throw new Error("HTTP " + res.status);
+      typingIn = null;
+      await refresh();
+      return true;
+    } catch (err) {
+      setStatus(false, "could not reply: " + err.message);
+      return false;
+    }
+  }
+
+  function replyBox(threadId) {
+    const box = el("div", "reply");
+    const input = el("textarea");
+    input.placeholder = "Reply in this thread…";
+    const send = el("button", "btn small", "Reply");
+    send.type = "button";
+
+    const submit = async () => {
+      const text = input.value.trim();
+      if (!text) return;
+      send.disabled = true;
+      send.textContent = "Sending…";
+      if (await sendReply(threadId, text)) {
+        input.value = "";
+      } else {
+        send.disabled = false;
+        send.textContent = "Reply";
+      }
+    };
+
+    input.addEventListener("focus", () => { typingIn = threadId; });
+    input.addEventListener("blur", () => {
+      if (!input.value.trim()) {
+        typingIn = null;
+        if (repaintPending) { repaintPending = false; paintThreads(); }
+      }
+    });
+    input.addEventListener("keydown", e => {
+      if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) { e.preventDefault(); submit(); }
+    });
+    send.addEventListener("click", submit);
+
+    box.appendChild(input);
+    const row = el("div", "row");
+    row.appendChild(send);
+    row.appendChild(el("span", "hint", "⌘/Ctrl + Enter to send"));
+    box.appendChild(row);
+    return box;
+  }
+
+  async function setResolved(questionId, resolved) {
+    try {
+      const res = await fetch("/resolve", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ question_id: questionId, resolved })
+      });
+      if (!res.ok) throw new Error("HTTP " + res.status);
+      await refresh();
+    } catch (err) {
+      setStatus(false, "could not resolve: " + err.message);
+    }
+  }
+
+  function closeComposer() {
+    document.querySelectorAll("tr.composer-row").forEach(n => n.remove());
+    composerOpen = false;
+  }
+
+  function openComposer(tr) {
+    closeComposer();
+    composerOpen = true;
+    const row = el("tr", "composer-row");
+    const cell = el("td");
+    cell.colSpan = 3;
+    const box = el("div", "composer");
+    box.appendChild(el("div", "anchor",
+      tr.dataset.file + "  line " + tr.dataset.line +
+      (tr.dataset.side === "add" ? " (added)" : tr.dataset.side === "del" ? " (removed)" : "")));
+    const input = el("textarea");
+    input.placeholder = "Ask Claude about this line…";
+    box.appendChild(input);
+    const controls = el("div", "row");
+    const send = el("button", "btn", "Ask Claude");
+    send.type = "button";
+    const cancel = el("button", "btn ghost", "Cancel");
+    cancel.type = "button";
+    controls.appendChild(send);
+    controls.appendChild(cancel);
+    controls.appendChild(el("span", "hint", "⌘/Ctrl + Enter to send · Esc to close"));
+    box.appendChild(controls);
+    cell.appendChild(box);
+    row.appendChild(cell);
+    tr.after(row);
+    input.focus();
+
+    const submit = async () => {
+      const question = input.value.trim();
+      if (!question) return;
+      send.disabled = true;
+      send.textContent = "Sending…";
+      try {
+        const res = await fetch("/ask", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            question,
+            commit: tr.dataset.commit,
+            file: tr.dataset.file,
+            side: tr.dataset.side,
+            line: tr.dataset.line,
+            code: tr.dataset.code
+          })
+        });
+        if (!res.ok) throw new Error("HTTP " + res.status);
+        closeComposer();
+        await refresh();
+      } catch (err) {
+        send.disabled = false;
+        send.textContent = "Ask Claude";
+        setStatus(false, "could not send: " + err.message);
+      }
+    };
+    send.addEventListener("click", submit);
+    cancel.addEventListener("click", closeComposer);
+    input.addEventListener("keydown", e => {
+      if (e.key === "Escape") { e.preventDefault(); closeComposer(); }
+      if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) { e.preventDefault(); submit(); }
+    });
+  }
+
+  function setStatus(up, text) {
+    document.getElementById("qnaLive").classList.toggle("down", !up);
+    document.getElementById("qnaStatus").textContent = text;
+  }
+
+  async function refresh() {
+    try {
+      const res = await fetch("/thread", { cache: "no-store" });
+      if (!res.ok) throw new Error("HTTP " + res.status);
+      const body = await res.json();
+      const next = JSON.stringify(body.threads);
+      if (next !== JSON.stringify(THREADS)) {
+        THREADS = body.threads;
+        paintThreads();
+        paintOrphans();
+      }
+      const open = THREADS.filter(t => !t.resolved).length;
+      const unanswered = THREADS.filter(t => {
+        if (t.resolved) return false;
+        const turns = t.turns || [];
+        return !turns.length || turns[turns.length - 1].role !== "claude";
+      }).length;
+      const yourCall = THREADS.filter(t => {
+        if (t.resolved) return false;
+        const last = (t.turns || [])[(t.turns || []).length - 1];
+        return last && last.role === "claude" && last.kind === "ask";
+      }).length;
+      setStatus(true, THREADS.length
+        ? `Q&A live · ${THREADS.length} asked · ${open} open` +
+          (unanswered ? ` · ${unanswered} awaiting reply` : "") +
+          (yourCall ? ` · ${yourCall} awaiting your go-ahead` : "")
+        : "Q&A live · click a line number to ask");
+    } catch (err) {
+      setStatus(false, "Q&A offline · run ./serve.sh");
+    }
+  }
+
+  document.addEventListener("click", e => {
+    const gut = e.target.closest("td.gut");
+    if (!gut) return;
+    const tr = gut.closest("tr[data-line]");
+    if (tr) openComposer(tr);
+  });
+
+  const origSelect = select;
+  select = function (i) { closeComposer(); origSelect(i); paintThreads(); };
+
+  refresh();
+  setInterval(() => { if (!document.hidden) refresh(); }, 4000);
+
+  document.addEventListener("keydown", e => {
+    if (e.target.matches("input, textarea, summary")) return;
+    if (e.key === "j" || e.key === "ArrowDown") { e.preventDefault(); select(Math.min(selected + 1, DATA.commits.length - 1)); }
+    if (e.key === "k" || e.key === "ArrowUp") { e.preventDefault(); select(Math.max(selected - 1, 0)); }
+  });
+</script>

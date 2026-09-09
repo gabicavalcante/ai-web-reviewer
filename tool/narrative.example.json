@@ -1,0 +1,30 @@
+{
+  "title": "Migration Guard Cleanup",
+  "dek": "One or two sentences on what this branch does and how to read it.",
+  "eyebrow": "quality pass, no behaviour change except where noted",
+  "figures": [
+    { "k": "files in the branch", "v": "2", "was": "3" },
+    { "k": "exit-code cases re-verified", "v": "6 of 6" }
+  ],
+  "stages": [
+    { "where": "git, on the host", "what": "List changed migrations", "marks": ["1"] },
+    { "where": "django", "what": "Arm the guard", "marks": ["2", "3"] }
+  ],
+  "notes": [
+    {
+      "kind": "needs a rewrite",
+      "title": "The PR description is stale",
+      "body": "It names files this branch deleted.",
+      "tone": "warn"
+    }
+  ],
+  "commits": {
+    "4dceec2db": {
+      "stage": "1 · Detect",
+      "flow": "git, on the host",
+      "why": "Why this commit exists, in one or two sentences.",
+      "points": ["A specific consequence worth calling out."],
+      "matrix": [["case", "got", "want", true]]
+    }
+  }
+}
