@@ -226,6 +226,8 @@
   .turn.claude .who { color: var(--accent); }
   .turn .said { font-size: 14px; line-height: 1.55; white-space: pre-wrap; max-width: 76ch; }
   .turn .said code { font-family: var(--mono); font-size: .88em; background: var(--surface-2); padding: 1px 5px; border-radius: 2px; }
+  .turn .said pre, .q pre, .why pre, .points pre { font-family: var(--mono); font-size: 12.5px; line-height: 1.6; white-space: pre-wrap; overflow-wrap: anywhere; background: var(--surface-2); border-radius: 3px; padding: 9px 11px; margin: 10px 0; overflow-x: auto; }
+  .turn .said pre code, .q pre code, .why pre code, .points pre code { background: none; padding: 0; font-size: inherit; }
   .pending { font-family: var(--mono); font-size: 11.5px; color: var(--ink-faint); display: flex; align-items: center; gap: 8px; }
   .pending .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--accent); animation: pulse 1.4s ease-in-out infinite; }
   @keyframes pulse { 0%, 100% { opacity: .25; } 50% { opacity: 1; } }
@@ -350,7 +352,37 @@
      block runs, which throws and leaves the page half drawn. */
   const escapeHtml = s => String(s)
     .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-  const code = s => s.replace(/`([^`]+)`/g, "<code>$1</code>");
+  /* Inline markdown: `code` and **bold**. Code spans are lifted out before bold
+     runs, so a * inside one is never read as markup, and bold still spans a code
+     span the way **`.git/shallow`.** does. Bold stays on one line: a stray ** would
+     otherwise pair across paragraphs. Single-* italic is deliberately not supported,
+     because a line like "tool/*.py bin/*.js" would read as emphasis. */
+  const inlineMd = s => {
+    const spans = [];
+    let out = s.replace(/`([^`\n]+)`/g, (_, body) => "\u0000" + (spans.push(body) - 1) + "\u0000");
+    out = out.replace(/\*\*([^\n]+?)\*\*/g, "<strong>$1</strong>");
+    return out.replace(/\u0000(\d+)\u0000/g, (_, i) => "<code>" + spans[i] + "</code>");
+  };
+
+  /* ```fenced``` blocks become <pre>; the odd chunks of a split on ``` are the
+     insides. Without this the inline regex above pairs the fence backticks with
+     each other and renders the block as a run of inline code spans. */
+  const md = s => {
+    const chunks = String(s).split("```");
+    return chunks.map((chunk, i) => {
+      if (i % 2 === 1) {
+        // drop the language tag on the opening line, and the newline before the close
+        const body = chunk.includes("\n") ? chunk.replace(/^[^\n]*\n/, "") : chunk;
+        return "<pre><code>" + body.replace(/\n+$/, "") + "</code></pre>";
+      }
+      // The newline closing the text before a fence and the one opening the text
+      // after it are the fence's own; pre-wrap would show them as blank lines.
+      let text = chunk;
+      if (i > 0) text = text.replace(/^\n/, "");
+      if (i < chunks.length - 1) text = text.replace(/\n$/, "");
+      return inlineMd(text);
+    }).join("");
+  };
 
   let selected = 0;
 
@@ -402,7 +434,7 @@
       const card = el("div", "q" + (n.tone === "info" ? " info" : ""));
       card.appendChild(el("span", "qk", n.kind || "note"));
       card.appendChild(el("span", "qt", n.title || ""));
-      card.appendChild(rich("p", null, code(escapeHtml(n.body || ""))));
+      card.appendChild(rich("p", null, md(escapeHtml(n.body || ""))));
       list.appendChild(card);
     });
     document.getElementById("notesSection").hidden = false;
@@ -534,9 +566,9 @@
     if (c.flow) kindrow.appendChild(el("span", "stagetag", c.flow));
     head.appendChild(kindrow);
     head.appendChild(el("h3", null, c.headline));
-    if (c.why) head.appendChild(rich("p", "why", code(escapeHtml(c.why))));
+    if (c.why) head.appendChild(rich("p", "why", md(escapeHtml(c.why))));
     const ul = el("ul", "points");
-    c.points.forEach(p => ul.appendChild(rich("li", null, code(p))));
+    c.points.forEach(p => ul.appendChild(rich("li", null, md(escapeHtml(p)))));
     head.appendChild(ul);
     pane.appendChild(head);
 
@@ -718,11 +750,11 @@
       if (turn.commit) did.appendChild(el("span", "sha", turn.commit));
       if (turn.stat) did.appendChild(el("span", "stat", turn.stat));
       box.appendChild(did);
-      box.appendChild(rich("div", null, code(escapeHtml(turn.text))));
+      box.appendChild(rich("div", null, md(escapeHtml(turn.text))));
       row.appendChild(box);
       return row;
     }
-    row.appendChild(rich("div", "said", code(escapeHtml(turn.text))));
+    row.appendChild(rich("div", "said", md(escapeHtml(turn.text))));
     return row;
   }
 
