@@ -284,7 +284,7 @@
   </header>
 
   <section class="flow" id="flowSection" hidden>
-    <h2>How the check runs, and which commit touches each stage</h2>
+    <h2 id="flowTitle"></h2>
     <div class="stages" id="stages"></div>
   </section>
 
@@ -302,7 +302,7 @@
   </div>
 
   <section class="orphans" id="orphans" hidden>
-    <h2>Threads whose line is no longer in this range</h2>
+    <h2>Threads on code that is no longer in this diff</h2>
     <div class="orphan-list" id="orphanList"></div>
   </section>
 
@@ -310,10 +310,8 @@
     <h2>Before you push</h2>
     <div class="qgrid" id="notesList"></div>
     <footer>
-      <span>Nothing pushed</span><span class="sep">/</span>
-      <span>working tree clean</span><span class="sep">/</span>
       <span id="footTotals"></span><span class="sep">/</span>
-      <span class="qna"><i class="live" id="qnaLive"></i><span id="qnaStatus">Q&amp;A starting</span></span>
+      <span class="qna"><i class="live" id="qnaLive"></i><span id="qnaStatus">Starting</span></span>
     </footer>
   </section>
 </div>
@@ -363,6 +361,8 @@
   }
   document.getElementById("footTotals").textContent = DATA.totals || DATA.range;
   document.getElementById("flowSection").hidden = !(DATA.stages || []).length;
+  document.getElementById("flowTitle").textContent =
+    DATA.stagesTitle || "Stages of this change, and which commit touches each one";
 
   const figures = DATA.figures || [];
   const figWrap = document.getElementById("figures");
@@ -486,9 +486,9 @@
     return box;
   }
 
-  function renderMatrix(matrix) {
+  function renderMatrix(matrix, caption) {
     const sec = el("section", "verified");
-    sec.appendChild(el("h4", null, "Run in the local container under api.settings.test, guard armed only by the assignment"));
+    sec.appendChild(el("h4", null, caption || "What was checked"));
     const wrap = el("div", "vwrap");
     const table = el("table", "matrix");
     const thead = el("thead");
@@ -534,7 +534,7 @@
     head.appendChild(ul);
     pane.appendChild(head);
 
-    if (c.matrix) pane.appendChild(renderMatrix(c.matrix));
+    if (c.matrix) pane.appendChild(renderMatrix(c.matrix, c.matrixCaption));
 
     const tools = el("div", "difftools");
     tools.appendChild(el("span", null, c.files.length === 1 ? "1 file" : c.files.length + " files"));
@@ -616,7 +616,7 @@
       const box = el("div", "orphan");
       box.appendChild(el("div", "where",
         (t.commit || "?") + " · " + (t.file || "?") + ":" + (t.line || "?") +
-        " · that commit is not in the range this page was built from"));
+        " · this commit is not part of the diff shown here"));
       if (t.code) box.appendChild(el("div", "snippet", t.code));
       const q = el("div", "turn you");
       q.appendChild(el("span", "who", "you"));
@@ -678,7 +678,7 @@
         const lastTurn = turns[turns.length - 1];
         if (lastTurn && lastTurn.role === "claude" && lastTurn.kind === "ask") {
           const call = el("div", "yourcall");
-          call.appendChild(document.createTextNode("your call"));
+          call.appendChild(document.createTextNode("waiting for you"));
           const go = el("button", "btn small", "Yes, investigate");
           go.type = "button";
           go.addEventListener("click", () => sendReply(t.id, "Yes, run the deep investigation."));
@@ -691,7 +691,7 @@
         } else if (!lastTurn || lastTurn.role !== "claude") {
           const wait = el("div", "pending");
           wait.appendChild(el("i", "dot"));
-          wait.appendChild(document.createTextNode("waiting for Claude"));
+          wait.appendChild(document.createTextNode("waiting for an answer"));
           thread.appendChild(wait);
         }
 
@@ -903,12 +903,12 @@
         return last && last.role === "claude" && last.kind === "ask";
       }).length;
       setStatus(true, THREADS.length
-        ? `Q&A live · ${THREADS.length} asked · ${open} open` +
-          (unanswered ? ` · ${unanswered} awaiting reply` : "") +
-          (yourCall ? ` · ${yourCall} awaiting your go-ahead` : "")
-        : "Q&A live · click a line number to ask");
+        ? `${THREADS.length} asked · ${open} open` +
+          (unanswered ? ` · ${unanswered} waiting for an answer` : "") +
+          (yourCall ? ` · ${yourCall} waiting for you` : "")
+        : "Ask a question by clicking a line number");
     } catch (err) {
-      setStatus(false, "Q&A offline · run ./serve.sh");
+      setStatus(false, "Not connected · restart the review server");
     }
   }
 

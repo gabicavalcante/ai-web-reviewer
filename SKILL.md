@@ -61,6 +61,17 @@ every thread anchored to it. The page surfaces orphans in their own section rath
 hiding them, but the anchor is still lost. Do not amend mid-review unless asked, and say
 what it will cost when you do.
 
+## Write the copy for a person
+
+Before you build the page, run the `deslop` skill over every string you wrote: the
+narrative fields, any new label, any answer you post into a thread. A reviewer reads this,
+often not in their first language, so the implementation's vocabulary does not belong in
+the interface. `halt` is `skip`; `arm` is `turn on`; `your call` is `waiting for you`.
+Keep the code's own terms, which are precise and already known.
+
+Never print a claim you have not computed. A line like "working tree clean" is wrong on
+most branches. [reference/voice.md](reference/voice.md) has the word list and the rules.
+
 ## The narrative layer
 
 With no narrative the page is a good diff reader: title from the branch, figures from

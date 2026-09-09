@@ -154,6 +154,7 @@ def main():
             stage=note.get("stage") or str(index + 1),
             flow=note.get("flow", ""), why=note.get("why", ""),
             points=note.get("points", []), matrix=note.get("matrix"),
+            matrixCaption=note.get("matrixCaption", ""),
             additions=sum(f["additions"] for f in files),
             deletions=sum(f["deletions"] for f in files),
             files=files,

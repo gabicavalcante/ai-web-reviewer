@@ -40,6 +40,10 @@ SKELETON = """<!doctype html>
 def build(rng, narrative):
     repo = paths.repo_root()
     state = paths.state_dir(repo)
+    # A narrative written for this review lives beside its state, so it is picked up
+    # on every rebuild without repeating the flag.
+    if not narrative and (state / "narrative.json").exists():
+        narrative = state / "narrative.json"
     command = [sys.executable, str(HERE / "build_data.py")]
     if narrative:
         command += ["--narrative", str(pathlib.Path(narrative).resolve())]
