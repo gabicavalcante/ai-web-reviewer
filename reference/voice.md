@@ -36,6 +36,17 @@ of the *implementation* leaking into the interface.
 Their word is not always shorter. It is the one whose meaning a reader can work out from
 the parts.
 
+## Every "the" points at something the reader has seen
+
+You investigated the branch, so the parts have names in your head. The reader has the page
+and the diff, and nothing else. "the boundary" sends them looking for a boundary they were
+never shown. This is `deslop` pattern B12, and the quick check catches it: for every
+`the <noun>`, find where the text introduced it.
+
+The shared context is real, though. The reviewer is looking at the anchored line and has
+read the diff, so re-narrating code they can see is its own failure. Introduce what is
+missing, once.
+
 ## Rules that matter most here
 
 - **No em dashes.** Use a period, a comma, a colon, or parentheses.

@@ -77,7 +77,9 @@ the interface. `halt` is `skip`; `arm` is `turn on`; `your call` is `waiting for
 Keep the code's own terms, which are precise and already known.
 
 Never print a claim you have not computed. A line like "working tree clean" is wrong on
-most branches. [reference/voice.md](reference/voice.md) has the word list and the rules.
+most branches. Watch the definite articles too: "the boundary" is anchored for you and
+points at nothing for the reader. [reference/voice.md](reference/voice.md) has the word
+list and the rules.
 
 ## The narrative layer
 
