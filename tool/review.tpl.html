@@ -233,14 +233,14 @@
   .composer .anchor { font-family: var(--mono); font-size: 11px; color: var(--ink-faint); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .composer textarea { font-family: var(--sans); font-size: 14px; line-height: 1.5; color: var(--ink); background: var(--ground); border: 1px solid var(--line); border-radius: 3px; padding: 9px 11px; resize: vertical; min-height: 68px; width: 100%; max-width: 76ch; }
   .composer textarea:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
-  .composer .row { display: flex; align-items: center; gap: 10px; }
+  .composer .row, .reply .row { display: flex; align-items: center; gap: 10px; }
   .btn { font-family: var(--sans); font-size: 13px; font-weight: 500; padding: 6px 14px; border-radius: 3px; border: 1px solid var(--accent); background: var(--accent); color: var(--on-accent); cursor: pointer; }
   .btn.ghost { background: transparent; color: var(--accent); border-color: var(--accent); }
   .btn.ghost:hover { background: var(--accent-soft); }
   .btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-  .composer .hint { font-family: var(--mono); font-size: 10.5px; color: var(--ink-faint); }
+  .composer .hint, .reply .hint { font-family: var(--mono); font-size: 10.5px; color: var(--ink-faint); }
   .thread.done { opacity: .58; }
-  .thread .acts { display: flex; align-items: center; gap: 10px; }
+  .reply .row .btn.resolve { margin-left: auto; flex: none; }
   .btn.small { font-size: 12px; padding: 4px 10px; }
   .resolved-line { display: flex; align-items: baseline; gap: 10px; font-family: var(--sans); white-space: normal; margin: 0 24px 0 52px; padding: 11px 0; }
   .resolved-line .tick { font-family: var(--mono); font-size: 11px; letter-spacing: .05em; text-transform: uppercase; color: var(--add); flex: none; }
@@ -634,12 +634,6 @@
       (t.turns || []).forEach(turn => box.appendChild(renderTurn(turn)));
       if (!t.resolved) {
         box.appendChild(replyBox(t.id));
-        const acts = el("div", "acts");
-        const resolve = el("button", "btn ghost small", "Resolve");
-        resolve.type = "button";
-        resolve.addEventListener("click", () => setResolved(t.id, true));
-        acts.appendChild(resolve);
-        box.appendChild(acts);
       } else {
         box.appendChild(el("div", "where", "resolved"));
       }
@@ -705,13 +699,6 @@
         }
 
         thread.appendChild(replyBox(t.id));
-
-        const acts = el("div", "acts");
-        const resolve = el("button", "btn ghost small", "Resolve");
-        resolve.type = "button";
-        resolve.addEventListener("click", () => setResolved(t.id, true));
-        acts.appendChild(resolve);
-        thread.appendChild(acts);
       });
       cell.appendChild(thread);
       row.appendChild(cell);
@@ -793,6 +780,10 @@
     const row = el("div", "row");
     row.appendChild(send);
     row.appendChild(el("span", "hint", "⌘/Ctrl + Enter to send"));
+    const resolve = el("button", "btn ghost small resolve", "Resolve");
+    resolve.type = "button";
+    resolve.addEventListener("click", () => setResolved(threadId, true));
+    row.appendChild(resolve);
     box.appendChild(row);
     return box;
   }
