@@ -2,7 +2,9 @@
 """Serve the review page and carry questions to Claude.
 
 GET  /         index.html and the other static files in this directory
-GET  /thread   every thread with its turns and resolved state, as JSON
+GET  /thread   every thread with its turns and resolved state, plus the commits
+               currently in the reviewed range, as JSON
+POST /rebuild  build the page again, for when those commits have moved
 POST /ask      start a new thread, anchored to a diff line
 POST /reply    add your turn to an existing thread
 POST /resolve  mark a thread resolved, or reopen it
@@ -15,6 +17,7 @@ import json
 import os
 import pathlib
 import socketserver
+import subprocess
 import sys
 import time
 import uuid
@@ -30,6 +33,34 @@ ANSWERS = STATE / "answers.jsonl"
 RESOLVED = STATE / "resolved.jsonl"
 MESSAGES = STATE / "messages.jsonl"
 MAX_BODY = 64 * 1024
+REPO = paths.repo_root()
+# review.py passes the range it served. The default matches its own.
+RANGE = os.environ.get("REVIEW_RANGE") or "origin/main...HEAD"
+
+_revision = {"at": 0.0, "value": ""}
+
+
+def revision(fresh=False):
+    """The commits in the reviewed range, sorted, as one string.
+
+    The page holds the same string for the commits built into it. They stop matching when
+    a commit lands, which is the only way the page can tell it is behind: the diff is baked
+    in at build time, while threads are polled.
+
+    Sorted, so the answer does not depend on the order git happens to list them. Cached for
+    a few seconds, because every open page asks for it every four.
+    """
+    now = time.monotonic()
+    if not fresh and now - _revision["at"] < 3:
+        return _revision["value"]
+    result = subprocess.run(
+        ["git", "-C", str(REPO), "rev-list", "--max-count=500", RANGE],
+        capture_output=True, text=True,
+    )
+    # An unresolvable range is not something to nag about: the page treats "" as unknown.
+    _revision["value"] = ",".join(sorted(result.stdout.split())) if result.returncode == 0 else ""
+    _revision["at"] = now
+    return _revision["value"]
 
 
 def read_jsonl(path):
@@ -102,7 +133,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                 }
                 for question in read_jsonl(QUESTIONS)
             ]
-            return self._json({"threads": threads})
+            return self._json({"threads": threads, "revision": revision()})
         return super().do_GET()
 
     def _body(self):
@@ -115,6 +146,8 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             return None
 
     def do_POST(self):
+        if self.path == "/rebuild":
+            return self._rebuild()
         if self.path == "/resolve":
             return self._resolve()
         if self.path == "/reply":
@@ -151,6 +184,21 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             os.fsync(handle.fileno())
         return self._json({"ok": True, "id": row["id"]})
 
+
+    def _rebuild(self):
+        """Rebuild index.html for the same range, so a reload shows the new commits.
+
+        "--" so a range like --root..HEAD is not read as an option. The build runs its own
+        smoke check and fails loudly, so a page that would throw is never written.
+        """
+        result = subprocess.run(
+            [sys.executable, str(HERE / "review.py"), "build", "--", RANGE],
+            capture_output=True, text=True, cwd=str(REPO),
+        )
+        if result.returncode != 0:
+            problem = (result.stderr or result.stdout).strip() or "build failed"
+            return self._json({"error": problem[:400]}, 500)
+        return self._json({"ok": True, "revision": revision(fresh=True)})
 
     def _reply(self):
         payload = self._body()

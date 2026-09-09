@@ -120,6 +120,8 @@ def main():
     # way out before the process is replaced.
     sys.stdout.flush()
     os.environ["PORT"] = str(port)
+    # The server reports whether these commits are still the ones in the repo.
+    os.environ["REVIEW_RANGE"] = args.range
     os.execv(sys.executable, [sys.executable, str(HERE / "server.py")])
 
 

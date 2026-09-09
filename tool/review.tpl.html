@@ -82,6 +82,8 @@
     -webkit-font-smoothing: antialiased;
   }
   .shell { max-width: 1320px; margin: 0 auto; padding: 32px 24px 72px; }
+  .stale { position: sticky; top: 0; z-index: 40; display: flex; align-items: center; gap: 12px; margin: 0 0 20px; padding: 9px 14px; border: 1px solid var(--accent); border-radius: 3px; background: var(--accent-soft); font-family: var(--sans); font-size: 13px; color: var(--ink); }
+  .stale .btn { margin-left: auto; flex: none; }
 
   /* ---------- header ---------- */
   .masthead { display: flex; flex-direction: column; gap: 14px; padding-bottom: 26px; border-bottom: 1px solid var(--line); }
@@ -314,6 +316,11 @@
 </style>
 
 <div class="shell">
+  <div class="stale" id="stale" hidden>
+    <span id="staleText"></span>
+    <button class="btn small" id="staleBuild" type="button">Rebuild and reload</button>
+  </div>
+
   <header class="masthead">
     <div class="eyebrow">
       <span class="branch" id="branch"></span>
@@ -436,6 +443,11 @@
   };
 
   let selected = 0;
+
+  /* The commits built into this page. The server reports the ones in the range now, and
+     the two stop matching when a commit lands. The diff is baked in at build time, so
+     without this the reader sees a stale page with no sign that it is stale. */
+  const BUILT_REVISION = (DATA.commits || []).map(c => c.hash).sort().join(",");
 
   /* ---------- masthead ---------- */
   document.title = DATA.title;
@@ -1037,6 +1049,7 @@
       const res = await fetch("/thread", { cache: "no-store" });
       if (!res.ok) throw new Error("HTTP " + res.status);
       const body = await res.json();
+      setStale(body.revision);
       const next = JSON.stringify(body.threads);
       if (next !== JSON.stringify(THREADS)) {
         THREADS = body.threads;
@@ -1078,6 +1091,35 @@
   });
 
   document.getElementById("sideClose").addEventListener("click", closeSide);
+
+  function setStale(revision) {
+    const bar = document.getElementById("stale");
+    // "" means the server could not resolve the range. Unknown is not a reason to nag.
+    if (!revision || revision === BUILT_REVISION) { bar.hidden = true; return; }
+    const built = new Set(BUILT_REVISION.split(","));
+    const added = revision.split(",").filter(h => h && !built.has(h)).length;
+    document.getElementById("staleText").textContent =
+      added === 0 ? "This branch changed since the page was built."
+      : added === 1 ? "1 new commit on this branch."
+      : added + " new commits on this branch.";
+    bar.hidden = false;
+  }
+
+  document.getElementById("staleBuild").addEventListener("click", async () => {
+    const btn = document.getElementById("staleBuild");
+    btn.disabled = true;
+    btn.textContent = "Rebuilding…";
+    try {
+      const res = await fetch("/rebuild", { method: "POST" });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(body.error || "HTTP " + res.status);
+      location.reload();
+    } catch (err) {
+      btn.disabled = false;
+      btn.textContent = "Rebuild and reload";
+      setStatus(false, "could not rebuild: " + err.message);
+    }
+  });
 
   const origSelect = select;
   select = function (i) { closeComposer(); closeSide(); origSelect(i); paintThreads(); };
