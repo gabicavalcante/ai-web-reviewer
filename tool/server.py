@@ -5,6 +5,7 @@ GET  /         index.html and the other static files in this directory
 GET  /thread   every thread with its turns and resolved state, plus the commits
                currently in the reviewed range, as JSON
 POST /rebuild  build the page again, for when those commits have moved
+POST /squash   git rebase --autosquash the reviewed range, guarded and reversible
 POST /ask      start a new thread, anchored to a diff line
 POST /reply    add your turn to an existing thread
 POST /resolve  mark a thread resolved, or reopen it
@@ -36,6 +37,41 @@ MAX_BODY = 64 * 1024
 REPO = paths.repo_root()
 # review.py passes the range it served. The default matches its own.
 RANGE = os.environ.get("REVIEW_RANGE") or "origin/main...HEAD"
+
+FIXUP_PREFIXES = ("fixup!", "squash!", "amend!")
+
+
+def git(*args, **kwargs):
+    return subprocess.run(["git", "-C", str(REPO), *args], capture_output=True, text=True, **kwargs)
+
+
+def review_base():
+    """The commit the reviewed range starts from, which is what a rebase rewrites onto.
+
+    A three dot range is measured from the merge base, so that is what has to be rebased
+    onto: rebasing onto the left side itself would drag in everything main gained since.
+    """
+    if "..." in RANGE:
+        left = RANGE.split("...")[0] or "origin/main"
+        found = git("merge-base", left, "HEAD")
+        return found.stdout.strip() if found.returncode == 0 else ""
+    if ".." in RANGE:
+        return RANGE.split("..")[0].strip()
+    return ""
+
+
+def pushed_in_range(base):
+    """How many commits in the range the upstream already has.
+
+    Squashing rewrites every one of them, so a branch that has been pushed needs a force
+    push afterwards. Counting conservatively: with no upstream there is nothing to break.
+    """
+    upstream = git("rev-parse", "--abbrev-ref", "@{u}")
+    if upstream.returncode != 0:
+        return 0
+    counted = git("rev-list", "--count", f"{base}..{upstream.stdout.strip()}")
+    return int(counted.stdout.strip() or 0) if counted.returncode == 0 else 0
+
 
 _revision = {"at": 0.0, "value": ""}
 
@@ -146,6 +182,8 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             return None
 
     def do_POST(self):
+        if self.path == "/squash":
+            return self._squash()
         if self.path == "/rebuild":
             return self._rebuild()
         if self.path == "/resolve":
@@ -184,6 +222,75 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             os.fsync(handle.fileno())
         return self._json({"ok": True, "id": row["id"]})
 
+
+    def _squash(self):
+        """Run git rebase --autosquash over the reviewed range.
+
+        Every guard here exists because the failure it prevents is worse than the button
+        being unavailable: a rebase started from a web page that leaves the repo mid
+        conflict, or rewrites commits someone else has pulled, is not a small mistake.
+        """
+        asked = self._body() or {}
+        base = review_base()
+        if not base:
+            return self._json({"error": f"no base commit in the range {RANGE}"}, 400)
+
+        if git("status", "--porcelain").stdout.strip():
+            return self._json({"error": "the working tree has changes: commit or stash them first"}, 409)
+
+        git_dir = pathlib.Path(git("rev-parse", "--git-dir").stdout.strip() or ".git")
+        if not git_dir.is_absolute():
+            git_dir = REPO / git_dir
+        if (git_dir / "rebase-merge").exists() or (git_dir / "rebase-apply").exists():
+            return self._json({"error": "a rebase is already in progress here"}, 409)
+
+        subjects = [s for s in git("log", "--format=%s", f"{base}..HEAD").stdout.split("\n") if s]
+        if not any(s.startswith(FIXUP_PREFIXES) for s in subjects):
+            return self._json({"error": "nothing to squash: no fixups in this range"}, 400)
+
+        pushed = pushed_in_range(base)
+        if pushed and not asked.get("force"):
+            return self._json({
+                "error": f"{pushed} commit(s) in this range are already pushed. Squashing "
+                         "rewrites them, so the branch would need a force push.",
+                "needsForce": True,
+            }, 409)
+
+        head = git("rev-parse", "HEAD").stdout.strip()
+        backup = "pre-squash/" + time.strftime("%Y%m%d-%H%M%S")
+        made = git("branch", backup, head)
+        if made.returncode != 0:
+            return self._json({"error": "could not make a backup branch: " + made.stderr.strip()[:200]}, 500)
+
+        # true as the editor takes the todo list and the messages as git wrote them.
+        env = dict(os.environ, GIT_SEQUENCE_EDITOR="true", GIT_EDITOR="true")
+        run = subprocess.run(["git", "-C", str(REPO), "rebase", "-i", "--autosquash", base],
+                             capture_output=True, text=True, env=env)
+        if run.returncode != 0:
+            # Never leave a repo mid rebase because a button was pressed.
+            subprocess.run(["git", "-C", str(REPO), "rebase", "--abort"], capture_output=True, text=True)
+            git("reset", "--hard", head)
+            return self._json({
+                "error": "the rebase did not apply and was rolled back: "
+                         + (run.stderr or run.stdout).strip()[:400],
+                "backup": backup,
+            }, 409)
+
+        before = len(subjects)
+        after = len([s for s in git("log", "--format=%s", f"{base}..HEAD").stdout.split("\n") if s])
+        built = subprocess.run([sys.executable, str(HERE / "review.py"), "build", "--", RANGE],
+                               capture_output=True, text=True, cwd=str(REPO))
+        if built.returncode != 0:
+            return self._json({
+                "error": "the squash worked but the page did not build: "
+                         + (built.stderr or built.stdout).strip()[:400],
+                "backup": backup,
+            }, 500)
+
+        return self._json({
+            "ok": True, "before": before, "after": after,
+            "backup": backup, "head": head, "revision": revision(fresh=True),
+        })
 
     def _rebuild(self):
         """Rebuild index.html for the same range, so a reload shows the new commits.

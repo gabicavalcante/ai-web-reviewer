@@ -84,6 +84,8 @@
   .shell { max-width: 1320px; margin: 0 auto; padding: 32px 24px 72px; }
   .stale { position: sticky; top: 0; z-index: 40; display: flex; align-items: center; gap: 12px; margin: 0 0 20px; padding: 9px 14px; border: 1px solid var(--accent); border-radius: 3px; background: var(--accent-soft); font-family: var(--sans); font-size: 13px; color: var(--ink); }
   .stale .btn { margin-left: auto; flex: none; }
+  /* The end of a review, not a step in it: shown only once every commit is ticked. */
+  .stale.squash { border-color: var(--add); background: var(--add-bg); }
 
   /* ---------- header ---------- */
   .masthead { display: flex; flex-direction: column; gap: 14px; padding-bottom: 26px; border-bottom: 1px solid var(--line); }
@@ -358,6 +360,11 @@
     <button class="btn small" id="staleBuild" type="button">Rebuild and reload</button>
   </div>
 
+  <div class="stale squash" id="squash" hidden>
+    <span id="squashText"></span>
+    <button class="btn small" id="squashRun" type="button">Squash fixups</button>
+  </div>
+
   <header class="masthead">
     <div class="eyebrow">
       <span class="branch" id="branch"></span>
@@ -597,6 +604,21 @@
     document.getElementById("progressText").textContent = n + " of " + DATA.commits.length + " reviewed";
     document.getElementById("progressBar").style.width = (n / DATA.commits.length * 100) + "%";
     DATA.commits.forEach(c => { c._doneTag.hidden = !reviewed.has(c.short); });
+    refreshSquash(n);
+  }
+
+  const FIXUP_COUNT = DATA.commits.reduce((n, c) => n + (c.followups || []).length, 0);
+  const FIXUP_TARGETS = DATA.commits.filter(c => (c.followups || []).length).length;
+
+  /* Squashing is what you do after reading everything, so the bar waits until every
+     commit is ticked. Before that it would be one more thing to ignore. */
+  function refreshSquash(reviewedCount) {
+    const bar = document.getElementById("squash");
+    if (!FIXUP_COUNT || reviewedCount < DATA.commits.length) { bar.hidden = true; return; }
+    document.getElementById("squashText").textContent =
+      "Every commit reviewed. " + FIXUP_COUNT + (FIXUP_COUNT === 1 ? " fixup" : " fixups")
+      + " can be squashed into " + FIXUP_TARGETS + (FIXUP_TARGETS === 1 ? " commit." : " commits.");
+    bar.hidden = false;
   }
 
   /* ---------- diff rendering ---------- */
@@ -1211,6 +1233,49 @@
       : added + " new commits on this branch.";
     bar.hidden = false;
   }
+
+  async function runSquash(button, force) {
+    button.disabled = true;
+    button.textContent = "Squashing…";
+    try {
+      const res = await fetch("/squash", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ force: !!force }),
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        // The pushed-branch guard is the one worth offering to override, and only after
+        // saying what it costs.
+        if (body.needsForce && window.confirm(body.error + "\n\nSquash anyway?")) {
+          return runSquash(button, true);
+        }
+        throw new Error(body.error || "HTTP " + res.status);
+      }
+      // The backup branch is the way back, so it is shown and waited on rather than
+      // flashed past by an immediate reload.
+      document.getElementById("squashText").textContent =
+        body.before + " commits became " + body.after + ". Undo with: git reset --hard " + body.backup;
+      button.disabled = false;
+      button.textContent = "Reload";
+      button.onclick = () => location.reload();
+    } catch (err) {
+      button.disabled = false;
+      button.textContent = "Squash fixups";
+      setStatus(false, "could not squash: " + err.message);
+    }
+  }
+
+  document.getElementById("squashRun").addEventListener("click", () => {
+    const button = document.getElementById("squashRun");
+    const anchored = THREADS.filter(t => VALID_ANCHORS.has(anchorKey(t))).length;
+    const warning =
+      "Squash " + FIXUP_COUNT + " fixup(s) into " + FIXUP_TARGETS + " commit(s)?\n\n"
+      + "Every commit in this range gets a new sha.\n"
+      + anchored + " thread(s) will lose their anchor and move to the orphan section.\n"
+      + "A backup branch is made first, so this can be undone.";
+    if (window.confirm(warning)) runSquash(button, false);
+  });
 
   document.getElementById("staleBuild").addEventListener("click", async () => {
     const btn = document.getElementById("staleBuild");
