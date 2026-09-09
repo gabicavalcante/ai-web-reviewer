@@ -267,12 +267,18 @@
   table.diff tr[data-asked] td { cursor: pointer; }
   table.diff tr[data-asked]:hover .gut { box-shadow: inset 3px 0 0 var(--accent), 0 0 0 1px var(--accent); }
   tr.thread-row > td, tr.composer-row > td { padding: 0 !important; background: var(--surface); border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
-  .thread { margin: 0 24px 0 52px; padding: 14px 0; display: flex; flex-direction: column; gap: 11px; font-family: var(--sans); white-space: normal; }
+  .thread { margin: 0 24px 0 52px; padding: 14px 0; display: flex; flex-direction: column; gap: 16px; font-family: var(--sans); white-space: normal; }
   .turn { display: grid; grid-template-columns: 62px minmax(0, 1fr); gap: 12px; align-items: baseline; }
   .turn .who { font-family: var(--mono); font-size: 10.5px; letter-spacing: .06em; text-transform: uppercase; color: var(--ink-faint); }
   .turn.claude .who { color: var(--accent); }
   .turn .said { font-size: 14px; line-height: 1.55; white-space: pre-wrap; max-width: 76ch; }
   .turn .said code { font-family: var(--mono); font-size: .88em; background: var(--surface-2); padding: 1px 5px; border-radius: 2px; }
+  /* A label over plain text looks the same whoever wrote it, and in the panel, where the
+     label sits above rather than beside, the two ran together. What you said is a filled
+     card, what Claude said runs on the page: a quote, then the answer to it. The card
+     needs its own inset shade for code, because code defaults to the card's own colour. */
+  .turn.you .said { background: var(--surface-2); border-radius: 3px; padding: 9px 11px; }
+  .turn.you .said code, .turn.you .said pre { background: var(--surface); }
   .turn .said pre, .q pre, .why pre, .points pre { font-family: var(--mono); font-size: 12.5px; line-height: 1.6; white-space: pre-wrap; overflow-wrap: anywhere; background: var(--surface-2); border-radius: 3px; padding: 9px 11px; margin: 10px 0; overflow-x: auto; }
   .turn .said pre code, .q pre code, .why pre code, .points pre code { background: none; padding: 0; font-size: inherit; }
   .pending { font-family: var(--mono); font-size: 11.5px; color: var(--ink-faint); display: flex; align-items: center; gap: 8px; }
