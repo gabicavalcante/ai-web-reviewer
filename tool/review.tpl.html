@@ -200,6 +200,13 @@
   .ok { color: var(--add); font-family: var(--mono); font-size: 12px; white-space: nowrap; }
 
   /* ---------- diff ---------- */
+  /* A follow-up is a fixup that git will squash into the commit above it. It is drawn
+     inside its target rather than beside it, so a review is as long as the change is. */
+  .followup { display: flex; align-items: baseline; flex-wrap: wrap; gap: 10px; padding: 16px 26px 8px; border-top: 1px solid var(--line-soft); font-family: var(--sans); }
+  .followup .tag { font-family: var(--mono); font-size: 10.5px; letter-spacing: .06em; text-transform: uppercase; color: var(--accent); }
+  .followup .sha { font-family: var(--mono); font-size: 11.5px; color: var(--ink-faint); }
+  .followup .sub { font-size: 13px; color: var(--ink-soft); }
+  .followup .stat { margin-left: auto; font-family: var(--mono); font-size: 11px; color: var(--ink-faint); }
   .difftools { display: flex; align-items: center; gap: 14px; padding: 12px 26px; border-bottom: 1px solid var(--line); font-family: var(--mono); font-size: 11px; color: var(--ink-faint); letter-spacing: .05em; text-transform: uppercase; }
   .difftools .spacer { margin-left: auto; }
   .toggle { display: inline-flex; align-items: center; gap: 7px; cursor: pointer; color: var(--ink-soft); text-transform: none; letter-spacing: 0; font-size: 12px; }
@@ -464,6 +471,12 @@
     }).join("");
   };
 
+  /* A commit and the fixups folded into it. Declared up here with the other helpers:
+     renderCommit calls it during the first render, well above the anchor block where it
+     used to live, and a const in its temporal dead zone throws and leaves a half-drawn
+     page. */
+  const withFollowups = c => [c, ...(c.followups || [])];
+
   let selected = 0;
 
   /* The commits built into this page. The server reports the ones in the range now, and
@@ -660,7 +673,8 @@
     if (c.matrix) pane.appendChild(renderMatrix(c.matrix, c.matrixCaption));
 
     const tools = el("div", "difftools");
-    tools.appendChild(el("span", null, c.files.length === 1 ? "1 file" : c.files.length + " files"));
+    const paneFiles = withFollowups(c).reduce((n, src) => n + src.files.length, 0);
+    tools.appendChild(el("span", null, paneFiles === 1 ? "1 file" : paneFiles + " files"));
     const spacer = el("span", "spacer");
     tools.appendChild(spacer);
 
@@ -699,6 +713,15 @@
 
     const files = el("div", "files");
     c.files.forEach(f => files.appendChild(renderFile(f, c.short)));
+    (c.followups || []).forEach(fu => {
+      const mark = el("div", "followup");
+      mark.appendChild(el("span", "tag", "follow-up"));
+      mark.appendChild(el("span", "sha", fu.short));
+      mark.appendChild(el("span", "sub", fu.headline || fu.subject));
+      mark.appendChild(el("span", "stat", "+" + fu.additions + " -" + fu.deletions));
+      files.appendChild(mark);
+      fu.files.forEach(f => files.appendChild(renderFile(f, fu.short)));
+    });
     pane.appendChild(files);
 
     const msg = el("details", "msg");
@@ -724,10 +747,10 @@
   /* Every anchor the loaded range can still render. A thread outside it is orphaned,
      which happens when a commit is amended or rebased away. */
   const VALID_ANCHORS = new Set();
-  DATA.commits.forEach(c => c.files.forEach(f => f.rows.forEach(r => {
+  DATA.commits.forEach(c => withFollowups(c).forEach(src => src.files.forEach(f => f.rows.forEach(r => {
     if (r.t === "hunk") return;
-    VALID_ANCHORS.add([c.short, f.path, r.t, String(r.t === "del" ? r.o : r.n)].join("\u0000"));
-  })));
+    VALID_ANCHORS.add([src.short, f.path, r.t, String(r.t === "del" ? r.o : r.n)].join("\u0000"));
+  }))));
   let composerOpen = false;
   const anchorKey = d => [d.commit, d.file, d.side, d.line].join("\u0000");
 

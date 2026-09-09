@@ -101,6 +101,46 @@ def fallback_narrative(index, subject, body):
     return dict(stage=f"{index + 1}", flow="", why=first_para or subject, points=[], matrix=None)
 
 
+FIXUP_RE = re.compile(r"^(fixup!|squash!|amend!)\s+")
+
+
+def fold_fixups(commits):
+    """Attach every fixup to the commit it amends, and return what is left.
+
+    A fixup is not a commit to review on its own. It is an amendment to one already
+    reviewed, and git squashes it away at the end, so listing it beside real commits
+    doubles the length of a review with nothing new to read.
+
+    Its diff still matters, so it moves inside its target rather than disappearing, and
+    it keeps its own sha: threads anchor to that, so folding changes where a fixup is
+    drawn and nothing else.
+
+    A fixup whose target is not in the range has nothing to attach to and stays a commit
+    of its own.
+    """
+    first_with_subject = {}
+    for commit in commits:
+        first_with_subject.setdefault(commit["subject"], commit)
+
+    kept, kept_ids = [], set()
+    for commit in commits:
+        target_subject = commit["subject"]
+        # "git commit --fixup" onto a fixup stacks the prefixes: fixup! fixup! <subject>.
+        while FIXUP_RE.match(target_subject):
+            target_subject = FIXUP_RE.sub("", target_subject, count=1)
+
+        target = first_with_subject.get(target_subject)
+        # Only fold backwards, onto a commit already kept. A target that comes later is
+        # not the one this fixup amends.
+        if target_subject != commit["subject"] and target is not None and id(target) in kept_ids:
+            target.setdefault("followups", []).append(commit)
+            continue
+
+        kept.append(commit)
+        kept_ids.add(id(commit))
+    return kept
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("range", nargs="?", default="origin/main...HEAD")
@@ -160,6 +200,9 @@ def main():
             files=files,
         ))
 
+    commits = fold_fixups(commits)
+    folded = sum(len(c.get("followups", [])) for c in commits)
+
     branch = git(repo, "rev-parse", "--abbrev-ref", "HEAD").strip()
     total_files, total_adds, total_dels = shortstat_numbers(
         git(repo, "diff", "--shortstat", rng)
@@ -170,6 +213,8 @@ def main():
         {"k": "lines added", "v": str(total_adds)},
         {"k": "lines removed", "v": str(total_dels)},
     ]
+    if folded:
+        default_figures.insert(1, {"k": "follow-ups", "v": str(folded)})
 
     print(json.dumps(dict(
         commits=commits,
