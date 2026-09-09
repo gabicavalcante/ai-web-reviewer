@@ -100,6 +100,10 @@
   .figure .v { font-family: var(--mono); font-size: 17px; font-weight: 500; font-variant-numeric: tabular-nums; display: block; }
   .figure .k { font-size: 12px; color: var(--ink-faint); letter-spacing: .02em; }
   .figure .was { color: var(--ink-faint); text-decoration: line-through; font-weight: 400; }
+  /* Red only when the figure actually went down, so the strike says "dropped" and not
+     merely "changed". A figure that went up stays neutral: green would be the page
+     deciding that more lines is good news. */
+  .figure .was.dropped { color: var(--del); }
 
   /* ---------- flow strip ---------- */
   .flow { margin: 30px 0 34px; }
@@ -535,12 +539,29 @@
   document.getElementById("flowTitle").textContent =
     DATA.stagesTitle || "Stages of this change, and which commit touches each one";
 
+  /* A figure is only comparable when both sides are plain numbers. "6 of 6" is not, and
+     stripping it to digits would read as 66, so anything else is left alone. */
+  const plainNumber = value => {
+    const found = /^\s*(-?[\d,]+(?:\.\d+)?)\s*$/.exec(String(value));
+    return found ? parseFloat(found[1].replace(/,/g, "")) : NaN;
+  };
+  const droppedFrom = (was, now) => {
+    const before = plainNumber(was);
+    const after = plainNumber(now);
+    return Number.isFinite(before) && Number.isFinite(after) && after < before;
+  };
+
   const figures = DATA.figures || [];
   const figWrap = document.getElementById("figures");
   figures.forEach(f => {
     const box = el("div", "figure");
     const v = el("span", "v");
-    if (f.was) { v.appendChild(el("span", "was", f.was)); v.appendChild(document.createTextNode(" " + f.v)); }
+    if (f.was) {
+      const was = el("span", "was", f.was);
+      if (droppedFrom(f.was, f.v)) was.classList.add("dropped");
+      v.appendChild(was);
+      v.appendChild(document.createTextNode(" " + f.v));
+    }
     else { v.textContent = f.v; }
     box.appendChild(v);
     box.appendChild(el("span", "k", f.k));
