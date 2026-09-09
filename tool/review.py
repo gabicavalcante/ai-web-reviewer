@@ -40,9 +40,11 @@ SKELETON = """<!doctype html>
 def build(rng, narrative):
     repo = paths.repo_root()
     state = paths.state_dir(repo)
-    command = [sys.executable, str(HERE / "build_data.py"), rng]
+    command = [sys.executable, str(HERE / "build_data.py")]
     if narrative:
         command += ["--narrative", str(pathlib.Path(narrative).resolve())]
+    # "--" so a range like --root..HEAD is not read as an option
+    command += ["--", rng]
     data = subprocess.run(command, capture_output=True, text=True, cwd=repo)
     if data.returncode != 0:
         raise SystemExit(data.stderr.strip() or "build_data.py failed")
@@ -51,8 +53,10 @@ def build(rng, narrative):
     template = (HERE / "review.tpl.html").read_text()
     if template.count("/*__DATA__*/") != 1:
         raise SystemExit("template placeholder missing")
-    if "</script" in payload.lower():
-        raise SystemExit("data would close the inline script")
+    # Any "<" inside the JSON would let a diff of an HTML file close the inline
+    # script tag. In JSON, "<" only ever appears inside a string, where \u003c is
+    # the same character, so escaping every one is safe and keeps the data intact.
+    payload = payload.replace("<", "\\u003c")
 
     page = template.replace("/*__DATA__*/", payload)
     split = page.index('<div class="shell">')

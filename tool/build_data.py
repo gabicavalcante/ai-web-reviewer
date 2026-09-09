@@ -27,6 +27,18 @@ def git(repo, *args):
     return result.stdout
 
 
+def check_range(repo, rng):
+    """Fail with something actionable, rather than passing git's usage text along."""
+    probe = subprocess.run(["git", "-C", str(repo), "rev-list", "--count", rng],
+                           capture_output=True, text=True)
+    if probe.returncode == 0:
+        return
+    hint = "try an explicit range such as HEAD~3..HEAD"
+    if "origin/" in rng:
+        hint = f"'git fetch origin' first, or pass an explicit range such as HEAD~3..HEAD"
+    raise SystemExit(f"cannot resolve the range {rng!r} in {repo.name}: {hint}")
+
+
 def parse_patch(patch):
     files, current = [], None
     old_no = new_no = 0
@@ -105,6 +117,7 @@ def main():
         narrative = json.loads(pathlib.Path(args.narrative).read_text())
     per_commit = narrative.get("commits", {})
 
+    check_range(repo, rng)
     shas = [s for s in git(repo, "log", "--format=%h", "--reverse", rng).strip().split("\n") if s]
     if not shas:
         raise SystemExit(f"no commits in range {rng}")
