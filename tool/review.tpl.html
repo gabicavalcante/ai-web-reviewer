@@ -336,6 +336,7 @@
   .did { border-left: 2px solid var(--add); padding: 2px 0 2px 12px; display: flex; flex-direction: column; gap: 4px; }
   .did .landed { font-family: var(--mono); font-size: 11px; letter-spacing: .04em; text-transform: uppercase; color: var(--add); }
   .did .sha { font-family: var(--mono); font-size: 12px; color: var(--ink); }
+  .did .into { font-family: var(--mono); font-size: 11px; color: var(--accent); }
   .did .stat { font-family: var(--mono); font-size: 11px; color: var(--ink-faint); }
   .orphans { margin-top: 40px; padding-top: 26px; border-top: 1px solid var(--line); }
   .orphan { background: var(--surface); border: 1px solid var(--line); border-left: 2px solid var(--del); border-radius: 3px; padding: 15px 18px; display: flex; flex-direction: column; gap: 9px; }
@@ -483,6 +484,21 @@
      used to live, and a const in its temporal dead zone throws and leaves a half-drawn
      page. */
   const withFollowups = c => [c, ...(c.followups || [])];
+
+  /* A fixup's sha stops existing when git squashes it, so a thread that recorded its
+     change against one is pointing at something with a shelf life. The commit it folds
+     into does not move, so the thread can say where the change actually lands. */
+  const FOLDED_INTO = new Map();
+  DATA.commits.forEach(c => (c.followups || []).forEach(f => FOLDED_INTO.set(f.short, c)));
+  const foldedInto = sha => {
+    if (!sha) return null;
+    if (FOLDED_INTO.has(sha)) return FOLDED_INTO.get(sha);
+    // --did and the diff can abbreviate to different lengths.
+    for (const [short, target] of FOLDED_INTO) {
+      if (short.startsWith(sha) || sha.startsWith(short)) return target;
+    }
+    return null;
+  };
 
   let selected = 0;
 
@@ -971,6 +987,11 @@
       const did = el("div", "did");
       did.appendChild(el("span", "landed", "changed"));
       if (turn.commit) did.appendChild(el("span", "sha", turn.commit));
+      const target = foldedInto(String(turn.commit || "").split(" ")[0]);
+      if (target) {
+        did.appendChild(el("span", "into",
+          "squashed into " + target.short + " " + target.headline));
+      }
       if (turn.stat) did.appendChild(el("span", "stat", turn.stat));
       box.appendChild(did);
       box.appendChild(rich("div", null, md(escapeHtml(turn.text))));
