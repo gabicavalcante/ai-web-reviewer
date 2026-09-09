@@ -1,7 +1,7 @@
 # web-reviewer
 
 Read a branch's diff in a browser and ask questions about individual lines, with the
-answers appearing inline next to the code.
+answers arriving beside the code they are about.
 
 Built as a [Claude Code](https://claude.com/claude-code) skill. The page is plain HTML
 served from a local Python process; there is no build step and no dependencies outside
@@ -17,11 +17,22 @@ the question on the line.
 
 - Renders a git range as a page: commits in a rail, diffs with line numbers, files
   collapsible, large deletions collapsed by default.
-- Click any line number to open a thread anchored to that commit, file and line.
-- Threads reach your Claude Code session, and answers render in place.
-- Mark threads resolved, reopen them, hide the resolved ones.
-- Threads survive rebuilds, restarts and rebases. When a rebase orphans one, the page
-  shows it in its own section rather than dropping it.
+- Click any line to open a thread anchored to that commit, file and line. A line that
+  already carries a thread is marked in the gutter.
+- Threads reach your Claude Code session, and answers arrive in a panel beside the diff,
+  so a long answer never pushes the code off the screen.
+- Answers render `code`, **bold** and fenced blocks.
+- Mark threads resolved, read a resolved one without reopening it, hide them entirely.
+- Folds `fixup!` commits into the commit they amend, so a branch under review reads as
+  long as the change is rather than as long as the review was.
+- Notices when the branch has moved under the page, and offers to build it again.
+- Squashes the fixups when the review is done, with guards and a backup branch.
+
+## Requirements
+
+Python 3 and git. `node` is optional: the build runs the page's script against a minimal
+DOM and refuses to serve a page that throws, and without node that check is skipped with
+a message.
 
 ## Install
 
@@ -31,6 +42,51 @@ ln -s ~/development/personal/web-reviewer ~/.claude/skills/web-reviewer
 ```
 
 Then ask Claude Code to review a branch in the browser, or invoke `/web-reviewer`.
+
+## How a question reaches Claude
+
+Asking on the page appends to a log. Nothing reads that log on its own, so a session that
+never started a watcher will leave every question unanswered with no sign that it is
+doing so.
+
+Claude Code arms the watcher when it opens the review, following `SKILL.md`. It runs
+`tool/watch.py`, which prints one line per new question or reply, and the session answers
+with `tool/answer.py`. If answers never arrive, that watcher is the first thing to check.
+
+## Controls
+
+| | |
+| --- | --- |
+| Click a line | Ask about it, or open the thread it already has |
+| `j` `k` or arrows | Move between commits |
+| `⌘/Ctrl + Enter` | Send the question or reply you are typing |
+| `Esc` | Close the thread panel or the question box |
+| `Changes only` | Hide unchanged context lines |
+| `Wrap lines` | Wrap long lines instead of scrolling sideways |
+| `Hide resolved` | Drop resolved threads out of the page |
+| `Thread at the side` | Threads in a panel beside the diff, or as rows under the line |
+
+## Change requests, and why fixups
+
+A request made in a thread lands as `git commit --fixup=<sha>`, never as an amend. A
+thread is anchored to a commit's sha, so amending a reviewed commit changes that sha and
+orphans every thread on it. A fixup leaves the reviewed commits alone.
+
+The page folds each fixup into the commit it amends and marks it as one, so the rail
+stays as long as the change rather than growing with every correction. A fixup whose
+target is outside the range stays a commit of its own.
+
+When every commit is ticked, the page offers to squash. It refuses on a dirty working
+tree, on a rebase already in progress, when there is nothing to squash, and when the
+range contains commits that are already pushed, which is the only refusal it will let you
+override. It writes a `pre-squash/<stamp>` branch first, and a rebase that does not apply
+is aborted and rolled back rather than left half done.
+
+Squashing rewrites every commit in the range, so the threads on them are orphaned. They
+are not lost: the page keeps them in their own section, and they stay readable and
+answerable there.
+
+See `git help rebase` for what `--fixup` and `--autosquash` do.
 
 ## Use it without Claude Code
 
@@ -44,6 +100,13 @@ You get the diff reader and the thread UI. Questions are appended to
 `~/.local/state/web-reviewer/<repo>-<hash>/questions.jsonl`, and anything that appends an
 answer to `messages.jsonl` shows up in the thread, so the Claude Code integration is one
 consumer rather than a requirement.
+
+`tool/answer.py` writes those turns. A plain turn is an answer; `--ask` marks it as a
+question back to the reviewer, which the page offers a button to answer; `--did` records
+a change with the commit it landed in.
+
+State lives outside the repo, keyed by the repo's path, so questions never land in git and
+survive rebuilds and restarts.
 
 ## The narrative layer
 
@@ -60,16 +123,20 @@ page never shows an empty frame. See [reference/narrative.md](reference/narrativ
 | --- | --- |
 | `SKILL.md` | Instructions for the agent |
 | `reference/narrative.md` | The optional editorial layer |
+| `reference/voice.md` | How the page's own copy is written |
 | `reference/gotchas.md` | Operational traps worth not rediscovering |
 | `tool/review.py` | Build and serve |
 | `tool/build_data.py` | Git range to page data |
+| `tool/paths.py` | Where the repo is and where state lives |
 | `tool/review.tpl.html` | The page |
-| `tool/server.py` | Static files plus `/thread` `/ask` `/reply` `/resolve` |
+| `tool/server.py` | Static files plus `/thread` `/ask` `/reply` `/resolve` `/rebuild` `/squash` |
 | `tool/answer.py` | Write a turn into a thread |
 | `tool/watch.py` | Emit new questions and replies as events |
+| `tool/smoke.js` | Run the built page's script, so a page that throws is not served |
+| `tool/narrative.example.json` | A narrative to copy from |
 
 ## Scope
 
 The server binds `127.0.0.1` and has no authentication: anything that can reach the port
-can read and append. It is a local review tool, not a service. Do not bind it to a
-routable interface.
+can read and append, and `/squash` rewrites history in the repo it was started from. It is
+a local review tool, not a service. Do not bind it to a routable interface.
