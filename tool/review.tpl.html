@@ -112,6 +112,41 @@
 
   /* ---------- layout ---------- */
   .board { display: grid; grid-template-columns: 340px minmax(0, 1fr); gap: 28px; align-items: start; }
+  /* The panel takes its own column, so opening a thread narrows the diff instead of
+     covering it. Sticky with its own scrollbar: a long thread scrolls inside the panel
+     while the anchored line stays where it was. */
+  body.side-threads.side-open .board { grid-template-columns: 340px minmax(0, 1fr) minmax(400px, 480px); }
+  /* The panel needs a column of its own. Capped at 1320px it took that column out of the
+     diff, which then clipped mid-line. Open, the page uses the window instead. */
+  body.side-threads.side-open .shell { max-width: none; }
+  .side { position: sticky; top: 20px; max-height: calc(100vh - 40px); display: flex; flex-direction: column; background: var(--surface); border: 1px solid var(--line); border-radius: 3px; box-shadow: var(--shadow); overflow: hidden; }
+  .side-head { display: flex; align-items: center; gap: 10px; padding: 10px 14px; border-bottom: 1px solid var(--line); font-family: var(--mono); font-size: 11px; color: var(--ink-faint); flex: none; }
+  .side-anchor { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .side-close { margin-left: auto; flex: none; }
+  .side-code { flex: none; padding: 9px 14px; border-bottom: 1px solid var(--line); background: var(--surface-2); font-family: var(--mono); font-size: 12px; line-height: 1.6; white-space: pre-wrap; overflow-wrap: anywhere; color: var(--ink-soft); }
+  .side-body { overflow-y: auto; overscroll-behavior: contain; }
+  .side-body .thread, .side-body .resolved-line { margin: 0 14px; }
+  .side-body .turn { grid-template-columns: minmax(0, 1fr); gap: 1px; }
+  .side-body .turn .who { margin-top: 2px; }
+  .side-body .reply, .side-body .turn .said { max-width: none; }
+  table.diff tr.side-open-row td { background: var(--accent-soft); }
+  /* Below this width a third column would squeeze the diff past reading, so the panel
+     floats instead. It covers the code, which is the thing this layout exists to avoid,
+     so the inline mode is the better choice on a narrow screen. */
+  /* Three columns stop fitting before the panel does. The commit list is the one you are
+     not reading while a thread is open, so it gives up its column first and comes back on
+     Close. */
+  @media (max-width: 1660px) {
+    body.side-threads.side-open .board { grid-template-columns: minmax(0, 1fr) minmax(380px, 460px); }
+    body.side-threads.side-open .rail { display: none; }
+  }
+  /* Narrower than this the diff itself stops being readable beside a panel, so the panel
+     floats. It covers the code, which is what this layout exists to avoid, so the inline
+     toggle is the better choice at this width. */
+  @media (max-width: 1080px) {
+    body.side-threads.side-open .board { grid-template-columns: minmax(0, 1fr); }
+    .side { position: fixed; top: 0; right: 0; bottom: 0; width: min(420px, 92vw); max-height: none; border-radius: 0; z-index: 30; }
+  }
   @media (max-width: 940px) { .board { grid-template-columns: 1fr; } }
 
   .rail { position: sticky; top: 20px; }
@@ -186,7 +221,7 @@
   .diffwrap { overflow-x: auto; }
   table.diff { border-collapse: collapse; width: 100%; font-family: var(--mono); font-size: 12.5px; line-height: 1.65; }
   table.diff td { padding: 0; vertical-align: top; }
-  .gut { width: 1%; white-space: nowrap; text-align: right; padding: 0 10px 0 14px !important; color: var(--ink-faint); font-variant-numeric: tabular-nums; user-select: none; font-size: 11.5px; }
+  .gut { width: 1%; white-space: nowrap; text-align: right; padding: 0 10px 0 24px !important; color: var(--ink-faint); font-variant-numeric: tabular-nums; user-select: none; font-size: 11.5px; }
   .sign { width: 1%; padding: 0 6px !important; user-select: none; text-align: center; color: var(--ink-faint); }
   .code { white-space: pre; padding-right: 24px !important; }
   body.wrap .code { white-space: pre-wrap; overflow-wrap: anywhere; }
@@ -218,7 +253,12 @@
   /* ---------- inline Q&A ---------- */
   .gut { cursor: pointer; position: relative; }
   table.diff tr:hover .gut::after { content: "?"; position: absolute; right: 2px; top: 0; font-size: 10px; color: var(--accent); }
-  table.diff tr[data-asked="true"] .gut::before { content: ""; position: absolute; left: 4px; top: .62em; width: 5px; height: 5px; border-radius: 50%; background: var(--accent); }
+  /* A 5px dot was easy to miss and hard to aim at. A line carrying threads gets a bar
+     down the gutter and a badge with the number of them, and the whole line is clickable. */
+  table.diff tr[data-asked] .gut { box-shadow: inset 3px 0 0 var(--accent); }
+  table.diff tr[data-asked] .gut::before { content: attr(data-threads); position: absolute; left: 7px; top: 50%; transform: translateY(-50%); min-width: 14px; height: 14px; padding: 0 3px; box-sizing: border-box; border-radius: 7px; background: var(--accent); color: var(--on-accent); font-size: 9.5px; font-weight: 600; line-height: 14px; text-align: center; }
+  table.diff tr[data-asked] td { cursor: pointer; }
+  table.diff tr[data-asked]:hover .gut { box-shadow: inset 3px 0 0 var(--accent), 0 0 0 1px var(--accent); }
   tr.thread-row > td, tr.composer-row > td { padding: 0 !important; background: var(--surface); border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
   .thread { margin: 0 24px 0 52px; padding: 14px 0; display: flex; flex-direction: column; gap: 11px; font-family: var(--sans); white-space: normal; }
   .turn { display: grid; grid-template-columns: 62px minmax(0, 1fr); gap: 12px; align-items: baseline; }
@@ -248,9 +288,11 @@
   .resolved-line .tick { font-family: var(--mono); font-size: 11px; letter-spacing: .05em; text-transform: uppercase; color: var(--add); flex: none; }
   .resolved-line .q { font-size: 13.5px; color: var(--ink-soft); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .resolved-line .btn { margin-left: auto; flex: none; }
-  table.diff tr[data-asked="resolved"] .gut::before { background: transparent; box-shadow: inset 0 0 0 1px var(--ink-faint); }
+  table.diff tr[data-asked="resolved"] .gut { box-shadow: inset 3px 0 0 var(--ink-faint); }
+  table.diff tr[data-asked="resolved"] .gut::before { background: transparent; color: var(--ink-faint); box-shadow: inset 0 0 0 1px var(--ink-faint); }
   body.hide-resolved tr.thread-row[data-resolved="true"] { display: none; }
   body.hide-resolved table.diff tr[data-asked="resolved"] .gut::before { display: none; }
+  body.hide-resolved table.diff tr[data-asked="resolved"] .gut { box-shadow: none; }
   .turn.ask .said { border-left: 2px solid var(--accent); padding-left: 12px; }
   .yourcall { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; font-family: var(--mono); font-size: 11px; letter-spacing: .05em; text-transform: uppercase; color: var(--accent); }
   .did { border-left: 2px solid var(--add); padding: 2px 0 2px 12px; display: flex; flex-direction: column; gap: 4px; }
@@ -301,6 +343,15 @@
     </nav>
 
     <main class="pane" id="pane" aria-live="polite"></main>
+
+    <aside class="side" id="side" hidden aria-label="Thread on the selected line">
+      <div class="side-head">
+        <span class="side-anchor" id="sideAnchor"></span>
+        <button class="btn ghost small side-close" id="sideClose" type="button">Close</button>
+      </div>
+      <div class="side-code" id="sideCode"></div>
+      <div class="side-body" id="sideBody"></div>
+    </aside>
   </div>
 
   <section class="orphans" id="orphans" hidden>
@@ -579,12 +630,15 @@
     const spacer = el("span", "spacer");
     tools.appendChild(spacer);
 
-    const mkToggle = (label, cls, initial) => {
+    const mkToggle = (label, cls, initial, after) => {
       const lab = el("label", "toggle");
       const cb = el("input");
       cb.type = "checkbox";
       cb.checked = initial;
-      cb.addEventListener("change", () => document.body.classList.toggle(cls, cb.checked));
+      cb.addEventListener("change", () => {
+        document.body.classList.toggle(cls, cb.checked);
+        if (after) after();
+      });
       lab.appendChild(cb);
       lab.appendChild(document.createTextNode(label));
       return lab;
@@ -592,6 +646,8 @@
     tools.appendChild(mkToggle("Changes only", "only-changes", document.body.classList.contains("only-changes")));
     tools.appendChild(mkToggle("Wrap lines", "wrap", document.body.classList.contains("wrap")));
     tools.appendChild(mkToggle("Hide resolved", "hide-resolved", document.body.classList.contains("hide-resolved")));
+    tools.appendChild(mkToggle("Thread at the side", "side-threads",
+      document.body.classList.contains("side-threads"), () => { closeSide(); paintThreads(); }));
 
     const done = el("label", "toggle");
     const donecb = el("input");
@@ -616,6 +672,10 @@
     msg.appendChild(el("pre", null, c.subject + "\n\n" + c.body));
     pane.appendChild(msg);
   }
+
+  /* The layout under test is the default. Set before the first render, because the
+     diff tools read this class to decide whether the toggle starts checked. */
+  document.body.classList.add("side-threads");
 
   select(0);
   refreshProgress();
@@ -673,69 +733,134 @@
     });
   }
 
+  /* One thread renderer for both layouts: the row under the line, and the docked panel.
+     Only the container differs. */
+  function buildThread(list) {
+    const allResolved = list.every(t => t.resolved);
+    const thread = el("div", "thread" + (allResolved ? " done" : ""));
+    list.forEach(t => {
+      if (t.resolved) {
+        const line = el("div", "resolved-line");
+        line.appendChild(el("span", "tick", "resolved"));
+        line.appendChild(el("span", "q", t.question));
+        const reopen = el("button", "btn ghost small", "Reopen");
+        reopen.type = "button";
+        reopen.addEventListener("click", () => setResolved(t.id, false));
+        line.appendChild(reopen);
+        thread.appendChild(line);
+        return;
+      }
+      const q = el("div", "turn you");
+      q.appendChild(el("span", "who", "you"));
+      q.appendChild(el("div", "said", t.question));
+      thread.appendChild(q);
+
+      (t.turns || []).forEach(turn => thread.appendChild(renderTurn(turn)));
+
+      const turns = t.turns || [];
+      const lastTurn = turns[turns.length - 1];
+      if (lastTurn && lastTurn.role === "claude" && lastTurn.kind === "ask") {
+        const call = el("div", "yourcall");
+        call.appendChild(document.createTextNode("waiting for you"));
+        const go = el("button", "btn small", "Yes, investigate");
+        go.type = "button";
+        go.addEventListener("click", () => sendReply(t.id, "Yes, run the deep investigation."));
+        call.appendChild(go);
+        const no = el("button", "btn ghost small", "No, skip it");
+        no.type = "button";
+        no.addEventListener("click", () => sendReply(t.id, "No, skip the investigation."));
+        call.appendChild(no);
+        thread.appendChild(call);
+      } else if (!lastTurn || lastTurn.role !== "claude") {
+        const wait = el("div", "pending");
+        wait.appendChild(el("i", "dot"));
+        wait.appendChild(document.createTextNode("waiting for an answer"));
+        thread.appendChild(wait);
+      }
+
+      thread.appendChild(replyBox(t.id));
+    });
+    return { thread, allResolved };
+  }
+
+  /* ---------- the docked panel ---------- */
+
+  /* The line the panel is showing, as an anchor key rather than an element, so a refresh
+     redraws the same thread even though the rows were rebuilt underneath it. */
+  let sideKey = null;
+  const sideMode = () => document.body.classList.contains("side-threads");
+
+  function closeSide() {
+    sideKey = null;
+    document.getElementById("side").hidden = true;
+    document.body.classList.remove("side-open");
+    document.querySelectorAll("tr.side-open-row")
+      .forEach(n => n.classList.remove("side-open-row"));
+  }
+
+  function rowForKey(key) {
+    return [...document.querySelectorAll("table.diff tr[data-line]")]
+      .find(tr => anchorKey(tr.dataset) === key) || null;
+  }
+
+  function paintSide() {
+    if (!sideKey) return;
+    const tr = rowForKey(sideKey);
+    const list = threadsByAnchor().get(sideKey);
+    // The line can leave the page under us: another commit selected, or the thread
+    // resolved and hidden. Closing beats showing a thread with nothing to point at.
+    if (!tr || !list) { closeSide(); return; }
+
+    document.querySelectorAll("tr.side-open-row")
+      .forEach(n => n.classList.remove("side-open-row"));
+    tr.classList.add("side-open-row");
+
+    document.getElementById("sideAnchor").textContent =
+      tr.dataset.file + "  line " + tr.dataset.line +
+      (tr.dataset.side === "add" ? " (added)" : tr.dataset.side === "del" ? " (removed)" : "");
+    document.getElementById("sideCode").textContent = tr.dataset.code || "";
+
+    const body = document.getElementById("sideBody");
+    body.replaceChildren();
+    body.appendChild(buildThread(list).thread);
+
+    document.getElementById("side").hidden = false;
+    document.body.classList.add("side-open");
+  }
+
+  function openSide(tr) {
+    sideKey = anchorKey(tr.dataset);
+    paintSide();
+  }
+
   function paintThreads() {
     if (composerOpen || typingIn) { repaintPending = true; return; }
     document.querySelectorAll("tr.thread-row").forEach(n => n.remove());
-    document.querySelectorAll("table.diff tr[data-asked]").forEach(n => delete n.dataset.asked);
+    document.querySelectorAll("table.diff tr[data-asked]").forEach(n => {
+      delete n.dataset.asked;
+      const g = n.querySelector("td.gut");
+      if (g) delete g.dataset.threads;
+    });
 
     const byAnchor = threadsByAnchor();
+    const side = sideMode();
     document.querySelectorAll("table.diff tr[data-line]").forEach(tr => {
       const list = byAnchor.get(anchorKey(tr.dataset));
       if (!list) return;
-      tr.dataset.asked = "true";
-      const row = el("tr", "thread-row");
       const allResolved = list.every(t => t.resolved);
-      row.dataset.resolved = String(allResolved);
       tr.dataset.asked = allResolved ? "resolved" : "true";
+      const gut = tr.querySelector("td.gut");
+      if (gut) gut.dataset.threads = String(list.length);
+      if (side) return;
+      const row = el("tr", "thread-row");
+      row.dataset.resolved = String(allResolved);
       const cell = el("td");
       cell.colSpan = 3;
-      const thread = el("div", "thread" + (allResolved ? " done" : ""));
-      list.forEach(t => {
-        if (t.resolved) {
-          const line = el("div", "resolved-line");
-          line.appendChild(el("span", "tick", "resolved"));
-          line.appendChild(el("span", "q", t.question));
-          const reopen = el("button", "btn ghost small", "Reopen");
-          reopen.type = "button";
-          reopen.addEventListener("click", () => setResolved(t.id, false));
-          line.appendChild(reopen);
-          thread.appendChild(line);
-          return;
-        }
-        const q = el("div", "turn you");
-        q.appendChild(el("span", "who", "you"));
-        q.appendChild(el("div", "said", t.question));
-        thread.appendChild(q);
-
-        (t.turns || []).forEach(turn => thread.appendChild(renderTurn(turn)));
-
-        const turns = t.turns || [];
-        const lastTurn = turns[turns.length - 1];
-        if (lastTurn && lastTurn.role === "claude" && lastTurn.kind === "ask") {
-          const call = el("div", "yourcall");
-          call.appendChild(document.createTextNode("waiting for you"));
-          const go = el("button", "btn small", "Yes, investigate");
-          go.type = "button";
-          go.addEventListener("click", () => sendReply(t.id, "Yes, run the deep investigation."));
-          call.appendChild(go);
-          const no = el("button", "btn ghost small", "No, skip it");
-          no.type = "button";
-          no.addEventListener("click", () => sendReply(t.id, "No, skip the investigation."));
-          call.appendChild(no);
-          thread.appendChild(call);
-        } else if (!lastTurn || lastTurn.role !== "claude") {
-          const wait = el("div", "pending");
-          wait.appendChild(el("i", "dot"));
-          wait.appendChild(document.createTextNode("waiting for an answer"));
-          thread.appendChild(wait);
-        }
-
-        thread.appendChild(replyBox(t.id));
-      });
-      cell.appendChild(thread);
+      cell.appendChild(buildThread(list).thread);
       row.appendChild(cell);
       tr.after(row);
     });
+    if (side) paintSide(); else closeSide();
   }
 
   function renderTurn(turn) {
@@ -887,6 +1012,7 @@
         if (!res.ok) throw new Error("HTTP " + res.status);
         closeComposer();
         await refresh();
+        if (sideMode()) openSide(tr);
       } catch (err) {
         send.disabled = false;
         send.textContent = "Ask Claude";
@@ -939,20 +1065,29 @@
   }
 
   document.addEventListener("click", e => {
-    const gut = e.target.closest("td.gut");
-    if (!gut) return;
-    const tr = gut.closest("tr[data-line]");
-    if (tr) openComposer(tr);
+    const tr = e.target.closest("tr[data-line]");
+    if (!tr) return;
+    if (sideMode() && threadsByAnchor().has(anchorKey(tr.dataset))) {
+      // Reading a line often means selecting part of it. A drag that ends on the row is
+      // a selection, not a click on the thread.
+      if (String(window.getSelection() || "").trim()) return;
+      openSide(tr);
+      return;
+    }
+    if (e.target.closest("td.gut")) openComposer(tr);
   });
 
+  document.getElementById("sideClose").addEventListener("click", closeSide);
+
   const origSelect = select;
-  select = function (i) { closeComposer(); origSelect(i); paintThreads(); };
+  select = function (i) { closeComposer(); closeSide(); origSelect(i); paintThreads(); };
 
   refresh();
   setInterval(() => { if (!document.hidden) refresh(); }, 4000);
 
   document.addEventListener("keydown", e => {
     if (e.target.matches("input, textarea, summary")) return;
+    if (e.key === "Escape" && sideKey) { e.preventDefault(); closeSide(); return; }
     if (e.key === "j" || e.key === "ArrowDown") { e.preventDefault(); select(Math.min(selected + 1, DATA.commits.length - 1)); }
     if (e.key === "k" || e.key === "ArrowUp") { e.preventDefault(); select(Math.max(selected - 1, 0)); }
   });
