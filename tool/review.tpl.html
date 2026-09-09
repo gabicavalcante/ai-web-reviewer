@@ -482,7 +482,11 @@
   /* The commits built into this page. The server reports the ones in the range now, and
      the two stop matching when a commit lands. The diff is baked in at build time, so
      without this the reader sees a stale page with no sign that it is stale. */
-  const BUILT_REVISION = (DATA.commits || []).map(c => c.hash).sort().join(",");
+  /* Follow-ups count. The server lists what git lists, and git does not know a fixup was
+     folded into its target, so leaving them out left this permanently short of the
+     server's answer and the staleness bar permanently on. */
+  const BUILT_REVISION = (DATA.commits || [])
+    .flatMap(c => withFollowups(c).map(x => x.hash)).sort().join(",");
 
   /* ---------- masthead ---------- */
   document.title = DATA.title;
