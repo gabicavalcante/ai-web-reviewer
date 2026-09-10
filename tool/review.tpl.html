@@ -1338,6 +1338,9 @@
     } catch (err) {
       button.disabled = false;
       button.textContent = "Squash fixups";
+      // Next to the button as well as in the status strip: a refusal that only lands in
+      // the strip reads as the button doing nothing at all.
+      document.getElementById("squashText").textContent = "Could not squash: " + err.message;
       setStatus(false, "could not squash: " + err.message);
     }
   }

@@ -255,8 +255,11 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         if not base:
             return self._json({"error": f"no base commit in the range {RANGE}"}, 400)
 
-        if git("status", "--porcelain").stdout.strip():
-            return self._json({"error": "the working tree has changes: commit or stash them first"}, 409)
+        # --untracked-files=no because a rebase only refuses over tracked changes. Counting
+        # untracked files here blocked the button on a scratch directory beside the post
+        # being reviewed, which has nothing to do with the commits being squashed.
+        if git("status", "--porcelain", "--untracked-files=no").stdout.strip():
+            return self._json({"error": "the working tree has uncommitted changes: commit or stash them first"}, 409)
 
         git_dir = pathlib.Path(git("rev-parse", "--git-dir").stdout.strip() or ".git")
         if not git_dir.is_absolute():
