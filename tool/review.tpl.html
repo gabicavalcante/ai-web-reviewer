@@ -1297,10 +1297,16 @@
 
   document.getElementById("sideClose").addEventListener("click", closeSide);
 
+  /* A squash rebuilds the page on disk itself, so afterwards this tab is behind only
+     until it reloads. The staleness bar would offer to rebuild what is already built,
+     leaving two bars with two buttons for one action. */
+  let rebuiltAwaitingReload = false;
+
   function setStale(revision) {
     const bar = document.getElementById("stale");
     // "" means the server could not resolve the range. Unknown is not a reason to nag.
     if (!revision || revision === BUILT_REVISION) { bar.hidden = true; return; }
+    if (rebuiltAwaitingReload) { bar.hidden = true; return; }
     const built = new Set(BUILT_REVISION.split(","));
     const added = revision.split(",").filter(h => h && !built.has(h)).length;
     document.getElementById("staleText").textContent =
@@ -1330,6 +1336,8 @@
       }
       // The backup branch is the way back, so it is shown and waited on rather than
       // flashed past by an immediate reload.
+      rebuiltAwaitingReload = true;
+      document.getElementById("stale").hidden = true;
       document.getElementById("squashText").textContent =
         body.before + " commits became " + body.after + ". Undo with: git reset --hard " + body.backup;
       button.disabled = false;
