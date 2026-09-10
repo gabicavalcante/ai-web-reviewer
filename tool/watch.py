@@ -2,9 +2,8 @@
 """Emit one line per new question or reply, so the Claude Code session is notified.
 
 Replays the threads still owed an answer at startup, so a question asked while no
-session was attached is delivered when one arrives instead of being skipped, and
-keeps a heartbeat the page reads to tell "Claude is thinking" apart from "nobody
-is listening".
+session was attached reaches the next one. Keeps a heartbeat the page reads to tell
+"Claude is thinking" apart from "nobody is listening".
 """
 import json
 import pathlib
@@ -108,12 +107,8 @@ def describe_question(row):
 
 
 def describe_reply(row):
-    """A reviewer's turn, with the kind that produced it.
-
-    A decline arriving as bare prose leaves the reading session to infer what the
-    reviewer meant from the button's wording. Naming the kind keeps that unambiguous,
-    and keeps working if the button text changes.
-    """
+    # Naming the kind saves the reading session inferring a decline from the button's
+    # wording, and survives a reword of it.
     kind = row.get("kind", "answer")
     return "REPLY in thread {thread}{kind} · {text}".format(
         thread=row.get("thread_id", "?"),
@@ -131,8 +126,8 @@ def describe_backlog(question, last):
 
 
 def main():
-    # Anything already answered stays quiet; anything still waiting is replayed, because
-    # the alternative is a question that sits behind a spinner nobody will ever answer.
+    # Answered threads stay quiet. A waiting one is replayed, or it sits behind a
+    # spinner nobody will ever answer.
     for question, last in backlog():
         print(describe_backlog(question, last), flush=True)
 
@@ -157,8 +152,7 @@ def main():
             time.sleep(1)
     finally:
         # The page reads this to decide whether a spinner is honest, so clear it on the
-        # way out. A kill -9 cannot run this, which is why the page judges the heartbeat
-        # by how fresh it is rather than by whether it exists.
+        # way out. A kill -9 cannot, which is why the server judges it by mtime.
         try:
             HEARTBEAT.unlink()
         except OSError:
@@ -166,7 +160,7 @@ def main():
 
 
 if __name__ == "__main__":
-    # TaskStop and the Monitor timeout both send SIGTERM, whose default action skips the
-    # cleanup above. Turning it into SystemExit lets the heartbeat be cleared.
+    # TaskStop and the Monitor timeout both send SIGTERM, whose default action would
+    # skip the cleanup above.
     signal.signal(signal.SIGTERM, lambda signum, frame: sys.exit(0))
     main()

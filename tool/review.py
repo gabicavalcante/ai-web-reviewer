@@ -93,16 +93,15 @@ def smoke(page):
 def free_port(preferred):
     """The first port near `preferred` that nothing holds.
 
-    Asked by binding rather than by connecting. A connect probe has to wait for the
-    other end to refuse, and on a loopback stack that silently drops SYN to a closed
-    port (WSL2 does) that refusal never arrives, so the probe blocks forever and the
-    server never starts. A bind either succeeds or raises, without touching the wire.
+    Asked by binding: a connect probe waits for the other end to refuse, and a loopback
+    stack that drops SYN to a closed port (WSL2 does) never sends that refusal, so the
+    probe blocks forever and the server never starts.
     """
     for candidate in [preferred] + list(range(preferred + 1, preferred + 20)):
         with socket.socket() as probe:
-            # The same option the server sets, or the probe is stricter than the thing it
-            # is probing for: a port just vacated sits in TIME_WAIT, which refuses a plain
-            # bind but not the server's, and the port would drift up on every restart.
+            # The same option the server sets: a port just vacated sits in TIME_WAIT,
+            # which refuses a plain bind but not the server's, so without this the port
+            # drifts up by one on every restart.
             probe.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
             try:
                 probe.bind(("127.0.0.1", candidate))
