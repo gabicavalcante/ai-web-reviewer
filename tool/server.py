@@ -33,6 +33,10 @@ QUESTIONS = STATE / "questions.jsonl"
 ANSWERS = STATE / "answers.jsonl"
 RESOLVED = STATE / "resolved.jsonl"
 MESSAGES = STATE / "messages.jsonl"
+HEARTBEAT = STATE / "watcher.alive"
+# watch.py refreshes the heartbeat every second, so a few missed ticks still read as
+# attached while a stopped watcher goes stale before the page next polls.
+WATCHER_STALE_AFTER = 10
 MAX_BODY = 64 * 1024
 REPO = paths.repo_root()
 # review.py passes the range it served. The default matches its own.
@@ -74,6 +78,18 @@ def pushed_in_range(base):
 
 
 _revision = {"at": 0.0, "value": ""}
+
+
+def watcher_alive():
+    """Whether a Monitor is currently tailing the logs.
+
+    Judged by how fresh the heartbeat is rather than whether the file exists, because a
+    watcher killed with SIGKILL never gets to remove it.
+    """
+    try:
+        return (time.time() - HEARTBEAT.stat().st_mtime) < WATCHER_STALE_AFTER
+    except OSError:
+        return False
 
 
 def revision(fresh=False):
@@ -169,7 +185,11 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                 }
                 for question in read_jsonl(QUESTIONS)
             ]
-            return self._json({"threads": threads, "revision": revision()})
+            return self._json({
+                "threads": threads,
+                "revision": revision(),
+                "watcher": watcher_alive(),
+            })
         return super().do_GET()
 
     def _body(self):
@@ -317,9 +337,15 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         text = (payload.get("text") or "").strip()
         if not text:
             return self._json({"error": "empty reply"}, 400)
+        # "skip" marks a declined investigation, which settles the thread instead of
+        # leaving it looking like it is still owed an answer.
+        kind = str(payload.get("kind", "answer"))
+        if kind not in {"answer", "go", "skip"}:
+            kind = "answer"
         row = {
             "thread_id": thread_id,
             "role": "you",
+            "kind": kind,
             "text": text[:4000],
             "at": time.strftime("%Y-%m-%d %H:%M:%S"),
         }

@@ -107,5 +107,7 @@ Rebuild after new commits: `python3 $TOOL/review.py build <range>`, then reload.
 
 Read [reference/gotchas.md](reference/gotchas.md). The short version: never `pkill -f` a
 pattern that appears in your own command line, find the server by pid and
-`/proc/<pid>/cwd`, bound every `curl` with `--max-time`, and remember the Monitor dies
-with the session while the page keeps recording questions.
+`/proc/<pid>/cwd`, bound every `curl` with `--max-time`, and never probe a port by
+connecting to it. The Monitor dies with the session while the page keeps recording
+questions; re-arming it replays every thread still owed an answer, and while nothing is
+attached the page says so instead of showing a spinner.

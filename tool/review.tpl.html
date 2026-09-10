@@ -305,6 +305,7 @@
   .turn .said pre code, .q pre code, .why pre code, .points pre code { background: none; padding: 0; font-size: inherit; }
   .pending { font-family: var(--mono); font-size: 11.5px; color: var(--ink-faint); display: flex; align-items: center; gap: 8px; }
   .pending .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--accent); animation: pulse 1.4s ease-in-out infinite; }
+  .pending.detached .dot, .pending.settled .dot { background: var(--ink-faint); animation: none; }
   @keyframes pulse { 0%, 100% { opacity: .25; } 50% { opacity: 1; } }
   .composer { margin: 0 24px 0 52px; padding: 14px 0; display: flex; flex-direction: column; gap: 9px; font-family: var(--sans); white-space: normal; }
   .composer .anchor { font-family: var(--mono); font-size: 11px; color: var(--ink-faint); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -809,9 +810,25 @@
 
   /* ---------- inline Q&A with Claude ---------- */
   let THREADS = [];
+  /* Whether a Monitor is tailing the logs. Assumed true until the first poll says
+     otherwise, so a live review never flashes the detached state on load. */
+  let WATCHER_LIVE = true;
   /* A repaint would discard a half-typed reply, so it waits until the box is empty again. */
   let typingIn = null;
   let repaintPending = false;
+  /* The live textarea per thread, so a repaint can hand a half-typed reply to the
+     element that replaces it. Rebuilt by every paintThreads. */
+  const replyInputs = new Map();
+
+  /* Declines written before the reply carried a kind. Matched on the exact text the
+     button sent, so threads already on disk settle too. */
+  const LEGACY_SKIP = "No, skip the investigation.";
+
+  function isSkip(turn) {
+    if (!turn || turn.role === "claude") return false;
+    return turn.kind === "skip" || turn.text === LEGACY_SKIP;
+  }
+
 
   /* Every anchor the loaded range can still render. A thread outside it is orphaned,
      which happens when a commit is amended or rebased away. */
@@ -907,17 +924,32 @@
         call.appendChild(document.createTextNode("waiting for you"));
         const go = el("button", "btn small", "Yes, investigate");
         go.type = "button";
-        go.addEventListener("click", () => sendReply(t.id, "Yes, run the deep investigation."));
+        go.addEventListener("click", () => sendReply(t.id, "Yes, run the deep investigation.", "go"));
         call.appendChild(go);
         const no = el("button", "btn ghost small", "No, skip it");
         no.type = "button";
-        no.addEventListener("click", () => sendReply(t.id, "No, skip the investigation."));
+        no.addEventListener("click", () => sendReply(t.id, "No, skip the investigation.", "skip"));
         call.appendChild(no);
         thread.appendChild(call);
+      } else if (isSkip(lastTurn)) {
+        /* The reviewer turned the investigation down, so the thread is settled: nobody
+           owes it an answer and it must not read as though someone does. */
+        const done = el("div", "pending settled");
+        done.appendChild(el("i", "dot"));
+        done.appendChild(document.createTextNode("investigation skipped · nothing owed"));
+        thread.appendChild(done);
       } else if (!lastTurn || lastTurn.role !== "claude") {
-        const wait = el("div", "pending");
+        /* A pulsing "waiting" with no session attached promises an answer that cannot
+           come. The question is on disk either way, so say which of the two it is. */
+        const wait = el("div", WATCHER_LIVE ? "pending" : "pending detached");
         wait.appendChild(el("i", "dot"));
-        wait.appendChild(document.createTextNode("waiting for an answer"));
+        wait.appendChild(document.createTextNode(WATCHER_LIVE
+          ? "waiting for an answer"
+          : "no session attached · saved for when one starts"));
+        if (!WATCHER_LIVE) {
+          wait.title = "Nothing is watching the review log. A session that arms the "
+            + "watcher picks this thread up from where it left off.";
+        }
         thread.appendChild(wait);
       }
 
@@ -976,8 +1008,36 @@
     paintSide();
   }
 
+  function captureDraft(threadId) {
+    const input = replyInputs.get(threadId);
+    if (!input) return null;
+    return {
+      threadId,
+      value: input.value || "",
+      start: input.selectionStart,
+      end: input.selectionEnd,
+    };
+  }
+
+  function restoreDraft(draft) {
+    // The thread can leave the page under us (another commit selected, or resolved).
+    // Then the draft goes with it; there is nowhere to put it back.
+    const input = replyInputs.get(draft.threadId);
+    if (!input) return;
+    input.value = draft.value;
+    if (typeof input.focus === "function") input.focus();
+    if (typeof draft.start === "number" && typeof input.setSelectionRange === "function") {
+      input.setSelectionRange(draft.start, draft.end);
+    }
+  }
+
   function paintThreads() {
-    if (composerOpen || typingIn) { repaintPending = true; return; }
+    if (composerOpen) { repaintPending = true; return; }
+    /* A poll must not wipe a half-typed reply — but skipping the repaint instead froze
+       the thread for as long as the box kept focus, so an answer that arrived meanwhile
+       never appeared. Carry the draft across the redraw rather than refusing to redraw. */
+    const draft = typingIn ? captureDraft(typingIn) : null;
+    replyInputs.clear();
     document.querySelectorAll("tr.thread-row").forEach(n => n.remove());
     document.querySelectorAll("table.diff tr[data-asked]").forEach(n => {
       delete n.dataset.asked;
@@ -1035,12 +1095,12 @@
   }
 
 
-  async function sendReply(threadId, text) {
+  async function sendReply(threadId, text, kind) {
     try {
       const res = await fetch("/reply", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ thread_id: threadId, text })
+        body: JSON.stringify({ thread_id: threadId, text, kind: kind || "answer" })
       });
       if (!res.ok) throw new Error("HTTP " + res.status);
       typingIn = null;
@@ -1072,6 +1132,7 @@
       }
     };
 
+    replyInputs.set(threadId, input);
     input.addEventListener("focus", () => { typingIn = threadId; });
     input.addEventListener("blur", () => {
       if (!input.value.trim()) {
@@ -1189,8 +1250,10 @@
       if (!res.ok) throw new Error("HTTP " + res.status);
       const body = await res.json();
       setStale(body.revision);
+      const watcherWas = WATCHER_LIVE;
+      WATCHER_LIVE = body.watcher !== false;
       const next = JSON.stringify(body.threads);
-      if (next !== JSON.stringify(THREADS)) {
+      if (next !== JSON.stringify(THREADS) || WATCHER_LIVE !== watcherWas) {
         THREADS = body.threads;
         paintThreads();
         paintOrphans();
@@ -1199,7 +1262,9 @@
       const unanswered = THREADS.filter(t => {
         if (t.resolved) return false;
         const turns = t.turns || [];
-        return !turns.length || turns[turns.length - 1].role !== "claude";
+        const last = turns[turns.length - 1];
+        if (isSkip(last)) return false;
+        return !turns.length || last.role !== "claude";
       }).length;
       const yourCall = THREADS.filter(t => {
         if (t.resolved) return false;
@@ -1208,7 +1273,9 @@
       }).length;
       setStatus(true, THREADS.length
         ? `${THREADS.length} asked · ${open} open` +
-          (unanswered ? ` · ${unanswered} waiting for an answer` : "") +
+          (unanswered ? (WATCHER_LIVE
+            ? ` · ${unanswered} waiting for an answer`
+            : ` · ${unanswered} undelivered · no session attached`) : "") +
           (yourCall ? ` · ${yourCall} waiting for you` : "")
         : "Ask a question by clicking a line number");
     } catch (err) {

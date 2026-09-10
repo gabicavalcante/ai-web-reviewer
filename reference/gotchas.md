@@ -28,8 +28,18 @@ failure looks like it happened somewhere it did not.
 
 `Monitor` lives as long as the Claude Code session. The page keeps serving and keeps
 appending questions to `questions.jsonl` after the session ends, but nothing wakes you.
-Those questions show as pending and are answered when someone re-arms the watcher. Tell
-the reviewer this rather than letting it go quiet on them.
+
+Two things make that survivable, and both have to keep working:
+
+`watch.py` replays on startup. It emits every unresolved thread whose last turn is not
+Claude's, prefixed `BACKLOG`, so questions asked while nothing was attached arrive when a
+session re-arms the watcher. It used to seek to the end of both logs, which silently
+dropped them.
+
+`watch.py` writes `watcher.alive` every second, and `/thread` reports it as `watcher`.
+The page shows the pulsing "waiting for an answer" only when that is fresh; otherwise it
+says no session is attached. Judge the heartbeat by mtime, not existence: `kill -9` leaves
+the file behind.
 
 ## Theme colors come from tokens, never from a `[data-theme]` guard
 
