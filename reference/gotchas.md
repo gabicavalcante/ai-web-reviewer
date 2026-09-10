@@ -9,14 +9,22 @@ shell running it. The same is true of any `pgrep -f` check. Find the process by 
 rather than by a pattern:
 
 ```bash
-for pid in $(ps -eo pid= -o args= | awk '/python3 server\.py/ {print $1}'); do
-  [ "$(readlink /proc/$pid/cwd)" = "$STATE_DIR" ] && kill "$pid"
+REPO=$(git rev-parse --show-toplevel)
+for pid in $(ps -eo pid= -o args= | awk '/[s]erver\.py/ {print $1}'); do
+  [ "$(readlink /proc/$pid/cwd)" = "$REPO" ] && kill "$pid"
 done
 ```
 
-The server runs as plain `python3 server.py` from the state directory, so grepping for the
-directory in `args` finds nothing and you will wrongly conclude it stopped. The next start
-then fails with `Address already in use`.
+Two details that look like nits and are not. `review.py` execs the server by absolute
+path, so its `args` read `python3 /long/path/tool/server.py` — a pattern like
+`python3 server.py` matches nothing and you conclude it stopped. And it inherits the
+**repo** as its cwd, not the state directory, so that is what identifies which review a
+process belongs to. The bracketed `[s]` keeps the pattern from matching the `awk` that
+carries it.
+
+Get either wrong and the search comes back empty while the server is still holding the
+port. The next start quietly picks a different one, and the reviewer opens a page nobody
+is listening to.
 
 ## Bound every request
 

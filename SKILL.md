@@ -104,6 +104,30 @@ restarts and rebases. The rendered `index.html` sits in the same directory.
 
 Rebuild after new commits: `python3 $TOOL/review.py build <range>`, then reload.
 
+## When the review is over
+
+Nothing here stops on its own, and both halves have to be stopped separately.
+
+The server is started in the background, so it reparents to init and outlives the terminal
+that launched it, still holding its port. The watcher tails the logs, not the server, so
+killing the server leaves it running; it ends when the session does, or when you stop it.
+
+```bash
+REPO=$(git rev-parse --show-toplevel)
+for pid in $(ps -eo pid= -o args= | awk '/[s]erver\.py/ {print $1}'); do
+  [ "$(readlink /proc/$pid/cwd)" = "$REPO" ] && kill "$pid"
+done
+```
+
+Then `TaskStop` the Monitor. Read [reference/gotchas.md](reference/gotchas.md) before
+adapting that loop — the pattern and the cwd are both easy to get wrong in ways that
+silently find nothing.
+
+Stopping costs nothing: threads are on disk, and a later session that re-arms the watcher
+is handed everything still owed an answer. Leave them running only while the reviewer is
+still reading, and if you do, tell them the URL and that questions will reach you for as
+long as this session lives.
+
 ## Before you touch a running server
 
 Read [reference/gotchas.md](reference/gotchas.md). The short version: never `pkill -f` a
