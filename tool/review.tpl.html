@@ -800,9 +800,11 @@
     pane.appendChild(msg);
   }
 
-  /* The layout under test is the default. Set before the first render, because the
-     diff tools read this class to decide whether the toggle starts checked. */
+  /* The layout under test is the default, and long lines wrap rather than run off the
+     side. Set before the first render, because the diff tools read these classes to
+     decide whether their toggles start checked. */
   document.body.classList.add("side-threads");
+  document.body.classList.add("wrap");
 
   select(0);
   refreshProgress();
