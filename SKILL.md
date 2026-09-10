@@ -39,9 +39,10 @@ printf '%s\n' "needs a repo sweep, want it?" | python3 $TOOL/answer.py --ask <th
 printf '%s\n' "renamed it" | python3 $TOOL/answer.py --did <thread-id> <sha>
 ```
 
-`--ask` renders a go-ahead button instead of a spinner, so a question back to the reviewer
-never looks like a stalled answer. `--did` records a change with the commit that carried
-it, so the thread reads *asked → answered → changed*.
+`--ask` asks permission to spend real time — a repo-wide sweep, subagents — before
+answering. It is not for offering a change: say that in a plain answer, because the page
+renders every `--ask` as a request to investigate. `--did` records a change with the
+commit that carried it, so the thread reads *asked → answered → changed*.
 
 ## Judge complexity yourself
 
