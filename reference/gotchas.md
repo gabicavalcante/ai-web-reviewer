@@ -48,3 +48,15 @@ a token in all three theme blocks and let components read it.
 Threads anchor on `(commit, file, side, line)`. A rebuild from the same commits reattaches
 everything. A rebase or amend changes hashes and line numbers, and those threads move to
 the orphan section with their original anchor and code snippet preserved.
+
+## Never check a port by connecting to it
+
+`connect_ex` to a closed loopback port hangs on WSL2 rather than returning
+`ECONNREFUSED` — the SYN is dropped, so nothing ever comes back. An unbounded check
+therefore blocks forever on the first free candidate, which is usually the port you
+wanted, and `review.py serve` never reaches the line that prints the URL. Ask by binding
+instead: it answers immediately and needs no network round trip.
+
+Give the check the same `SO_REUSEADDR` the server sets. Without it the check is stricter
+than the server it is checking for: a port just vacated sits in `TIME_WAIT`, a plain bind
+refuses it, and the port walks up by one on every restart.
