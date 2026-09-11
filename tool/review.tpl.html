@@ -1196,7 +1196,8 @@
        it from reading as an omission. */
     if (silent.length) {
       const list = el("div", "stagegroup");
-      list.appendChild(el("h3", null, "touched, with nothing to show here"));
+      list.appendChild(el("h3", null, drawn ? "touched, with nothing to show here"
+                                             : "the files it touched"));
       silent.forEach(f => {
         const why = f.status === "deleted" ? "deleted by this branch"
           : !f.rows.length ? "empty file"
@@ -1208,10 +1209,14 @@
       });
       pane.appendChild(list);
     }
-    if (!drawn && !silent.length) {
+    if (!drawn) {
+      const marks = ((DATA.stages || []).find(s => s.where === where) || {}).marks || [];
       pane.appendChild(el("p", "filesnote",
-        "Nothing of this stage is in the branch as it stands. Its commits are on the "
-        + "Commits tab."));
+        "Nothing this stage wrote is in the branch as it stands. Later commits rewrote "
+        + "all of it."
+        + (marks.length
+            ? " Its work is commit " + marks.join(", ") + " on the Commits tab."
+            : "")));
     }
     groups.appendChild(pane);
   }
@@ -1307,12 +1312,22 @@
       return true;
     }
 
+    const marksOf = new Map((DATA.stages || []).map(s => [s.where, s.marks || []]));
+
     const entries = [];
     final.order.forEach(where => {
       const files = final.files.filter(f => (f.stages || []).includes(where));
       const lines = final.files.reduce((n, f) => n + ((f.lines || {})[where] || 0), 0);
-      entries.push({ where, label: where,
-                     meta: files.length + " file(s) · " + lines + " line(s)" });
+      /* A stage can have written nothing that is still here, because later commits
+         rewrote all of it. That is worth knowing before opening it, and it is a fact
+         about the branch rather than an empty section. */
+      const marks = marksOf.get(where) || [];
+      entries.push({
+        where, label: where, spent: lines === 0,
+        meta: lines === 0
+          ? "nothing of it survives" + (marks.length ? " · commit " + marks.join(", ") : "")
+          : files.length + " file(s) · " + lines + " line(s)",
+      });
     });
     /* Only when there is something in it. A file no stage claims is a gap in the
        narrative, and the one thing the stages cannot show between them. */
@@ -1325,9 +1340,9 @@
 
     const buttons = [];
     entries.forEach((entry, i) => {
-      const btn = el("button", "commit-btn");
+      const btn = el("button", "commit-btn" + (entry.spent ? " is-skim" : ""));
       btn.type = "button";
-      btn.appendChild(el("span", "cb-num", entry.where === null ? "·" : String(i)));
+      btn.appendChild(el("span", "cb-num", entry.where === null ? "·" : String(i + 1)));
       const body = el("div", "cb-body");
       body.appendChild(el("span", "cb-head", entry.label));
       if (entry.where && byWhat.get(entry.where)) {
