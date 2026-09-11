@@ -700,11 +700,19 @@
     stat.appendChild(document.createTextNode(" "));
     stat.appendChild(el("span", "minus", "−" + f.deletions));
     head.appendChild(stat);
-    head.addEventListener("click", () => {
-      box.dataset.open = box.dataset.open === "true" ? "false" : "true";
-    });
     box.appendChild(head);
 
+    /* A closed file builds nothing until it is opened. Hiding rows with CSS still costs
+       the DOM for them, and a view holding every file of a branch pays that cost before
+       the reader has asked for any of it. */
+    let built = box.dataset.open === "true";
+    head.addEventListener("click", () => {
+      const opening = box.dataset.open !== "true";
+      if (opening && !built) { box.appendChild(buildRows()); built = true; }
+      box.dataset.open = opening ? "true" : "false";
+    });
+
+    function buildRows() {
     const wrap = el("div", "diffwrap");
     const table = el("table", "diff");
     const tbody = el("tbody");
@@ -735,7 +743,10 @@
     });
     table.appendChild(tbody);
     wrap.appendChild(table);
-    box.appendChild(wrap);
+    return wrap;
+    }
+
+    if (built) box.appendChild(buildRows());
     return box;
   }
 
@@ -896,6 +907,11 @@
   }))));
   let composerOpen = false;
   const anchorKey = d => [d.commit, d.file, d.side, d.line].join("\u0000");
+
+  /* Threads live in the commits view only, so every scan for a row runs over that
+     subtree rather than the document. The files view holds a second copy of the branch
+     once it has been opened, and the poll walks this every few seconds. */
+  const board = () => document.getElementById("board");
 
   /* The branch this page was built for. A thread carries the branch it was asked about,
      so the two together say whether a thread belongs to this review at all. The store is
@@ -1076,7 +1092,7 @@
         if (owner && byWhat.get(owner)) box.appendChild(el("p", "what", byWhat.get(owner)));
         groups.appendChild(box);
       }
-      box.appendChild(renderFile(f, null, false));
+      box.appendChild(renderFile({...f, collapsed: true}, null, false));
 
       const others = (f.stages || []).slice(grouped ? 1 : 0);
       if (others.length) {
@@ -1109,14 +1125,20 @@
     document.getElementById("tabFiles").setAttribute("aria-selected", String(onFiles));
   }
 
-  if (paintFiles()) {
+  let filesPainted = false;
+
+  if (DATA.final && DATA.final.files.length) {
     document.getElementById("tabs").hidden = false;
     document.getElementById("tabCommits").textContent =
       "Commits " + DATA.commits.length;
     document.getElementById("tabFiles").textContent =
       "Files changed " + DATA.final.files.length;
     document.getElementById("tabCommits").addEventListener("click", () => showTab("commits"));
-    document.getElementById("tabFiles").addEventListener("click", () => showTab("files"));
+    document.getElementById("tabFiles").addEventListener("click", () => {
+      // Built on the first visit, not at load. Most readings never leave the commits tab.
+      if (!filesPainted) { paintFiles(); filesPainted = true; }
+      showTab("files");
+    });
   }
 
   /* ---------- the docked panel ---------- */
@@ -1130,12 +1152,12 @@
     sideKey = null;
     document.getElementById("side").hidden = true;
     document.body.classList.remove("side-open");
-    document.querySelectorAll("tr.side-open-row")
+    board().querySelectorAll("tr.side-open-row")
       .forEach(n => n.classList.remove("side-open-row"));
   }
 
   function rowForKey(key) {
-    return [...document.querySelectorAll("table.diff tr[data-line]")]
+    return [...board().querySelectorAll("table.diff tr[data-line]")]
       .find(tr => anchorKey(tr.dataset) === key) || null;
   }
 
@@ -1147,7 +1169,7 @@
     // resolved and hidden. Closing beats showing a thread with nothing to point at.
     if (!tr || !list) { closeSide(); return; }
 
-    document.querySelectorAll("tr.side-open-row")
+    board().querySelectorAll("tr.side-open-row")
       .forEach(n => n.classList.remove("side-open-row"));
     tr.classList.add("side-open-row");
 
@@ -1199,8 +1221,8 @@
        lands while it is open. Carry the draft across instead. */
     const draft = typingIn ? captureDraft(typingIn) : null;
     replyInputs.clear();
-    document.querySelectorAll("tr.thread-row").forEach(n => n.remove());
-    document.querySelectorAll("table.diff tr[data-asked]").forEach(n => {
+    board().querySelectorAll("tr.thread-row").forEach(n => n.remove());
+    board().querySelectorAll("table.diff tr[data-asked]").forEach(n => {
       delete n.dataset.asked;
       const g = n.querySelector("td.gut");
       if (g) delete g.dataset.threads;
@@ -1208,7 +1230,7 @@
 
     const byAnchor = threadsByAnchor();
     const side = sideMode();
-    document.querySelectorAll("table.diff tr[data-line]").forEach(tr => {
+    board().querySelectorAll("table.diff tr[data-line]").forEach(tr => {
       const list = byAnchor.get(anchorKey(tr.dataset));
       if (!list) return;
       const allResolved = list.every(t => t.resolved);
