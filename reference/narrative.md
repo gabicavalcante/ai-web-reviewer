@@ -17,6 +17,38 @@ Per commit: `stage` (the rail label, e.g. `2 · Arm`), `flow` (where it sits in 
 flow), `why` (one or two sentences), `points` (specific consequences), and `matrix`
 (rows of `[case, got, want, ok]` for a verification table).
 
+## Starting one
+
+```bash
+python3 review.py narrate <range>
+```
+
+Writes `narrative.json` into the review's state directory with every commit keyed by its
+sha and its subject beside it, and every field empty. The structure is the part a script
+can get right — which commits exist, how long the rail is, what the keys are called. What
+it cannot get right is which stages the change moves through and why a commit is there, so
+those are left blank rather than guessed at.
+
+It refuses to overwrite an existing file unless you pass `--force`.
+
+An empty field falls back to git, so there is no cost to leaving one alone: an untouched
+scaffold builds the same page as no narrative at all, and a `why` you have not written
+keeps the commit's own message.
+
+Stage marks are rail positions, counted after fixups are folded, so they match the numbers
+the page draws beside each commit. Write them as strings.
+
+## What the build checks
+
+A narrative goes stale by design: rebasing and squashing rewrite shas, and the squash
+button rebuilds the page straight afterwards. So staleness never blocks a build, it warns
+on stderr — a key matching no commit, an ambiguous prefix, a mark past the end of the
+rail, a commit claimed by two stages, a commit no stage claims.
+
+A malformed entry does refuse to build: a stage missing `where` or `what`, a figure
+missing `k` or `v`, a mark that is not a number, a key whose value is the wrong type. The
+page would draw a frame around nothing, and nobody reading it would know.
+
 ## When a stage strip is worth drawing
 
 Only when the commits really are a sequence through a mechanism, and the reader needs that

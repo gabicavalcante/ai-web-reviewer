@@ -156,9 +156,15 @@ Nothing removes them either, and they are yours to delete once you trust the res
 With no configuration the page takes its title from the branch, its figures from git, and
 each commit's rationale from that commit's own message.
 
-Pass `--narrative FILE` to add a data-flow strip, per-commit rationale, verification
-tables and a list of open questions. Sections with no content stay hidden, so the plain
-page never shows an empty frame. See [reference/narrative.md](reference/narrative.md).
+`review.py narrate <range>` writes a scaffold next to the review's state: every commit
+keyed by sha with its subject, every field empty. Fill in what you know and rebuild, and
+it is picked up from then on without a flag. `--narrative FILE` points at one kept
+elsewhere.
+
+It adds a data-flow strip, per-commit rationale, verification tables and a list of open
+questions. Every field is optional and falls back to git, and sections with no content
+stay hidden, so a half-written narrative renders as the plain page rather than as empty
+frames. See [reference/narrative.md](reference/narrative.md).
 
 ## Layout
 

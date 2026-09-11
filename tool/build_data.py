@@ -96,6 +96,101 @@ def shortstat_numbers(text):
     return files, adds, dels
 
 
+def matches_commit(key, full, short):
+    """Whether a narrative key names this commit. Kept in one place so the check that
+    validates a narrative and the code that applies it can never drift apart."""
+    return full.startswith(key) or key.startswith(short)
+
+
+def mark_number(mark):
+    """A stage mark as a rail position, or None if it does not name one.
+
+    Written as strings in every narrative so far, because the page prints them straight
+    into a chip, so both forms have to read as the same number.
+    """
+    if isinstance(mark, bool):
+        return None
+    if isinstance(mark, int):
+        return mark
+    if isinstance(mark, str) and mark.strip().isdigit():
+        return int(mark.strip())
+    return None
+
+
+def validate_narrative(narrative, commits, fulls, shorts):
+    """Check a narrative against the range it will be drawn on.
+
+    Two kinds of wrong, and they are not the same. A malformed entry — a stage with no
+    label, a figure with no value — is always a mistake in the file, and the page draws a
+    frame around nothing, so refuse to build. A narrative that no longer matches its
+    commits is not a mistake: rebasing and squashing rewrite shas by design, and the
+    squash button rebuilds the page immediately afterwards. Failing there would leave a
+    repo that had just been rewritten with no page to read it on. Those are warnings.
+
+    Both are invisible on the page itself, which is the reason to say anything at all.
+    """
+    problems, warnings = [], []
+
+    per_commit = narrative.get("commits", {})
+    if not isinstance(per_commit, dict):
+        problems.append("commits: must be an object keyed by sha prefix")
+        per_commit = {}
+    for key in per_commit:
+        hits = [f for f, s in zip(fulls, shorts) if matches_commit(key, f, s)]
+        if not hits:
+            warnings.append(f"{key!r} matches no commit in this range")
+        elif len(hits) > 1:
+            warnings.append(f"{key!r} is ambiguous, it matches {len(hits)} commits")
+
+    seen = {}
+    stages = narrative.get("stages") or []
+    if not isinstance(stages, list):
+        problems.append("stages: must be a list")
+        stages = []
+    for position, stage in enumerate(stages, 1):
+        if not isinstance(stage, dict) or not stage.get("where") or not stage.get("what"):
+            problems.append(f"stages[{position}]: needs both 'where' and 'what'")
+            continue
+        marks = stage.get("marks") or []
+        if not isinstance(marks, list):
+            problems.append(f"stages[{position}] ({stage['where']!r}): 'marks' must be a list")
+            continue
+        for mark in marks:
+            number = mark_number(mark)
+            if number is None:
+                problems.append(
+                    f"stages[{position}] ({stage['where']!r}): mark {mark!r} is not a number")
+            elif not 1 <= number <= len(commits):
+                warnings.append(
+                    f"stage {stage['where']!r} marks commit {number}, "
+                    f"but the rail is {len(commits)} long")
+            else:
+                seen.setdefault(number, []).append(stage["where"])
+
+    figures = narrative.get("figures") or []
+    if not isinstance(figures, list):
+        problems.append("figures: must be a list")
+        figures = []
+    for position, figure in enumerate(figures, 1):
+        if not isinstance(figure, dict) or not figure.get("k") or not figure.get("v"):
+            problems.append(f"figures[{position}]: needs both 'k' and 'v'")
+
+    for mark, wheres in sorted(seen.items()):
+        if len(wheres) > 1:
+            warnings.append(f"commit {mark} is claimed by {len(wheres)} stages: "
+                            + ", ".join(repr(w) for w in wheres))
+    if seen:
+        missing = [n for n in range(1, len(commits) + 1) if n not in seen]
+        if missing:
+            warnings.append("no stage claims commit(s) "
+                            + ", ".join(str(n) for n in missing))
+
+    for warning in warnings:
+        print(f"narrative: {warning}", file=sys.stderr)
+    if problems:
+        raise SystemExit("narrative: " + "\n           ".join(problems))
+
+
 def fallback_narrative(index, subject, body):
     first_para = body.split("\n\n")[0].replace("\n", " ").strip() if body else ""
     return dict(stage=f"{index + 1}", flow="", why=first_para or subject, points=[], matrix=None)
@@ -163,9 +258,11 @@ def main():
         raise SystemExit(f"no commits in range {rng}")
 
     commits = []
+    fulls = []
     for index, short in enumerate(shas):
         meta = git(repo, "show", "-s", "--format=%H%x00%s%x00%b", short).split("\x00")
         full, subject, body = meta[0].strip(), meta[1].strip(), meta[2].strip()
+        fulls.append(full)
         kind, _, headline = subject.partition(": ")
         if not headline:
             kind, headline = "", subject
@@ -182,11 +279,13 @@ def main():
             entry["additions"], entry["deletions"] = add, dele
             entry["collapsed"] = entry["status"] == "deleted" and dele > COLLAPSE_DELETIONS_OVER
 
-        # A narrative may key a commit by any unambiguous prefix of its sha.
+        # A narrative may key a commit by any unambiguous prefix of its sha. Empty values
+        # are skipped so a scaffold that has only been half filled in leaves the commit's
+        # own message in place rather than replacing it with nothing.
         note = fallback_narrative(index, subject, body)
         for key, value in per_commit.items():
-            if full.startswith(key) or key.startswith(short):
-                note = {**note, **value}
+            if matches_commit(key, full, short):
+                note = {**note, **{k: v for k, v in value.items() if v not in ("", [], None)}}
                 break
 
         commits.append(dict(
@@ -202,6 +301,10 @@ def main():
 
     commits = fold_fixups(commits)
     folded = sum(len(c.get("followups", [])) for c in commits)
+
+    # After folding, because a stage's marks are rail positions and the rail is what is
+    # left once fixups have moved inside the commits they amend.
+    validate_narrative(narrative, commits, fulls, shas)
 
     branch = git(repo, "rev-parse", "--abbrev-ref", "HEAD").strip()
     total_files, total_adds, total_dels = shortstat_numbers(

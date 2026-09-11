@@ -87,10 +87,14 @@ list and the rules.
 With no narrative the page is a good diff reader: title from the branch, figures from
 `git`, each commit's "why" from its own message, and the editorial sections hidden.
 
-After you have actually reviewed the branch, write a `narrative.json` and pass
-`--narrative FILE` to add the data-flow strip, per-commit rationale, verification tables
-and open questions. Annotate only the commits that need it; the rest fall back. See
-[reference/narrative.md](reference/narrative.md) and
+After you have actually reviewed the branch, `python3 $TOOL/review.py narrate <range>`
+writes a scaffold into the state directory: every commit keyed by sha with its subject,
+and every field empty. Fill in what you worked out and rebuild. It is picked up on every
+later build without a flag, so `--narrative FILE` is only for keeping one somewhere else.
+
+Fill in nothing you have not earned. Every field falls back to git when left empty, so a
+scaffold you only half understand renders as the honest plain page. Annotate the commits
+that need it and leave the rest. See [reference/narrative.md](reference/narrative.md) and
 [tool/narrative.example.json](tool/narrative.example.json).
 
 Do not invent a narrative you have not earned. A fabricated "data flow" is decoration,

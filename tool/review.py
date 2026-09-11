@@ -3,12 +3,14 @@
 
     python3 review.py serve  [<range>] [--port N] [--narrative FILE]
     python3 review.py build  [<range>] [--narrative FILE]
+    python3 review.py narrate [<range>] [--force]
     python3 review.py where
 
 Range defaults to origin/main...HEAD. `serve` picks a free port when the one
 asked for is taken, and prints the URL it settled on.
 """
 import argparse
+import json
 import os
 import pathlib
 import shutil
@@ -53,6 +55,10 @@ def build(rng, narrative):
     data = subprocess.run(command, capture_output=True, text=True, cwd=repo)
     if data.returncode != 0:
         raise SystemExit(data.stderr.strip() or "build_data.py failed")
+    # Warnings about the narrative are the only thing on stderr, and swallowing them on a
+    # successful build would hide the very mistakes they exist to report.
+    if data.stderr.strip():
+        print(data.stderr.strip(), file=sys.stderr)
     payload = data.stdout.strip()
 
     template = (HERE / "review.tpl.html").read_text()
@@ -90,6 +96,56 @@ def smoke(page):
     print(result.stdout.strip())
 
 
+def narrate(rng, force):
+    """Write a narrative scaffold for this range, for a reader to fill in.
+
+    The structure is the part a script can get right: which commits exist, what they are
+    called, how long the rail is, what the keys are named. The judgement is the part it
+    cannot — which stages a change really moves through, and why a commit is there — so
+    every one of those fields is left empty rather than guessed at. An empty field falls
+    back to git, so a half-filled scaffold renders as the plain page rather than as blanks.
+    """
+    repo = paths.repo_root()
+    target = paths.state_dir(repo) / "narrative.json"
+    if target.exists() and not force:
+        raise SystemExit(
+            f"{target} already exists.\n"
+            "Edit it, or pass --force to replace it with an empty scaffold.")
+
+    data = subprocess.run([sys.executable, str(HERE / "build_data.py"), "--", rng],
+                          capture_output=True, text=True, cwd=repo)
+    if data.returncode != 0:
+        raise SystemExit(data.stderr.strip() or "build_data.py failed")
+    page = json.loads(data.stdout)
+    commits = page["commits"]
+
+    scaffold = {
+        "title": "",
+        "dek": "",
+        "eyebrow": "",
+        "figures": [],
+        "stages": [],
+        "notes": [],
+        "commits": {
+            commit["hash"][:9]: {
+                # Not read by the build. Here so whoever fills this in can tell the
+                # commits apart without keeping git log open beside it.
+                "subject": commit["subject"],
+                "stage": "",
+                "flow": "",
+                "why": "",
+                "points": [],
+            }
+            for commit in commits
+        },
+    }
+    target.write_text(json.dumps(scaffold, indent=2, ensure_ascii=False) + "\n")
+    print(f"scaffold written to {target}")
+    print(f"{len(commits)} commit(s) on the rail, numbered 1 to {len(commits)} for stage marks.")
+    print("Every key is optional. Anything left empty falls back to git, so fill in only")
+    print("what you have actually worked out, then run `review.py build` to see it.")
+
+
 def free_port(preferred):
     """The first port near `preferred` that nothing holds.
 
@@ -113,14 +169,20 @@ def free_port(preferred):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("action", choices=["serve", "build", "where"])
+    parser.add_argument("action", choices=["serve", "build", "narrate", "where"])
     parser.add_argument("range", nargs="?", default="origin/main...HEAD")
     parser.add_argument("--port", type=int, default=8777)
     parser.add_argument("--narrative", default=None)
+    parser.add_argument("--force", action="store_true",
+                        help="narrate: replace an existing narrative.json")
     args = parser.parse_args()
 
     if args.action == "where":
         print(paths.state_dir())
+        return
+
+    if args.action == "narrate":
+        narrate(args.range, args.force)
         return
 
     build(args.range, args.narrative)
