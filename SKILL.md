@@ -108,6 +108,19 @@ someone had checked it. Annotate the commits that need it and leave the rest. Se
 [reference/narrative.md](reference/narrative.md) and
 [tool/narrative.example.json](tool/narrative.example.json).
 
+## Which files to mark
+
+`files` in the narrative gives a file the same mark and sentence a commit gets, and the
+files view is read by those sentences. Say what the file is for in this change, not what
+it contains: "where the wizard is mounted", not "URL configuration".
+
+One `start` per stage, `skim` says why skipping is safe, and a note is one line. Most
+files need neither, and a branch where every file carries a sentence has told the reviewer
+nothing about which ones matter.
+
+`review.py narrate` lists every file in the range with both fields empty. Leave the ones
+you have nothing to say about.
+
 ## Which commits to mark
 
 `read` tells the reviewer what to do with a commit: `start`, `care`, `skim`, or nothing.

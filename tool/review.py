@@ -149,6 +149,7 @@ def narrate(rng, force):
         raise SystemExit(data.stderr.strip() or "build_data.py failed")
     page = json.loads(data.stdout)
     commits = page["commits"]
+    file_paths = [f["path"] for f in (page.get("final") or {}).get("files", [])]
 
     scaffold = {
         "title": "",
@@ -160,6 +161,9 @@ def narrate(rng, force):
         "figures": [{"k": "", "v": ""}],
         "stages": [{"where": "", "what": "", "marks": []}],
         "notes": [{"kind": "", "title": "", "body": "", "tone": ""}],
+        # Every file in the range, so the shape and the paths are in front of whoever
+        # fills this in. Untouched entries are dropped at build time.
+        "files": {path: {"read": "", "note": ""} for path in file_paths},
         "commits": {
             commit["hash"][:9]: {
                 # Not read by the build. Here so whoever fills this in can tell the

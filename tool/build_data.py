@@ -106,6 +106,7 @@ def matches_commit(key, full, short):
 # one-line reason; these say only what the reviewer should do about it.
 READ_MARKS = ("start", "care", "skim")
 READ_WHY_MAX = 80
+FILE_NOTE_MAX = 80
 
 # Measured from a narrative that reads well, set just above the longest field in it.
 #
@@ -321,6 +322,36 @@ def final_diff(repo, rng, commits, narrative):
                     if stage["where"] not in touched[entry["path"]]:
                         touched[entry["path"]].append(stage["where"])
 
+    # What the narrative says about individual files. The tool can order a file and weigh
+    # it; only a person can say what it is for in this change.
+    per_file = narrative.get("files") or {}
+    problems, warnings = [], []
+    if not isinstance(per_file, dict):
+        problems.append("files: must be an object keyed by path")
+        per_file = {}
+    known = {entry["path"] for entry in files}
+    for path in per_file:
+        if path not in known:
+            warnings.append(f"files: {path!r} is not in this range")
+
+    for entry in files:
+        said = per_file.get(entry["path"]) or {}
+        if not isinstance(said, dict):
+            problems.append(f"files[{entry['path']}]: must be an object")
+            said = {}
+        entry["read"] = said.get("read", "")
+        entry["note"] = said.get("note", "")
+        if entry["read"] and entry["read"] not in READ_MARKS:
+            problems.append(f"files[{entry['path']}]: read {entry['read']!r} is not one of "
+                            + ", ".join(repr(m) for m in READ_MARKS))
+            entry["read"] = ""
+        if entry["read"] == "skim" and not entry["note"]:
+            problems.append(f"files[{entry['path']}]: read 'skim' needs a note saying why it "
+                            "is safe to skim")
+        if len(entry["note"]) > FILE_NOTE_MAX:
+            problems.append(f"files[{entry['path']}]: note is {len(entry['note'])} characters, "
+                            f"over the {FILE_NOTE_MAX} that fit beside a path")
+
     for entry in files:
         reaching = touched.get(entry["path"], [])
         # Ordered by how much of the file as it stands now each stage actually wrote.
@@ -345,6 +376,22 @@ def final_diff(repo, rng, commits, narrative):
         # inside a file another stage owns. Runs rather than line numbers, because that is
         # what a reader is shown and it keeps the page small.
         entry["runs"] = {where: to_runs(numbers) for where, numbers in by_stage.items()}
+
+    # One place to start per stage, or the mark stops meaning anything. Checked here
+    # rather than with the rest, because only now is it known which stage a file is under.
+    starts = {}
+    for entry in files:
+        if entry.get("read") == "start":
+            owner = (entry["stages"] or [None])[0]
+            starts.setdefault(owner, []).append(entry["path"])
+    for owner, paths in starts.items():
+        if len(paths) > 1:
+            problems.append(f"files: {len(paths)} files marked 'start' under "
+                            f"{owner or 'no stage'}: " + ", ".join(paths))
+    for warning in warnings:
+        print(f"narrative: {warning}", file=sys.stderr)
+    if problems:
+        raise SystemExit("narrative: " + "\n           ".join(problems))
 
     rank = {where: i for i, where in enumerate(order)}
     files.sort(key=lambda e: (rank.get((e["stages"] or [None])[0], len(order)),

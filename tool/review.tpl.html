@@ -381,6 +381,8 @@
   .stagepane table.diff tr:not(.own):not(.hunk) td.code { opacity: .58; }
   .stagegroup > h3 { font-family: var(--mono); font-size: 11.5px; font-weight: 500; letter-spacing: .09em; text-transform: uppercase; color: var(--ink-faint); margin: 0 0 4px; }
   .stagegroup > .what { font-family: var(--sans); font-size: 14px; color: var(--ink); margin: 0 0 12px; max-width: 76ch; }
+  .fnote { font-family: var(--sans); font-size: 13px; color: var(--ink-soft); padding: 0 14px 10px 34px; max-width: 76ch; }
+  .file-head .cb-tag { margin-right: 2px; }
   .alsoin { font-family: var(--mono); font-size: 11px; color: var(--ink-faint); margin: 4px 0 0 24px; display: flex; align-items: baseline; gap: 6px; flex-wrap: wrap; }
   .alsoin .chip { border: 1px solid var(--line); border-radius: 2px; padding: 1px 6px; color: var(--ink-soft); }
   .orphan-list { display: flex; flex-direction: column; gap: 10px; }
@@ -1112,12 +1114,19 @@
     const head = el("button", "file-head");
     head.type = "button";
     head.appendChild(el("span", "chev", "▾"));
+    if (f.read) {
+      head.appendChild(el("span", "cb-tag " + f.read,
+        f.read === "start" ? "start here" : f.read));
+    }
     head.appendChild(el("span", "fpath", f.path));
     head.appendChild(el("span", "status " + f.status, f.status));
     head.addEventListener("click", () => {
       box.dataset.open = box.dataset.open === "true" ? "false" : "true";
     });
     box.appendChild(head);
+    /* What the file is for in this change. The tool can order a file and weigh it; this
+       is the part only a person can write, and it is what the list is read by. */
+    if (f.note) box.appendChild(el("div", "fnote", f.note));
 
     /* The windows are what this stage wrote. Reading the file whole is the other thing a
        reviewer wants, and it used to be a second copy of the branch in its own tab. It is
@@ -1247,7 +1256,11 @@
         if (owner && byWhat.get(owner)) box.appendChild(el("p", "what", byWhat.get(owner)));
         groups.appendChild(box);
       }
-      box.appendChild(renderFile({...f, collapsed: true}, null, false));
+      const plain = renderFile({...f, collapsed: true}, null, false);
+      box.appendChild(plain);
+      // A review with no stages still gets the sentence, which is the whole of what the
+      // list is read by.
+      if (f.note) box.appendChild(el("div", "fnote", f.note));
 
       const others = (f.stages || []).slice(grouped ? 1 : 0);
       if (others.length) {

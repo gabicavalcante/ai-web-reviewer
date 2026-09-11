@@ -17,6 +17,27 @@ Per commit: `stage` (the rail label, e.g. `2 · Arm`), `flow` (where it sits in 
 flow), `why` (one or two sentences), `points` (specific consequences), and `matrix`
 (rows of `[case, got, want, ok]` for a verification table).
 
+## Saying what a file is for
+
+`files` is keyed by path, and carries the same two things a commit carries: a `read` mark
+and one line of prose.
+
+```json
+"files": {
+  "api/urls.py": { "read": "start", "note": "where the wizard is mounted" },
+  "common/auth/django/admin_mfa.py": { "note": "the gate every admin request passes" },
+  "common/tests/test_admin_mfa.py": { "read": "skim", "note": "covers the wizard end to end" }
+}
+```
+
+The tool can order a file and weigh how much of the branch is in it. It cannot say what
+the file is for, and that sentence is what a list of twenty files is read by.
+
+One file per stage may be `start`, because a stage has one place to begin. `skim` needs a
+note saying why skipping is safe, and a note runs to 80 characters, which is the room it
+has beside a path. A path the range does not contain warns rather than failing, since a
+rebase moves files out from under a narrative.
+
 ## Telling the reviewer what to read first
 
 `read` marks a commit in the rail, with `readWhy` giving the reason on one line. This is
