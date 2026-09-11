@@ -204,6 +204,58 @@ def to_runs(numbers):
     return runs
 
 
+def file_tier(path):
+    """Where a file sits in a reading order: the code, then what documents it, then what
+    tests it. A test read before its subject is a list of assertions about nothing."""
+    name = path.rsplit("/", 1)[-1]
+    if name == "conftest.py" or name.startswith("test_") or "_test." in name:
+        return 2
+    if "/tests/" in "/" + path or path.startswith("tests/"):
+        return 2
+    if path.endswith((".md", ".rst", ".txt")):
+        return 1
+    return 0
+
+
+def test_stem(path):
+    """The name a test file is probably about. test_admin_mfa.py -> admin_mfa."""
+    name = path.rsplit("/", 1)[-1].rsplit(".", 1)[0]
+    if name.startswith("test_"):
+        name = name[5:]
+    if name.endswith("_test"):
+        name = name[:-5]
+    return name
+
+
+def pair_tests(files):
+    """Move a test to sit under the file it names, when that file is in the same group.
+
+    Only by name, so it is a guess, and a wrong guess costs an ordering rather than
+    anything a reader would trust. A test that names nothing here stays with the tests.
+    """
+    subjects = {}
+    for entry in files:
+        if file_tier(entry["path"]) == 0:
+            subjects.setdefault(test_stem(entry["path"]), entry["path"])
+
+    ordered, deferred = [], {}
+    for entry in files:
+        if file_tier(entry["path"]) == 2:
+            target = subjects.get(test_stem(entry["path"]))
+            if target:
+                deferred.setdefault(target, []).append(entry)
+                continue
+        ordered.append(entry)
+
+    out = []
+    for entry in ordered:
+        out.append(entry)
+        out.extend(deferred.pop(entry["path"], []))
+    for rest in deferred.values():
+        out.extend(rest)
+    return out
+
+
 def final_diff(repo, rng, commits, narrative):
     """The branch as one diff, with each file placed under the stage that reaches it first.
 
@@ -277,8 +329,20 @@ def final_diff(repo, rng, commits, narrative):
 
     rank = {where: i for i, where in enumerate(order)}
     files.sort(key=lambda e: (rank.get((e["stages"] or [None])[0], len(order)),
+                              file_tier(e["path"]),
                               -sum(e.get("lines", {}).values()), e["path"]))
-    return {"files": files, "order": order}
+
+    # Pairing happens inside a group, because a test and its subject being in different
+    # stages is a fact about the change and not something to reorder away.
+    paired, group = [], []
+    for entry in files:
+        owner = (entry["stages"] or [None])[0]
+        if group and (group[0]["stages"] or [None])[0] != owner:
+            paired.extend(pair_tests(group))
+            group = []
+        group.append(entry)
+    paired.extend(pair_tests(group))
+    return {"files": paired, "order": order}
 
 
 def is_placeholder(entry):
