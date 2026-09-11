@@ -174,7 +174,25 @@ def git_maybe(repo, *args):
 BLAME_LINE = re.compile(r"^([0-9a-f]{40}) \d+ (\d+)")
 
 
-def surviving_lines(repo, path):
+def range_tip(rng):
+    """The commit a range ends at.
+
+    Blame has to read the branch under review, not whatever happens to be checked out.
+    One repo can hold two reviews, and building one of them while the other's branch is
+    checked out found nothing to attribute and said so silently.
+    """
+    # Three dots before two, or "origin/main...HEAD" splits into ".HEAD", which is not a
+    # revision and which blame refuses for every file in silence.
+    if "..." in rng:
+        tip = rng.split("...")[-1]
+    elif ".." in rng:
+        tip = rng.split("..")[-1]
+    else:
+        tip = rng
+    return tip.strip() or "HEAD"
+
+
+def surviving_lines(repo, tip, path):
     """Which lines of the file as it stands now came from each commit.
 
     Blame credits the commit that last touched a line, so this is what survived rather
@@ -182,7 +200,7 @@ def surviving_lines(repo, path):
     which is the point: it should not be pulling a file into its stage, and its lines are
     not in the file to be read.
     """
-    out = git_maybe(repo, "blame", "--line-porcelain", "-M", "HEAD", "--", path)
+    out = git_maybe(repo, "blame", "--line-porcelain", "-M", tip, "--", path)
     if out is None:
         return {}
     lines = {}
@@ -271,6 +289,7 @@ def final_diff(repo, rng, commits, narrative):
     files = parse_patch(git(repo, "diff", "--patch", "--unified=3", rng))
     if not files:
         return None
+    tip = range_tip(rng)
 
     stats = {}
     for row in git(repo, "diff", "--numstat", rng).strip().split("\n"):
@@ -309,7 +328,7 @@ def final_diff(repo, rng, commits, narrative):
         # branch under its first stage and left one stage with no files at all.
         weight, by_stage = {}, {}
         if entry["status"] != "deleted":
-            for sha, numbers in surviving_lines(repo, entry["path"]).items():
+            for sha, numbers in surviving_lines(repo, tip, entry["path"]).items():
                 where = stage_of.get(sha)
                 if where:
                     weight[where] = weight.get(where, 0) + len(numbers)
