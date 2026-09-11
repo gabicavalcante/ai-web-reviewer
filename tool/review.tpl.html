@@ -366,7 +366,8 @@
   .stagegroup { margin-bottom: 30px; }
   .stagegroup > h3 { font-family: var(--mono); font-size: 11.5px; font-weight: 500; letter-spacing: .09em; text-transform: uppercase; color: var(--ink-faint); margin: 0 0 4px; }
   .stagegroup > .what { font-family: var(--sans); font-size: 14px; color: var(--ink); margin: 0 0 12px; max-width: 76ch; }
-  .alsoin { font-family: var(--mono); font-size: 11px; color: var(--ink-faint); margin: 3px 0 0 24px; }
+  .alsoin { font-family: var(--mono); font-size: 11px; color: var(--ink-faint); margin: 4px 0 0 24px; display: flex; align-items: baseline; gap: 6px; flex-wrap: wrap; }
+  .alsoin .chip { border: 1px solid var(--line); border-radius: 2px; padding: 1px 6px; color: var(--ink-soft); }
   .orphan-list { display: flex; flex-direction: column; gap: 10px; }
   #otherReviews summary { font-family: var(--mono); font-size: 11.5px; color: var(--ink-faint); cursor: pointer; padding: 4px 0; }
   #otherReviews summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
@@ -1058,22 +1059,39 @@
     /* Grouped by the first stage that reaches a file, which is the order build_data
        sorted them into. A file no stage claims goes last under its own heading, so it
        is not silently attached to whichever group happens to be nearest. */
+    /* Grouping orders files. With no more files than stages there is nothing to order,
+       and six headings over two files say less than the two files do. */
+    const grouped = final.order.length > 0 && final.files.length > final.order.length;
+
     let current = null;
     let box = null;
     final.files.forEach(f => {
       const owner = (f.stages && f.stages[0]) || null;
-      if (owner !== current || !box) {
+      if (!grouped) {
+        if (!box) { box = el("div", "stagegroup"); groups.appendChild(box); }
+      } else if (owner !== current || !box) {
         current = owner;
         box = el("div", "stagegroup");
-        /* With no stage strip there is nothing to group by, so the files are listed
-           plainly rather than under a heading that says they belong to nothing. */
-        if (final.order.length) box.appendChild(el("h3", null, owner || "not part of any stage"));
+        box.appendChild(el("h3", null, owner || "not part of any stage"));
         if (owner && byWhat.get(owner)) box.appendChild(el("p", "what", byWhat.get(owner)));
         groups.appendChild(box);
       }
       box.appendChild(renderFile(f, null, false));
-      if (f.stages && f.stages.length > 1) {
-        box.appendChild(el("div", "alsoin", "also in " + f.stages.slice(1).join(", ")));
+
+      const others = (f.stages || []).slice(grouped ? 1 : 0);
+      if (others.length) {
+        const line = el("div", "alsoin");
+        /* A stage name can contain a comma, so the names are chips rather than a list
+           joined by one. A file in most of the stages is counted instead of named: six
+           names on one file is not a cross reference, it is the whole strip again. */
+        if (final.order.length > 2 && f.stages.length > final.order.length / 2) {
+          line.appendChild(document.createTextNode(
+            "in " + f.stages.length + " of the " + final.order.length + " stages"));
+        } else {
+          line.appendChild(document.createTextNode(grouped ? "also in" : "in"));
+          others.forEach(w => line.appendChild(el("span", "chip", w)));
+        }
+        box.appendChild(line);
       }
     });
 
