@@ -159,9 +159,14 @@
   }
   @media (max-width: 940px) { .board { grid-template-columns: 1fr; } }
 
-  .rail { position: sticky; top: 20px; }
-  @media (max-width: 940px) { .rail { position: static; } }
-  .commits { display: flex; flex-direction: column; gap: 8px; }
+  /* The rail is taller than the screen on a long branch, so sticky alone does nothing:
+     reaching commit 20 scrolls the page, and the pane goes with it. The column is held
+     to the viewport and the list scrolls inside it, so the diff stays beside the commit
+     that produced it. */
+  .rail { position: sticky; top: 20px; display: flex; flex-direction: column; max-height: calc(100vh - 40px); }
+  @media (max-width: 940px) { .rail { position: static; max-height: none; } }
+  .commits { display: flex; flex-direction: column; gap: 8px; overflow-y: auto; min-height: 0; padding-right: 4px; }
+  @media (max-width: 940px) { .commits { overflow-y: visible; } }
   .commit-btn { display: grid; grid-template-columns: 26px minmax(0, 1fr); gap: 12px; text-align: left; padding: 13px 14px; background: var(--surface); border: 1px solid var(--line); border-radius: 3px; color: inherit; font: inherit; cursor: pointer; transition: border-color .12s, background .12s; }
   .commit-btn:hover { border-color: var(--accent); }
   .commit-btn[aria-current="true"] { border-color: var(--accent); background: var(--accent-soft); box-shadow: inset 3px 0 0 var(--accent); }
@@ -1569,7 +1574,19 @@
   });
 
   const origSelect = select;
-  select = function (i) { closeComposer(); closeSide(); origSelect(i); paintThreads(); };
+  select = function (i) {
+    closeComposer();
+    closeSide();
+    origSelect(i);
+    paintThreads();
+    /* Two different scrolls. The chosen commit has to stay visible in a list that now
+       scrolls on its own, and the pane has to come back into view when the choice was
+       made from the bottom of a long branch. Guarded because the smoke DOM has neither. */
+    const btn = (DATA.commits[i] || {})._btn;
+    if (btn && typeof btn.scrollIntoView === "function") btn.scrollIntoView({ block: "nearest" });
+    const pane = document.getElementById("pane");
+    if (pane && typeof pane.scrollIntoView === "function") pane.scrollIntoView({ block: "start" });
+  };
 
   refresh();
   setInterval(() => { if (!document.hidden) refresh(); }, 4000);
