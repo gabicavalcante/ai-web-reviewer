@@ -72,28 +72,24 @@ Without node the check is skipped with a message, so read the page before trusti
 ## Write the copy for a person
 
 This covers everything you write here: the narrative fields, any new label, every answer
-you post into a thread. Run the `deslop` skill over it before you build the page.
+you post into a thread, and what you report back in the session. Run the `deslop` skill
+over it, then read [reference/voice.md](reference/voice.md), which holds the rules. It is
+short.
 
-Then remove all mannered prose. Mannered prose is metaphor and flourish standing in for
-direct statement: "a dial worth turning" instead of "a parameter worth varying". It makes
-the reader work harder so the writer can perform, and it is imprecise, because a metaphor
-carries connotations you did not choose. Say what you mean, and use the literal phrase
-whenever one exists. [reference/voice.md](reference/voice.md) has the rule in full.
-
-An answer in a thread is shaped as well as worded. Lead with the answer, not with
-agreement. Make a list of changes a list. Cut the sentence explaining why the fix works,
-because the reviewer is looking at the code. `answer.py` refuses over 1200 characters
-unless you pass `--long`, and hitting that means cut rather than ask for more room.
-
-A reviewer reads this, often not in their first language, so the implementation's
-vocabulary does not belong in the interface. `halt` is `skip`; `arm` is `turn on`; `your
-call` is `waiting for you`. Keep the code's own terms, which are precise and already
-known.
+One test carries most of it. **Would you say this sentence to a colleague standing at
+their desk?** "Staff must verify an authenticator code before Django Admin will serve them
+anything" fails it. "Django Admin users should set authenticator code as MFA factor" is
+the same fact, said. Name the thing rather than describing it, state the fact rather than
+its effect on the reader, and remove all mannered prose, which is metaphor standing in for
+direct statement.
 
 Never print a claim you have not computed. A line like "working tree clean" is wrong on
-most branches. Watch the definite articles too: "the boundary" is anchored for you and
-points at nothing for the reader. [reference/voice.md](reference/voice.md) has the word
-list and the rules.
+most branches.
+
+Some of this is enforced rather than asked for. `answer.py` refuses a thread answer over
+1200 characters unless you pass `--long`, and the build refuses a `readWhy` over 80
+characters, a stage `what` over 120, and a commit `why` over 450. Reaching a limit means
+cut.
 
 ## The narrative layer
 

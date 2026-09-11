@@ -107,6 +107,16 @@ def matches_commit(key, full, short):
 READ_MARKS = ("start", "care", "skim")
 READ_WHY_MAX = 80
 
+# Measured from a narrative that reads well, set just above the longest field in it.
+#
+# There is no cap on the dek, and the reason is worth keeping. A padded dek and a good one
+# came out the same length when measured, so a limit there would refuse sentences that
+# read well and pass sentences that do not. Length catches sprawl. It does not catch a
+# sentence that states a fact as an effect on the reader, which is what a bad dek does,
+# and only the examples in reference/voice.md catch that.
+STAGE_WHAT_MAX = 120
+WHY_MAX = 450
+
 
 def validate_read_marks(per_commit, commit_count, problems, warnings):
     """Check the per-commit reading marks, and keep them scarce.
@@ -194,7 +204,11 @@ def validate_narrative(narrative, commits, fulls, shorts):
     if not isinstance(per_commit, dict):
         problems.append("commits: must be an object keyed by sha prefix")
         per_commit = {}
-    for key in per_commit:
+    for key, entry in per_commit.items():
+        why = (entry or {}).get("why") or "" if isinstance(entry, dict) else ""
+        if len(why) > WHY_MAX:
+            problems.append(
+                f"{key}: 'why' is {len(why)} characters, over {WHY_MAX}. One or two sentences")
         hits = [f for f, s in zip(fulls, shorts) if matches_commit(key, f, s)]
         if not hits:
             warnings.append(f"{key!r} matches no commit in this range")
@@ -214,6 +228,10 @@ def validate_narrative(narrative, commits, fulls, shorts):
         if not isinstance(stage, dict) or not stage.get("where") or not stage.get("what"):
             problems.append(f"stages[{position}]: needs both 'where' and 'what'")
             continue
+        if len(stage["what"]) > STAGE_WHAT_MAX:
+            problems.append(f"stages[{position}] ({stage['where']!r}): 'what' is "
+                            f"{len(stage['what'])} characters, over {STAGE_WHAT_MAX}. It is "
+                            "one line in a box")
         marks = stage.get("marks") or []
         if not isinstance(marks, list):
             problems.append(f"stages[{position}] ({stage['where']!r}): 'marks' must be a list")
