@@ -100,13 +100,32 @@ writes a scaffold into the state directory: every commit keyed by sha with its s
 and every field empty. Fill in what you worked out and rebuild. It is picked up on every
 later build without a flag, so `--narrative FILE` is only for keeping one somewhere else.
 
-Fill in nothing you have not earned. Every field falls back to git when left empty, so a
-scaffold you only half understand renders as the honest plain page. Annotate the commits
-that need it and leave the rest. See [reference/narrative.md](reference/narrative.md) and
+Fill in nothing you have not worked out. Every field falls back to git when left empty, so
+a scaffold you only half understand renders as the plain page, which is the honest one. A
+data flow you inferred from the folder layout is decoration, and it will be read as though
+someone had checked it. Annotate the commits that need it and leave the rest. See
+[reference/narrative.md](reference/narrative.md) and
 [tool/narrative.example.json](tool/narrative.example.json).
 
-Do not invent a narrative you have not earned. A fabricated "data flow" is decoration,
-and the fallback page is honest.
+## Which commits to mark
+
+`read` tells the reviewer what to do with a commit: `start`, `care`, `skim`, or nothing.
+Most commits get nothing, and for most branches that is the whole of it.
+
+Mark from what the reviewer needs, not from what the work cost you. The commit that took
+longest is often the one that needs the least checking, and the change worth checking is
+often three lines.
+
+- `start` is the commit that makes the rest readable, usually where the mechanism first
+  appears. It is not always the first one. Only one commit can have it.
+- `care` is where behaviour changes in a way the reader has to check for themselves, and
+  where you were unsure or did not verify something. Say which in `readWhy`.
+- `skim` is mechanical: a move, a rename, formatting, generated output, tests that follow
+  from a change already reviewed. The reason has to be enough for the reviewer to trust
+  the skip, so name what makes it mechanical.
+
+If you cannot say why a commit is safe to skim in under 80 characters, it is probably not
+a skim.
 
 ## Where state lives
 
