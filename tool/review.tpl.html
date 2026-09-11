@@ -356,6 +356,17 @@
   .did .stat { font-family: var(--mono); font-size: 11px; color: var(--ink-faint); }
   .orphans { margin-top: 40px; padding-top: 26px; border-top: 1px solid var(--line); }
   .orphan { background: var(--surface); border: 1px solid var(--line); border-left: 2px solid var(--del); border-radius: 3px; padding: 15px 18px; display: flex; flex-direction: column; gap: 9px; }
+  .tabs { display: flex; gap: 2px; margin: 26px 0 0; border-bottom: 1px solid var(--line); }
+  .tab { font-family: var(--sans); font-size: 13.5px; color: var(--ink-soft); background: none; border: none; border-bottom: 2px solid transparent; padding: 9px 14px; cursor: pointer; margin-bottom: -1px; }
+  .tab:hover { color: var(--ink); }
+  .tab[aria-selected="true"] { color: var(--ink); border-bottom-color: var(--accent); font-weight: 500; }
+  .tab:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+  .filesview { margin-top: 24px; }
+  .filesnote { font-family: var(--mono); font-size: 11.5px; color: var(--ink-faint); margin: 0 0 20px; }
+  .stagegroup { margin-bottom: 30px; }
+  .stagegroup > h3 { font-family: var(--mono); font-size: 11.5px; font-weight: 500; letter-spacing: .09em; text-transform: uppercase; color: var(--ink-faint); margin: 0 0 4px; }
+  .stagegroup > .what { font-family: var(--sans); font-size: 14px; color: var(--ink); margin: 0 0 12px; max-width: 76ch; }
+  .alsoin { font-family: var(--mono); font-size: 11px; color: var(--ink-faint); margin: 3px 0 0 24px; }
   .orphan-list { display: flex; flex-direction: column; gap: 10px; }
   #otherReviews summary { font-family: var(--mono); font-size: 11.5px; color: var(--ink-faint); cursor: pointer; padding: 4px 0; }
   #otherReviews summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
@@ -400,7 +411,17 @@
     <div class="stages" id="stages"></div>
   </section>
 
-  <div class="board">
+  <div class="tabs" id="tabs" role="tablist" hidden>
+    <button class="tab" id="tabCommits" type="button" role="tab" aria-selected="true"></button>
+    <button class="tab" id="tabFiles" type="button" role="tab" aria-selected="false"></button>
+  </div>
+
+  <section class="filesview" id="filesView" hidden>
+    <p class="filesnote" id="filesNote"></p>
+    <div id="fileGroups"></div>
+  </section>
+
+  <div class="board" id="board">
     <nav class="rail" aria-label="Commits">
       <h2>Review in order</h2>
       <div class="commits" id="commits"></div>
@@ -662,7 +683,7 @@
   }
 
   /* ---------- diff rendering ---------- */
-  function renderFile(f, commitShort) {
+  function renderFile(f, commitShort, anchored = true) {
     const box = el("section", "file");
     box.dataset.file = f.path;
     box.dataset.commit = commitShort;
@@ -695,11 +716,16 @@
         tr.appendChild(td);
       } else {
         const lineNo = r.t === "del" ? r.o : r.n;
-        tr.dataset.commit = commitShort;
-        tr.dataset.file = f.path;
-        tr.dataset.side = r.t;
-        tr.dataset.line = String(lineNo);
-        tr.dataset.code = r.text;
+        /* A thread anchors to a commit, a file and a line. The files view has no single
+           commit behind a line, so its rows carry no anchor, and the click handler that
+           opens a question matches on data-line and passes them over. */
+        if (anchored) {
+          tr.dataset.commit = commitShort;
+          tr.dataset.file = f.path;
+          tr.dataset.side = r.t;
+          tr.dataset.line = String(lineNo);
+          tr.dataset.code = r.text;
+        }
         tr.appendChild(el("td", "gut", String(lineNo)));
         tr.appendChild(el("td", "sign", r.t === "add" ? "+" : r.t === "del" ? "−" : ""));
         tr.appendChild(el("td", "code", r.text));
@@ -1019,6 +1045,60 @@
       thread.appendChild(replyBox(t.id));
     });
     return { thread, allResolved };
+  }
+
+  /* ---------- files changed, in the order the stages tell ---------- */
+
+  function paintFiles() {
+    const final = DATA.final;
+    if (!final || !final.files.length) return false;
+    const groups = document.getElementById("fileGroups");
+    const byWhat = new Map((DATA.stages || []).map(s => [s.where, s.what]));
+
+    /* Grouped by the first stage that reaches a file, which is the order build_data
+       sorted them into. A file no stage claims goes last under its own heading, so it
+       is not silently attached to whichever group happens to be nearest. */
+    let current = null;
+    let box = null;
+    final.files.forEach(f => {
+      const owner = (f.stages && f.stages[0]) || null;
+      if (owner !== current || !box) {
+        current = owner;
+        box = el("div", "stagegroup");
+        /* With no stage strip there is nothing to group by, so the files are listed
+           plainly rather than under a heading that says they belong to nothing. */
+        if (final.order.length) box.appendChild(el("h3", null, owner || "not part of any stage"));
+        if (owner && byWhat.get(owner)) box.appendChild(el("p", "what", byWhat.get(owner)));
+        groups.appendChild(box);
+      }
+      box.appendChild(renderFile(f, null, false));
+      if (f.stages && f.stages.length > 1) {
+        box.appendChild(el("div", "alsoin", "also in " + f.stages.slice(1).join(", ")));
+      }
+    });
+
+    document.getElementById("filesNote").textContent =
+      final.files.length + " files as they stand now, grouped by stage. "
+      + "Questions are asked on the Commits tab, where a line has a commit behind it.";
+    return true;
+  }
+
+  function showTab(which) {
+    const onFiles = which === "files";
+    document.getElementById("filesView").hidden = !onFiles;
+    document.getElementById("board").hidden = onFiles;
+    document.getElementById("tabCommits").setAttribute("aria-selected", String(!onFiles));
+    document.getElementById("tabFiles").setAttribute("aria-selected", String(onFiles));
+  }
+
+  if (paintFiles()) {
+    document.getElementById("tabs").hidden = false;
+    document.getElementById("tabCommits").textContent =
+      "Commits " + DATA.commits.length;
+    document.getElementById("tabFiles").textContent =
+      "Files changed " + DATA.final.files.length;
+    document.getElementById("tabCommits").addEventListener("click", () => showTab("commits"));
+    document.getElementById("tabFiles").addEventListener("click", () => showTab("files"));
   }
 
   /* ---------- the docked panel ---------- */

@@ -161,6 +161,59 @@ def validate_read_marks(per_commit, commit_count, problems, warnings):
                         "no emphasis at all")
 
 
+def final_diff(repo, rng, commits, narrative):
+    """The branch as one diff, with each file placed under the stage that reaches it first.
+
+    The commit rail answers "how did this get built". On a long branch that is the wrong
+    question to start with, because later commits rewrite earlier ones and reading in
+    order means reading code that is no longer there. This answers "what does it do now",
+    in the order the stages tell it.
+
+    A file touched by several stages is listed once, under the first, and carries the
+    others so the reader knows where else it matters. Repeating a whole file under four
+    stages would be worse than telling them.
+    """
+    files = parse_patch(git(repo, "diff", "--patch", "--unified=3", rng))
+    if not files:
+        return None
+
+    stats = {}
+    for row in git(repo, "diff", "--numstat", rng).strip().split("\n"):
+        parts = row.split("\t")
+        if len(parts) == 3 and parts[0] != "-":
+            stats[parts[2]] = (int(parts[0]), int(parts[1]))
+    for entry in files:
+        add, dele = stats.get(entry["path"], (0, 0))
+        entry["additions"], entry["deletions"] = add, dele
+        entry["collapsed"] = entry["status"] == "deleted" and dele > COLLAPSE_DELETIONS_OVER
+
+    # Which stages reach a file, in the strip's own order. A mark is a rail position, and
+    # a commit's followups are part of it, so a fixup's files belong to its target's stage.
+    order, touched = [], {}
+    for stage in narrative.get("stages") or []:
+        if is_placeholder(stage) or not stage.get("where"):
+            continue
+        order.append(stage["where"])
+        for mark in stage.get("marks") or []:
+            index = mark_number(mark)
+            if index is None or not 1 <= index <= len(commits):
+                continue
+            commit = commits[index - 1]
+            for source in [commit] + list(commit.get("followups") or []):
+                for entry in source["files"]:
+                    touched.setdefault(entry["path"], [])
+                    if stage["where"] not in touched[entry["path"]]:
+                        touched[entry["path"]].append(stage["where"])
+
+    for entry in files:
+        entry["stages"] = touched.get(entry["path"], [])
+
+    # Grouped by first stage, in strip order, with whatever no stage claims at the end.
+    rank = {where: i for i, where in enumerate(order)}
+    files.sort(key=lambda e: (rank.get((e["stages"] or [None])[0], len(order)), e["path"]))
+    return {"files": files, "order": order}
+
+
 def is_placeholder(entry):
     """An entry left exactly as the scaffold wrote it, with every field still empty.
 
@@ -421,6 +474,7 @@ def main():
             f"compared against {base}."
         ),
         eyebrow=narrative.get("eyebrow", ""),
+        final=final_diff(repo, rng, commits, narrative),
         figures=[f for f in (narrative.get("figures") or []) if not is_placeholder(f)]
                 or default_figures,
         stages=[s for s in (narrative.get("stages") or []) if not is_placeholder(s)],
