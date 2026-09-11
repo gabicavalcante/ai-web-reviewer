@@ -29,7 +29,8 @@ const mk = (tag) => {
       p.children.splice(p.children.indexOf(node) + 1, 0, sib);
       sib.parentNode = p;
     },
-    addEventListener() {}, focus() {}, closest() { return null; },
+    addEventListener(type, fn) { (node._on = node._on || {})[type] = fn; },
+    focus() {}, closest() { return null; },
     setAttribute(k, v) { node[k] = v; }, getAttribute(k) { return node[k]; },
     matches() { return false; },
   };
@@ -63,6 +64,25 @@ try {
   process.exit(1);
 }
 
+// Everything behind a click is otherwise never run, so a throw in it would ship. The
+// files view and each stage in its rail are built only when their button is pressed.
+const press = (node, what) => {
+  if (!node || !node._on || !node._on.click) return false;
+  try {
+    node._on.click({ target: node, preventDefault() {} });
+    return true;
+  } catch (error) {
+    console.error(`${what} threw: ${error.constructor.name}: ${error.message}`);
+    process.exit(1);
+  }
+};
+
+let stagesPressed = 0;
+if (press(registry.tabFiles, "the files tab")) {
+  const rail = registry.stageRail ? registry.stageRail.children : [];
+  rail.forEach((btn, i) => { if (press(btn, `stage ${i} in the files rail`)) stagesPressed += 1; });
+}
+
 const drew = {
   commits: count("commits"),
   stages: count("stages"),
@@ -76,5 +96,6 @@ if (!drew.commits) {
 }
 console.log(
   `smoke ok: ${drew.commits} commits, ${drew.pane} pane sections, ` +
-  `${drew.stages} stages, ${drew.notes} notes, ${drew.figures} figures`
+  `${drew.stages} stages, ${drew.notes} notes, ${drew.figures} figures` +
+  (stagesPressed ? `, ${stagesPressed} files-rail views` : "")
 );

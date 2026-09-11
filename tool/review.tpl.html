@@ -369,6 +369,13 @@
   .filesview { margin-top: 24px; }
   .filesnote { font-family: var(--mono); font-size: 11.5px; color: var(--ink-faint); margin: 0 0 20px; }
   .stagegroup { margin-bottom: 30px; }
+  .stagegroup:last-child { margin-bottom: 0; }
+  .stagepane { padding: 18px 20px; }
+  .stagepane > h3 { font-family: var(--serif); font-size: 21px; font-weight: 600; margin: 0 0 4px; }
+  .stagepane > .what { font-family: var(--sans); font-size: 14px; color: var(--ink-soft); margin: 0 0 18px; max-width: 76ch; }
+  .snip { font-family: var(--mono); font-size: 11px; color: var(--ink-faint); padding: 4px 0 4px 24px; }
+  table.diff tr.own td.code { background: var(--accent-soft); }
+  table.diff tr.own td.gut { color: var(--accent-ink); font-weight: 500; }
   .stagegroup > h3 { font-family: var(--mono); font-size: 11.5px; font-weight: 500; letter-spacing: .09em; text-transform: uppercase; color: var(--ink-faint); margin: 0 0 4px; }
   .stagegroup > .what { font-family: var(--sans); font-size: 14px; color: var(--ink); margin: 0 0 12px; max-width: 76ch; }
   .alsoin { font-family: var(--mono); font-size: 11px; color: var(--ink-faint); margin: 4px 0 0 24px; display: flex; align-items: baseline; gap: 6px; flex-wrap: wrap; }
@@ -424,7 +431,13 @@
 
   <section class="filesview" id="filesView" hidden>
     <p class="filesnote" id="filesNote"></p>
-    <div id="fileGroups"></div>
+    <div class="board">
+      <nav class="rail" id="stageRailNav" aria-label="Stages">
+        <h2>Read by stage</h2>
+        <div class="commits" id="stageRail"></div>
+      </nav>
+      <main class="pane" id="filePane"><div id="fileGroups"></div></main>
+    </div>
   </section>
 
   <div class="board" id="board">
@@ -1071,11 +1084,101 @@
 
   /* ---------- files changed, in the order the stages tell ---------- */
 
-  function paintFiles() {
+  const CONTEXT_ROWS = 3;
+
+  /* One file, showing only what a stage wrote in it, with a few rows either side. A stage
+     can be three lines in a file another stage owns, and those three lines are the whole
+     of what it did: showing the file entire would bury them, and showing them alone would
+     strip the code that gives them meaning. */
+  function renderFileLines(f, runs) {
+    const own = new Set();
+    runs.forEach(([from, to]) => { for (let n = from; n <= to; n++) own.add(n); });
+
+    const keep = new Set();
+    f.rows.forEach((r, i) => {
+      if (r.t !== "hunk" && r.n && own.has(r.n)) {
+        for (let j = Math.max(0, i - CONTEXT_ROWS); j <= Math.min(f.rows.length - 1, i + CONTEXT_ROWS); j++) {
+          keep.add(j);
+        }
+      }
+    });
+    if (!keep.size) return null;
+
+    const box = el("section", "file");
+    box.dataset.open = "true";
+    const head = el("button", "file-head");
+    head.type = "button";
+    head.appendChild(el("span", "chev", "▾"));
+    head.appendChild(el("span", "fpath", f.path));
+    head.appendChild(el("span", "status " + f.status, f.status));
+    head.addEventListener("click", () => {
+      box.dataset.open = box.dataset.open === "true" ? "false" : "true";
+    });
+    box.appendChild(head);
+
+    const wrap = el("div", "diffwrap");
+    const table = el("table", "diff");
+    const tbody = el("tbody");
+    let last = -1;
+    [...keep].sort((a, b) => a - b).forEach(i => {
+      if (last >= 0 && i > last + 1) {
+        const sep = el("tr");
+        const td = el("td", "snip", "… " + (i - last - 1) + " line(s) not from this stage");
+        td.colSpan = 3;
+        sep.appendChild(td);
+        tbody.appendChild(sep);
+      }
+      last = i;
+      const r = f.rows[i];
+      const tr = el("tr", r.t + (r.n && own.has(r.n) ? " own" : ""));
+      if (r.t === "hunk") {
+        const td = el("td", "code", r.text);
+        td.colSpan = 3;
+        tr.appendChild(td);
+      } else {
+        const lineNo = r.t === "del" ? r.o : r.n;
+        tr.appendChild(el("td", "gut", String(lineNo)));
+        tr.appendChild(el("td", "sign", r.t === "add" ? "+" : r.t === "del" ? "−" : ""));
+        tr.appendChild(el("td", "code", r.text));
+      }
+      tbody.appendChild(tr);
+    });
+    table.appendChild(tbody);
+    wrap.appendChild(table);
+    box.appendChild(wrap);
+    return box;
+  }
+
+  function paintStage(where) {
     const final = DATA.final;
-    if (!final || !final.files.length) return false;
     const groups = document.getElementById("fileGroups");
     const byWhat = new Map((DATA.stages || []).map(s => [s.where, s.what]));
+    groups.replaceChildren();
+
+    const pane = el("div", "stagepane");
+    pane.appendChild(el("h3", null, where));
+    if (byWhat.get(where)) pane.appendChild(el("p", "what", byWhat.get(where)));
+
+    let drawn = 0;
+    final.files.forEach(f => {
+      const runs = (f.runs || {})[where];
+      if (!runs || !runs.length) return;
+      const box = renderFileLines(f, runs);
+      if (box) { pane.appendChild(box); drawn += 1; }
+    });
+    if (!drawn) {
+      pane.appendChild(el("p", "filesnote",
+        "Nothing of this stage survives in the branch as it stands. Its commits are on the "
+        + "Commits tab."));
+    }
+    groups.appendChild(pane);
+  }
+
+  function paintAllFiles() {
+    const final = DATA.final;
+    const groups = document.getElementById("fileGroups");
+    const byWhat = new Map((DATA.stages || []).map(s => [s.where, s.what]));
+    groups.replaceChildren();
 
     /* Grouped by the first stage that reaches a file, which is the order build_data
        sorted them into. A file no stage claims goes last under its own heading, so it
@@ -1142,6 +1245,52 @@
       });
     }
 
+  }
+
+  /* The rail is the strip again, read as a list. Every file is the branch as it stands;
+     a stage is only what that stage wrote, wherever it wrote it, so a file appears under
+     each stage that touched it instead of one stage having to win it. */
+  function paintFiles() {
+    const final = DATA.final;
+    if (!final || !final.files.length) return false;
+    const rail = document.getElementById("stageRail");
+    const byWhat = new Map((DATA.stages || []).map(s => [s.where, s.what]));
+    const entries = [{ where: null, label: "Every file",
+                       meta: final.files.length + " files" }];
+    final.order.forEach(where => {
+      const files = final.files.filter(f => ((f.runs || {})[where] || []).length);
+      const lines = final.files.reduce((n, f) => n + ((f.lines || {})[where] || 0), 0);
+      entries.push({ where, label: where,
+                     meta: files.length + " file(s) · " + lines + " line(s)" });
+    });
+
+    const buttons = [];
+    entries.forEach((entry, i) => {
+      const btn = el("button", "commit-btn");
+      btn.type = "button";
+      btn.appendChild(el("span", "cb-num", entry.where === null ? "·" : String(i)));
+      const body = el("div", "cb-body");
+      body.appendChild(el("span", "cb-head", entry.label));
+      if (entry.where && byWhat.get(entry.where)) {
+        body.appendChild(el("div", "cb-why", byWhat.get(entry.where)));
+      }
+      body.appendChild(el("div", "cb-meta", entry.meta));
+      btn.appendChild(body);
+      btn.addEventListener("click", () => {
+        buttons.forEach((b, j) => b.setAttribute("aria-current", String(j === i)));
+        if (entry.where === null) paintAllFiles(); else paintStage(entry.where);
+        document.getElementById("filesNote").textContent = entry.where === null
+          ? final.files.length + " files as they stand now, grouped by stage."
+          : "Only what " + entry.where + " wrote, with a few lines either side.";
+      });
+      buttons.push(btn);
+      rail.appendChild(btn);
+    });
+
+    buttons[0].setAttribute("aria-current", "true");
+    // With no stage strip the rail holds one entry and orders nothing, so it is not drawn.
+    document.getElementById("stageRailNav").hidden = !final.order.length;
+    paintAllFiles();
     document.getElementById("filesNote").textContent =
       final.files.length + " files as they stand now, grouped by stage. "
       + "Questions are asked on the Commits tab, where a line has a commit behind it.";

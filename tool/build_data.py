@@ -171,25 +171,37 @@ def git_maybe(repo, *args):
     return result.stdout if result.returncode == 0 else None
 
 
-BLAME_LINE = re.compile(r"^([0-9a-f]{40}) \d+ \d+")
+BLAME_LINE = re.compile(r"^([0-9a-f]{40}) \d+ (\d+)")
 
 
-def surviving_by_commit(repo, path):
-    """How many lines of the file as it stands now came from each commit.
+def surviving_lines(repo, path):
+    """Which lines of the file as it stands now came from each commit.
 
     Blame credits the commit that last touched a line, so this is what survived rather
-    than what was written. A commit whose work was rewritten later scores nothing here,
-    which is the point: it should not be pulling a file into its stage.
+    than what was written. A commit whose work was rewritten later owns nothing here,
+    which is the point: it should not be pulling a file into its stage, and its lines are
+    not in the file to be read.
     """
     out = git_maybe(repo, "blame", "--line-porcelain", "-M", "HEAD", "--", path)
     if out is None:
         return {}
-    counts = {}
-    for line in out.split("\n"):
-        found = BLAME_LINE.match(line)
+    lines = {}
+    for row in out.split("\n"):
+        found = BLAME_LINE.match(row)
         if found:
-            counts[found.group(1)] = counts.get(found.group(1), 0) + 1
-    return counts
+            lines.setdefault(found.group(1), []).append(int(found.group(2)))
+    return lines
+
+
+def to_runs(numbers):
+    """Sorted line numbers as [start, end] runs, which is how they are read and drawn."""
+    runs = []
+    for number in sorted(numbers):
+        if runs and number == runs[-1][1] + 1:
+            runs[-1][1] = number
+        else:
+            runs.append([number, number])
+    return runs
 
 
 def final_diff(repo, rng, commits, narrative):
@@ -243,12 +255,13 @@ def final_diff(repo, rng, commits, narrative):
         # Ordered by how much of the file as it stands now each stage actually wrote.
         # Placing a file under the first stage to mention it put two thirds of this
         # branch under its first stage and left one stage with no files at all.
-        weight = {}
+        weight, by_stage = {}, {}
         if entry["status"] != "deleted":
-            for sha, lines in surviving_by_commit(repo, entry["path"]).items():
+            for sha, numbers in surviving_lines(repo, entry["path"]).items():
                 where = stage_of.get(sha)
                 if where:
-                    weight[where] = weight.get(where, 0) + lines
+                    weight[where] = weight.get(where, 0) + len(numbers)
+                    by_stage.setdefault(where, []).extend(numbers)
         if weight:
             ranked = sorted(reaching, key=lambda w: (-weight.get(w, 0), order.index(w)))
         else:
@@ -257,6 +270,10 @@ def final_diff(repo, rng, commits, narrative):
             ranked = sorted(reaching, key=order.index)
         entry["stages"] = ranked
         entry["lines"] = {where: weight.get(where, 0) for where in ranked}
+        # Where each stage's surviving lines are, so the page can show a stage's own work
+        # inside a file another stage owns. Runs rather than line numbers, because that is
+        # what a reader is shown and it keeps the page small.
+        entry["runs"] = {where: to_runs(numbers) for where, numbers in by_stage.items()}
 
     rank = {where: i for i, where in enumerate(order)}
     files.sort(key=lambda e: (rank.get((e["stages"] or [None])[0], len(order)),
