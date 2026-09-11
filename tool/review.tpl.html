@@ -374,8 +374,11 @@
   .stagepane > h3 { font-family: var(--serif); font-size: 21px; font-weight: 600; margin: 0 0 4px; }
   .stagepane > .what { font-family: var(--sans); font-size: 14px; color: var(--ink-soft); margin: 0 0 18px; max-width: 76ch; }
   .snip { font-family: var(--mono); font-size: 11px; color: var(--ink-faint); padding: 4px 0 4px 24px; }
-  table.diff tr.own td.code { background: var(--accent-soft); }
-  table.diff tr.own td.gut { color: var(--accent-ink); font-weight: 500; }
+  /* A marker, not a background. Green already means added and red means removed, and
+     painting the cell took that away from exactly the lines the stage wrote, so its own
+     additions looked less like additions than the other stages' did. */
+  .stagepane table.diff tr.own td.gut { box-shadow: inset 3px 0 0 var(--accent); color: var(--accent-ink); font-weight: 500; }
+  .stagepane table.diff tr:not(.own):not(.hunk) td.code { opacity: .58; }
   .stagegroup > h3 { font-family: var(--mono); font-size: 11.5px; font-weight: 500; letter-spacing: .09em; text-transform: uppercase; color: var(--ink-faint); margin: 0 0 4px; }
   .stagegroup > .what { font-family: var(--sans); font-size: 14px; color: var(--ink); margin: 0 0 12px; max-width: 76ch; }
   .alsoin { font-family: var(--mono); font-size: 11px; color: var(--ink-faint); margin: 4px 0 0 24px; display: flex; align-items: baseline; gap: 6px; flex-wrap: wrap; }
