@@ -1561,10 +1561,15 @@
         body.before + " commits became " + body.after + ". Undo with: git reset --hard " + body.backup;
       button.disabled = false;
       button.textContent = "Reload";
-      button.onclick = () => location.reload();
+      /* The click handler is registered with addEventListener, which assigning
+         onclick does not replace. Setting both ran the reload and the squash confirm
+         from one press, so pressing Reload asked to squash again. The handler reads
+         this instead. */
+      button.dataset.done = "true";
     } catch (err) {
       button.disabled = false;
       button.textContent = "Squash fixups";
+      delete button.dataset.done;
       // Next to the button as well as in the status strip: a refusal that only lands in
       // the strip reads as the button doing nothing at all.
       document.getElementById("squashText").textContent = "Could not squash: " + err.message;
@@ -1574,6 +1579,7 @@
 
   document.getElementById("squashRun").addEventListener("click", () => {
     const button = document.getElementById("squashRun");
+    if (button.dataset.done === "true") { location.reload(); return; }
     const anchored = THREADS.filter(t => VALID_ANCHORS.has(anchorKey(t))).length;
     const warning =
       "Squash " + FIXUP_COUNT + " fixup(s) into " + FIXUP_TARGETS + " commit(s)?\n\n"
