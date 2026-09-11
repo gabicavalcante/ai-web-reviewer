@@ -1103,18 +1103,44 @@
       if (others.length) {
         const line = el("div", "alsoin");
         /* A stage name can contain a comma, so the names are chips rather than a list
-           joined by one. A file in most of the stages is counted instead of named: six
+           joined by one, and each carries how many of the file's surviving lines that
+           stage wrote. A file in most of the stages is counted instead of named: six
            names on one file is not a cross reference, it is the whole strip again. */
         if (final.order.length > 2 && f.stages.length > final.order.length / 2) {
           line.appendChild(document.createTextNode(
             "in " + f.stages.length + " of the " + final.order.length + " stages"));
         } else {
           line.appendChild(document.createTextNode(grouped ? "also in" : "in"));
-          others.forEach(w => line.appendChild(el("span", "chip", w)));
+          others.forEach(w => {
+            const n = (f.lines || {})[w];
+            line.appendChild(el("span", "chip", n ? w + " " + n : w));
+          });
         }
         box.appendChild(line);
       }
     });
+
+    /* A stage can write a handful of lines in files that other stages own, and then it
+       has no section of its own and disappears from the view. Naming where its lines
+       went keeps it on the page, because a small stage is often the interesting one. */
+    if (grouped) {
+      const owning = new Set(final.files.map(f => (f.stages || [])[0]).filter(Boolean));
+      final.order.filter(w => !owning.has(w)).forEach(where => {
+        const box = el("div", "stagegroup");
+        box.appendChild(el("h3", null, where));
+        if (byWhat.get(where)) box.appendChild(el("p", "what", byWhat.get(where)));
+        const scattered = final.files
+          .filter(f => (f.lines || {})[where])
+          .sort((a, b) => b.lines[where] - a.lines[where]);
+        const total = scattered.reduce((n, f) => n + f.lines[where], 0);
+        const line = el("div", "alsoin");
+        line.appendChild(document.createTextNode(
+          total ? "no files of its own. " + total + " line(s), in" : "no files of its own"));
+        scattered.forEach(f => line.appendChild(el("span", "chip", f.path + " " + f.lines[where])));
+        box.appendChild(line);
+        groups.appendChild(box);
+      });
+    }
 
     document.getElementById("filesNote").textContent =
       final.files.length + " files as they stand now, grouped by stage. "

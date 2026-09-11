@@ -161,6 +161,37 @@ def validate_read_marks(per_commit, commit_count, problems, warnings):
                         "no emphasis at all")
 
 
+def git_maybe(repo, *args):
+    """git, returning None instead of exiting when the command fails.
+
+    Blame fails for good reasons: a file the branch deleted has no final content, and a
+    binary one has no lines. Neither is a build error.
+    """
+    result = subprocess.run(["git", "-C", str(repo), *args], capture_output=True, text=True)
+    return result.stdout if result.returncode == 0 else None
+
+
+BLAME_LINE = re.compile(r"^([0-9a-f]{40}) \d+ \d+")
+
+
+def surviving_by_commit(repo, path):
+    """How many lines of the file as it stands now came from each commit.
+
+    Blame credits the commit that last touched a line, so this is what survived rather
+    than what was written. A commit whose work was rewritten later scores nothing here,
+    which is the point: it should not be pulling a file into its stage.
+    """
+    out = git_maybe(repo, "blame", "--line-porcelain", "-M", "HEAD", "--", path)
+    if out is None:
+        return {}
+    counts = {}
+    for line in out.split("\n"):
+        found = BLAME_LINE.match(line)
+        if found:
+            counts[found.group(1)] = counts.get(found.group(1), 0) + 1
+    return counts
+
+
 def final_diff(repo, rng, commits, narrative):
     """The branch as one diff, with each file placed under the stage that reaches it first.
 
@@ -187,9 +218,10 @@ def final_diff(repo, rng, commits, narrative):
         entry["additions"], entry["deletions"] = add, dele
         entry["collapsed"] = entry["status"] == "deleted" and dele > COLLAPSE_DELETIONS_OVER
 
-    # Which stages reach a file, in the strip's own order. A mark is a rail position, and
-    # a commit's followups are part of it, so a fixup's files belong to its target's stage.
-    order, touched = [], {}
+    # Which stages reach a file, and which commit belongs to which stage. A mark is a rail
+    # position, and a commit's followups are part of it, so a fixup belongs to its
+    # target's stage.
+    order, touched, stage_of = [], {}, {}
     for stage in narrative.get("stages") or []:
         if is_placeholder(stage) or not stage.get("where"):
             continue
@@ -200,17 +232,35 @@ def final_diff(repo, rng, commits, narrative):
                 continue
             commit = commits[index - 1]
             for source in [commit] + list(commit.get("followups") or []):
+                stage_of[source["hash"]] = stage["where"]
                 for entry in source["files"]:
                     touched.setdefault(entry["path"], [])
                     if stage["where"] not in touched[entry["path"]]:
                         touched[entry["path"]].append(stage["where"])
 
     for entry in files:
-        entry["stages"] = touched.get(entry["path"], [])
+        reaching = touched.get(entry["path"], [])
+        # Ordered by how much of the file as it stands now each stage actually wrote.
+        # Placing a file under the first stage to mention it put two thirds of this
+        # branch under its first stage and left one stage with no files at all.
+        weight = {}
+        if entry["status"] != "deleted":
+            for sha, lines in surviving_by_commit(repo, entry["path"]).items():
+                where = stage_of.get(sha)
+                if where:
+                    weight[where] = weight.get(where, 0) + lines
+        if weight:
+            ranked = sorted(reaching, key=lambda w: (-weight.get(w, 0), order.index(w)))
+        else:
+            # A deleted or binary file, or one whose surviving lines predate the branch.
+            # Nothing to weigh, so the strip's own order decides.
+            ranked = sorted(reaching, key=order.index)
+        entry["stages"] = ranked
+        entry["lines"] = {where: weight.get(where, 0) for where in ranked}
 
-    # Grouped by first stage, in strip order, with whatever no stage claims at the end.
     rank = {where: i for i, where in enumerate(order)}
-    files.sort(key=lambda e: (rank.get((e["stages"] or [None])[0], len(order)), e["path"]))
+    files.sort(key=lambda e: (rank.get((e["stages"] or [None])[0], len(order)),
+                              -sum(e.get("lines", {}).values()), e["path"]))
     return {"files": files, "order": order}
 
 
