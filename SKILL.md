@@ -80,6 +80,11 @@ the reader work harder so the writer can perform, and it is imprecise, because a
 carries connotations you did not choose. Say what you mean, and use the literal phrase
 whenever one exists. [reference/voice.md](reference/voice.md) has the rule in full.
 
+An answer in a thread is shaped as well as worded. Lead with the answer, not with
+agreement. Make a list of changes a list. Cut the sentence explaining why the fix works,
+because the reviewer is looking at the code. `answer.py` refuses over 1200 characters
+unless you pass `--long`, and hitting that means cut rather than ask for more room.
+
 A reviewer reads this, often not in their first language, so the implementation's
 vocabulary does not belong in the interface. `halt` is `skip`; `arm` is `turn on`; `your
 call` is `waiting for you`. Keep the code's own terms, which are precise and already

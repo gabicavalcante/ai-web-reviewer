@@ -62,6 +62,27 @@ the answers posted into threads, and the messages reported back in the session.
 **The short form is "Please remove all mannered prose."** Use it as a pass over a draft
 when the full definition is not needed.
 
+## Answers in a thread
+
+The reviewer asked from a line in the diff and is waiting to get back to reading. What
+makes an answer hard to use is usually its shape rather than its words.
+
+- **The first sentence is the answer.** Not agreement, not a restatement of the question.
+  "You're right:" and "Good question" cost a line and carry nothing.
+- **A list of changes is a list.** Four edits buried in one sentence have to be unpacked by
+  the reader before they can be checked off. Four bullets can be.
+- **Say what changes and where.** A proposal the reviewer cannot act on without asking a
+  follow-up is not finished.
+- **Cut the part that explains why the fix works.** They are looking at the code and will
+  see it. Keep the reason only where the fix looks wrong without it.
+- **Answer what was asked.** A second thing you noticed belongs in its own thread, or
+  nowhere.
+
+`answer.py` refuses an answer over 1200 characters unless you pass `--long`. Reaching the
+ceiling means cut, not ask for more room: lead with the answer, make the list a list, drop
+the justification. `--long` is for the answer that genuinely needs it, and passing it
+should be a decision you notice making.
+
 ## Every "the" points at something the reader has seen
 
 You investigated the branch, so the parts have names in your head. The reader has the page

@@ -19,6 +19,8 @@ go-ahead button instead of showing the thread as still awaiting a reply.
 --did records a change made in response to the thread, with the commit it landed
 in, so the thread reads as asked -> answered -> changed.
 
+--long allows an answer past the length ceiling, for the few that need it.
+
 Reads the body from stdin, so it can be long and contain any quoting.
 """
 import json
@@ -36,6 +38,15 @@ REPO = paths.repo_root()
 STATE = paths.state_dir()
 QUESTIONS = STATE / "questions.jsonl"
 MESSAGES = STATE / "messages.jsonl"
+
+# Long enough for a proposal with four parts, a quoted replacement sentence and a closing
+# question, measured from one that did that well. Short enough to refuse the version of
+# the same answer that explained itself first and buried the list in a paragraph.
+#
+# The ceiling is here rather than in a rule because a rule can be reasoned around and an
+# exit code cannot. Reaching it is the prompt to cut, and --long is for the answer that
+# has earned the room, which makes taking the room a decision instead of a drift.
+ANSWER_MAX = 1200
 
 
 def known_ids():
@@ -67,6 +78,8 @@ def describe_commit(sha):
 
 def main():
     args = sys.argv[1:]
+    allow_long = "--long" in args
+    args = [a for a in args if a != "--long"]
     kind = "answer"
     extra = {}
     if args and args[0] == "--ask":
@@ -88,6 +101,12 @@ def main():
     text = sys.stdin.read().strip()
     if not text:
         sys.exit("refusing to write an empty answer")
+    if len(text) > ANSWER_MAX and not allow_long:
+        sys.exit(
+            f"this answer is {len(text)} characters, over the {ANSWER_MAX} a thread reply "
+            f"gets.\n"
+            "Lead with the answer, make the list of changes a list, and cut the part that\n"
+            "explains why the fix works. If it still needs the room, pass --long.")
 
     row = {
         "thread_id": question_id,
