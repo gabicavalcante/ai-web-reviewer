@@ -18,7 +18,7 @@ const mk = (tag) => {
       contains(c) { return this._s.has(c); },
     },
     appendChild(c) { c.parentNode = node; node.children.push(c); return c; },
-    replaceChildren() { node.children = []; },
+    replaceChildren(...kids) { node.children = []; kids.forEach((k) => node.appendChild(k)); },
     remove() {
       const p = node.parentNode;
       if (p) { const i = p.children.indexOf(node); if (i >= 0) p.children.splice(i, 1); }

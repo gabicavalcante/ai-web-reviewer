@@ -1119,17 +1119,32 @@
     });
     box.appendChild(head);
 
+    /* The windows are what this stage wrote. Reading the file whole is the other thing a
+       reviewer wants, and it used to be a second copy of the branch in its own tab. It is
+       the same file either way, so it is a toggle on the file rather than a view. */
+    const whole = el("button", "btn ghost small wholefile", "Show the whole file");
+    whole.type = "button";
+    let showingAll = false;
+    whole.addEventListener("click", () => {
+      showingAll = !showingAll;
+      whole.textContent = showingAll ? "Show only this stage" : "Show the whole file";
+      draw(showingAll ? f.rows.map((_, i) => i) : [...keep].sort((a, b) => a - b));
+    });
+
     const wrap = el("div", "diffwrap");
     const table = el("table", "diff");
-    const tbody = el("tbody");
+    let tbody = el("tbody");
+
+    function draw(indices) {
+    const fresh = el("tbody");
     let last = -1;
-    [...keep].sort((a, b) => a - b).forEach(i => {
+    indices.forEach(i => {
       if (last >= 0 && i > last + 1) {
         const sep = el("tr");
         const td = el("td", "snip", "… " + (i - last - 1) + " line(s) not from this stage");
         td.colSpan = 3;
         sep.appendChild(td);
-        tbody.appendChild(sep);
+        fresh.appendChild(sep);
       }
       last = i;
       const r = f.rows[i];
@@ -1144,11 +1159,16 @@
         tr.appendChild(el("td", "sign", r.t === "add" ? "+" : r.t === "del" ? "−" : ""));
         tr.appendChild(el("td", "code", r.text));
       }
-      tbody.appendChild(tr);
+      fresh.appendChild(tr);
     });
-    table.appendChild(tbody);
+    table.replaceChildren(fresh);
+    tbody = fresh;
+    }
+
+    draw([...keep].sort((a, b) => a - b));
     wrap.appendChild(table);
     box.appendChild(wrap);
+    box.appendChild(whole);
     return box;
   }
 
@@ -1163,15 +1183,34 @@
     if (byWhat.get(where)) pane.appendChild(el("p", "what", byWhat.get(where)));
 
     let drawn = 0;
+    const silent = [];
     final.files.forEach(f => {
+      if (!(f.stages || []).includes(where)) return;
       const runs = (f.runs || {})[where];
-      if (!runs || !runs.length) return;
-      const box = renderFileLines(f, runs);
-      if (box) { pane.appendChild(box); drawn += 1; }
+      const box = runs && runs.length ? renderFileLines(f, runs) : null;
+      if (box) { pane.appendChild(box); drawn += 1; } else { silent.push(f); }
     });
-    if (!drawn) {
+
+    /* A file this stage touched that has no line to show: an empty file, one the branch
+       deletes, or one whose lines a later stage rewrote. Naming it and saying which keeps
+       it from reading as an omission. */
+    if (silent.length) {
+      const list = el("div", "stagegroup");
+      list.appendChild(el("h3", null, "touched, with nothing to show here"));
+      silent.forEach(f => {
+        const why = f.status === "deleted" ? "deleted by this branch"
+          : !f.rows.length ? "empty file"
+          : "its lines were rewritten by a later stage";
+        const line = el("div", "alsoin");
+        line.appendChild(document.createTextNode(f.path));
+        line.appendChild(el("span", "chip", why));
+        list.appendChild(line);
+      });
+      pane.appendChild(list);
+    }
+    if (!drawn && !silent.length) {
       pane.appendChild(el("p", "filesnote",
-        "Nothing of this stage survives in the branch as it stands. Its commits are on the "
+        "Nothing of this stage is in the branch as it stands. Its commits are on the "
         + "Commits tab."));
     }
     groups.appendChild(pane);
@@ -1258,14 +1297,31 @@
     if (!final || !final.files.length) return false;
     const rail = document.getElementById("stageRail");
     const byWhat = new Map((DATA.stages || []).map(s => [s.where, s.what]));
-    const entries = [{ where: null, label: "Every file",
-                       meta: final.files.length + " files" }];
+    /* No strip at all is not a gap in a narrative, it is a review without one, so the
+       files are listed plainly and the rail says nothing. */
+    if (!final.order.length) {
+      document.getElementById("stageRailNav").hidden = true;
+      paintAllFiles();
+      document.getElementById("filesNote").textContent =
+        final.files.length + " file(s) as they stand now. This review has no stages.";
+      return true;
+    }
+
+    const entries = [];
     final.order.forEach(where => {
-      const files = final.files.filter(f => ((f.runs || {})[where] || []).length);
+      const files = final.files.filter(f => (f.stages || []).includes(where));
       const lines = final.files.reduce((n, f) => n + ((f.lines || {})[where] || 0), 0);
       entries.push({ where, label: where,
                      meta: files.length + " file(s) · " + lines + " line(s)" });
     });
+    /* Only when there is something in it. A file no stage claims is a gap in the
+       narrative, and the one thing the stages cannot show between them. */
+    const orphanFiles = final.files.filter(f => !(f.stages || []).length);
+    if (orphanFiles.length) {
+      entries.push({ where: null, label: "not in any stage",
+                     meta: orphanFiles.length + " file(s)" });
+    }
+
 
     const buttons = [];
     entries.forEach((entry, i) => {
@@ -1283,19 +1339,19 @@
         buttons.forEach((b, j) => b.setAttribute("aria-current", String(j === i)));
         if (entry.where === null) paintAllFiles(); else paintStage(entry.where);
         document.getElementById("filesNote").textContent = entry.where === null
-          ? final.files.length + " files as they stand now, grouped by stage."
-          : "Only what " + entry.where + " wrote, with a few lines either side.";
+          ? "Files no stage claims. The narrative does not say where these belong."
+          : "Only what " + entry.where + " wrote, with a few lines either side. "
+            + "Open a file whole from the button under it.";
       });
       buttons.push(btn);
       rail.appendChild(btn);
     });
 
     buttons[0].setAttribute("aria-current", "true");
-    // With no stage strip the rail holds one entry and orders nothing, so it is not drawn.
-    document.getElementById("stageRailNav").hidden = !final.order.length;
-    paintAllFiles();
+    document.getElementById("stageRailNav").hidden = false;
+    if (entries[0].where === null) paintAllFiles(); else paintStage(entries[0].where);
     document.getElementById("filesNote").textContent =
-      final.files.length + " files as they stand now, grouped by stage. "
+      "Only what " + entries[0].label + " wrote, with a few lines either side. "
       + "Questions are asked on the Commits tab, where a line has a commit behind it.";
     return true;
   }
