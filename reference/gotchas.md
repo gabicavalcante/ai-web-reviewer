@@ -70,6 +70,21 @@ names and file every orphan under another review.
 Renaming a branch strands its threads under the old name. There is no fix for that in this
 design, and `review.py archive` is the way out.
 
+## One repo can hold two reviews, and they must not share a file
+
+The state directory is keyed by repo, so reviewing two branches of one checkout puts both
+in it. Anything named for the directory rather than the range is then shared by two
+reviews that disagree.
+
+It happened twice. A single `index.html` meant each server reported the other's build as
+stale, and clicking Rebuild overwrote the other page, so two open tabs took turns
+demanding a rebuild. A single `narrative.json` put one review's title and stage strip on
+the other's page, which built cleanly and read as though it were right.
+
+The page and the narrative are both named from a hash of the range now, and the server
+resolves `/` to its own range's page rather than to whatever was written last. Anything
+else added beside them needs the same treatment.
+
 ## Theme colors come from tokens, never from a `[data-theme]` guard
 
 `:root:not([data-theme="light"]) .btn { color: var(--ground) }` looks like a dark-mode

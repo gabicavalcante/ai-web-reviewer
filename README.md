@@ -125,7 +125,8 @@ absolute path, so two checkouts of the same project never collide:
 | `messages.jsonl` | Every turn after the opening question, each tagged with who wrote it |
 | `resolved.jsonl` | One row each time a thread is resolved or reopened |
 | `answers.jsonl` | An older reply format, still read so old reviews keep working |
-| `index.html` | The rendered page, rewritten by every build |
+| `index-<hash>.html` | The rendered page for one range, rewritten by every build |
+| `narrative-<hash>.json` | The narrative for one range, if it has one |
 
 The four logs are append-only, and a question is flushed and `fsync`ed before the browser
 is told it was accepted. Nothing rewrites a row. Resolving a thread appends a row saying
@@ -145,7 +146,8 @@ accumulates one directory per repo path, including repos you have since moved or
 Moving a repo changes the hash, so the next run starts empty while the old threads stay
 under the old name.
 
-`index.html` is the part you can lose safely: `review.py build` regenerates it from git.
+The rendered pages are the part you can lose safely: `review.py build` regenerates one
+from git.
 The logs are the only thing here that cannot be reconstructed.
 
 The `pre-squash/<stamp>` branches a squash leaves behind are the same kind of leftover.

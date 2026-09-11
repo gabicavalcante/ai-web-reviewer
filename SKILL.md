@@ -132,7 +132,7 @@ a skim.
 
 Threads are append-only JSONL in `~/.local/state/web-reviewer/<repo>-<hash>/`, keyed by
 repo path, outside the repo so questions never land in git. They survive rebuilds,
-restarts and rebases. The rendered `index.html` sits in the same directory.
+restarts and rebases. The rendered page sits in the same directory, named for its range, so two reviews of one repo do not overwrite each other.
 
 Rebuild after new commits: `python3 $TOOL/review.py build <range>`, then reload.
 

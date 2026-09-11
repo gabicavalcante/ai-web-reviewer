@@ -36,6 +36,23 @@ def state_dir(repo=None):
     return target
 
 
+def page(rng, repo=None):
+    """The built page for one range, inside that repo's state directory.
+
+    Named from the range rather than fixed, because the state directory is keyed by repo
+    and two ranges of one repo are two reviews. Sharing a single index.html made each
+    server report the other's build as stale, and each Rebuild overwrote the other page.
+    """
+    digest = hashlib.sha256(rng.encode()).hexdigest()[:8]
+    return state_dir(repo) / f"index-{digest}.html"
+
+
+def narrative(rng, repo=None):
+    """The narrative for one range. Same reason as page(): one repo, two reviews."""
+    digest = hashlib.sha256(rng.encode()).hexdigest()[:8]
+    return state_dir(repo) / f"narrative-{digest}.json"
+
+
 def logs(repo=None):
     """The append-only thread logs for this repo's review."""
     where = state_dir(repo)

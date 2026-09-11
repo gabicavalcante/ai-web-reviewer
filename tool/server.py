@@ -160,6 +160,15 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         self.wfile.write(body)
 
     def do_GET(self):
+        # "/" is this server's range, not whatever page was written to this directory
+        # last. Two reviews of one repo share the directory and must not share the page.
+        if self.path in ("/", "/index.html"):
+            page = paths.page(RANGE, REPO)
+            if not page.exists():
+                self.send_error(404, "no page built for this range yet")
+                return
+            self.path = "/" + page.name
+
         if self.path.split("?")[0] == "/thread":
             turns = {}
             # answers.jsonl predates threading; its rows are Claude turns.

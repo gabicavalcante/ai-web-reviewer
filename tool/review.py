@@ -45,10 +45,14 @@ SKELETON = """<!doctype html>
 def build(rng, narrative):
     repo = paths.repo_root()
     state = paths.state_dir(repo)
-    # A narrative written for this review lives beside its state, so it is picked up
-    # on every rebuild without repeating the flag.
-    if not narrative and (state / "narrative.json").exists():
-        narrative = state / "narrative.json"
+    # A narrative written for this review lives beside its state, so it is picked up on
+    # every rebuild without repeating the flag. The range's own file first: one repo can
+    # hold two reviews, and a shared narrative.json puts one review's title on the other.
+    if not narrative:
+        for candidate in (paths.narrative(rng, repo), state / "narrative.json"):
+            if candidate.exists():
+                narrative = candidate
+                break
     command = [sys.executable, str(HERE / "build_data.py")]
     if narrative:
         command += ["--narrative", str(pathlib.Path(narrative).resolve())]
@@ -74,7 +78,7 @@ def build(rng, narrative):
     page = template.replace("/*__DATA__*/", payload)
     split = page.index('<div class="shell">')
     out = SKELETON + page[:split] + "</head>\n<body>\n" + page[split:] + "\n</body>\n</html>\n"
-    target = state / "index.html"
+    target = paths.page(rng, repo)
     target.write_text(out)
     print(f"built {target} ({len(out):,} bytes)")
     smoke(target)
@@ -133,7 +137,7 @@ def narrate(rng, force):
     back to git, so a half-filled scaffold renders as the plain page rather than as blanks.
     """
     repo = paths.repo_root()
-    target = paths.state_dir(repo) / "narrative.json"
+    target = paths.narrative(rng, repo)
     if target.exists() and not force:
         raise SystemExit(
             f"{target} already exists.\n"
