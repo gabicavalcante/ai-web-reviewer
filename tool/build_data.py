@@ -151,6 +151,16 @@ def validate_read_marks(per_commit, commit_count, problems, warnings):
                         "no emphasis at all")
 
 
+def is_placeholder(entry):
+    """An entry left exactly as the scaffold wrote it, with every field still empty.
+
+    The scaffold ships one of each so the shape is visible without opening the reference.
+    An untouched one is not something the reader should see, and it is not an error
+    either, so it is dropped before the page and skipped by the checks below.
+    """
+    return isinstance(entry, dict) and not any(entry.values())
+
+
 def mark_number(mark):
     """A stage mark as a rail position, or None if it does not name one.
 
@@ -199,6 +209,8 @@ def validate_narrative(narrative, commits, fulls, shorts):
         problems.append("stages: must be a list")
         stages = []
     for position, stage in enumerate(stages, 1):
+        if is_placeholder(stage):
+            continue
         if not isinstance(stage, dict) or not stage.get("where") or not stage.get("what"):
             problems.append(f"stages[{position}]: needs both 'where' and 'what'")
             continue
@@ -223,6 +235,8 @@ def validate_narrative(narrative, commits, fulls, shorts):
         problems.append("figures: must be a list")
         figures = []
     for position, figure in enumerate(figures, 1):
+        if is_placeholder(figure):
+            continue
         if not isinstance(figure, dict) or not figure.get("k") or not figure.get("v"):
             problems.append(f"figures[{position}]: needs both 'k' and 'v'")
 
@@ -384,9 +398,10 @@ def main():
             f"compared against {base}."
         ),
         eyebrow=narrative.get("eyebrow", ""),
-        figures=narrative.get("figures") or default_figures,
-        stages=narrative.get("stages") or [],
-        notes=narrative.get("notes") or [],
+        figures=[f for f in (narrative.get("figures") or []) if not is_placeholder(f)]
+                or default_figures,
+        stages=[s for s in (narrative.get("stages") or []) if not is_placeholder(s)],
+        notes=[n for n in (narrative.get("notes") or []) if not is_placeholder(n)],
     )))
 
 

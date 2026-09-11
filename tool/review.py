@@ -123,9 +123,12 @@ def narrate(rng, force):
         "title": "",
         "dek": "",
         "eyebrow": "",
-        "figures": [],
-        "stages": [],
-        "notes": [],
+        # One blank entry each, so the shape is in front of whoever fills this in. A
+        # wholly empty entry is dropped at build time, so leaving them is the same as
+        # deleting them.
+        "figures": [{"k": "", "v": ""}],
+        "stages": [{"where": "", "what": "", "marks": []}],
+        "notes": [{"kind": "", "title": "", "body": "", "tone": ""}],
         "commits": {
             commit["hash"][:9]: {
                 # Not read by the build. Here so whoever fills this in can tell the
@@ -148,6 +151,7 @@ def narrate(rng, force):
     print(f"{len(commits)} commit(s) on the rail, numbered 1 to {len(commits)} for stage marks.")
     print("Every key is optional. Anything left empty falls back to git, so fill in only")
     print("what you have actually worked out, then run `review.py build` to see it.")
+    print("The blank figure, stage and note show the shape; untouched ones are dropped.")
 
 
 def free_port(preferred):

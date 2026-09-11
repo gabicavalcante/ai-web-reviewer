@@ -58,6 +58,10 @@ those are left blank rather than guessed at.
 
 It refuses to overwrite an existing file unless you pass `--force`.
 
+The scaffold carries one blank `figure`, `stage` and `note` so their shape is in front of
+you without opening this file. An entry whose fields are all still empty is dropped before
+the page and skipped by the checks, so leaving one is the same as deleting it.
+
 An empty field falls back to git, so there is no cost to leaving one alone: an untouched
 scaffold builds the same page as no narrative at all, and a `why` you have not written
 keeps the commit's own message.
