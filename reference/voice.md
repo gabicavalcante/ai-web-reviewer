@@ -36,6 +36,32 @@ of the *implementation* leaking into the interface.
 Their word is not always shorter. It is the one whose meaning a reader can work out from
 the parts.
 
+## Mannered prose
+
+Mannered prose substitutes metaphor and flourish for direct statement. Instead of "a
+parameter worth varying", the mannered writer produces "a dial worth turning". Instead of
+"this point still matters", "this point earns its keep".
+
+The phrases exist to display the writer, not to convey the idea, and readers can tell.
+That is why mannered prose irritates: it makes the reader work harder so the writer can
+perform. It is also imprecise, because metaphors drag in connotations the writer did not
+choose and cannot control.
+
+The fix is to say what you mean. When a literal phrase is available, use it.
+
+| Mannered | Direct |
+| --- | --- |
+| a dial worth turning | a parameter worth varying |
+| this point earns its keep | this point still matters |
+| the guard the button trips | the check that refuses the squash |
+| questions land on the floor | questions are never delivered |
+
+This applies to everything the skill writes, not only the page: narrative fields, labels,
+the answers posted into threads, and the messages reported back in the session.
+
+**The short form is "Please remove all mannered prose."** Use it as a pass over a draft
+when the full definition is not needed.
+
 ## Every "the" points at something the reader has seen
 
 You investigated the branch, so the parts have names in your head. The reader has the page
@@ -52,8 +78,9 @@ missing, once.
 - **No em dashes.** Use a period, a comma, a colon, or parentheses.
 - **No idiom or phrasal verbs.** "goes red" is "fails". "the paths users hit" is "the
   paths users use". A reader who knows every word in "your call" still cannot derive it.
-- **No metaphor as a technical term.** If a metaphor is doing the work of a term, say the
-  mechanism. "arm the guard" is "turn the guard on", or better, name what it does.
+- **No metaphor as a technical term.** The worst case of mannered prose above: if a
+  metaphor is doing the work of a term, name the mechanism. "arm the guard" is "turn the
+  guard on".
 - **Say it once.** A label, its tooltip and its status line should not restate each other.
 - **Name the actor.** "The script collects failures", not "failures are collected".
 - **Never assert what you have not checked.** A footer that says "working tree clean" on

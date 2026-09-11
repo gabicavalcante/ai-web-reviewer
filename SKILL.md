@@ -71,11 +71,19 @@ Without node the check is skipped with a message, so read the page before trusti
 
 ## Write the copy for a person
 
-Before you build the page, run the `deslop` skill over every string you wrote: the
-narrative fields, any new label, any answer you post into a thread. A reviewer reads this,
-often not in their first language, so the implementation's vocabulary does not belong in
-the interface. `halt` is `skip`; `arm` is `turn on`; `your call` is `waiting for you`.
-Keep the code's own terms, which are precise and already known.
+This covers everything you write here: the narrative fields, any new label, every answer
+you post into a thread. Run the `deslop` skill over it before you build the page.
+
+Then remove all mannered prose. Mannered prose is metaphor and flourish standing in for
+direct statement: "a dial worth turning" instead of "a parameter worth varying". It makes
+the reader work harder so the writer can perform, and it is imprecise, because a metaphor
+carries connotations you did not choose. Say what you mean, and use the literal phrase
+whenever one exists. [reference/voice.md](reference/voice.md) has the rule in full.
+
+A reviewer reads this, often not in their first language, so the implementation's
+vocabulary does not belong in the interface. `halt` is `skip`; `arm` is `turn on`; `your
+call` is `waiting for you`. Keep the code's own terms, which are precise and already
+known.
 
 Never print a claim you have not computed. A line like "working tree clean" is wrong on
 most branches. Watch the definite articles too: "the boundary" is anchored for you and
