@@ -390,7 +390,12 @@ def main():
     # left once fixups have moved inside the commits they amend.
     validate_narrative(narrative, commits, fulls, shas)
 
+    # "" on a detached HEAD, matching what the server stamps on a thread. Leaving it as
+    # the literal "HEAD" would make the page compare that string against real branch
+    # names and file every orphan under another review.
     branch = git(repo, "rev-parse", "--abbrev-ref", "HEAD").strip()
+    if branch == "HEAD":
+        branch = ""
     total_files, total_adds, total_dels = shortstat_numbers(
         git(repo, "diff", "--shortstat", rng)
     )

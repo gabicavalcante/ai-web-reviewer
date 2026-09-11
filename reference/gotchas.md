@@ -49,6 +49,27 @@ The page shows the pulsing "waiting for an answer" only when that is fresh; othe
 says no session is attached. Judge the heartbeat by mtime, not existence: `kill -9` leaves
 the file behind.
 
+## The store is keyed by repo, so a thread says which branch it came from
+
+Every review of a checkout appends to the same four logs, because `state_dir()` keys on
+the repo path. Without something on the row saying where it came from, a thread from an
+earlier review of another branch is indistinguishable from one whose commit was rebased
+away from this one, and both land in the orphan section.
+
+`/ask` stamps `branch` from git at the moment the question is asked, not from the range
+the server started with, because the branch changes under a running server. The page then
+splits orphans in two: rebased away from this review, and a collapsed group from other
+reviews. The status line counts only this review, or it reports questions asked on another
+branch as questions asked here.
+
+Two places have to agree on what "no branch" means. A detached HEAD gives `HEAD` from
+`rev-parse --abbrev-ref`, and both `server.py` and `build_data.py` turn that into `""`. If
+one of them kept the literal string, the page would compare `HEAD` against real branch
+names and file every orphan under another review.
+
+Renaming a branch strands its threads under the old name. There is no fix for that in this
+design, and `review.py archive` is the way out.
+
 ## Theme colors come from tokens, never from a `[data-theme]` guard
 
 `:root:not([data-theme="light"]) .btn { color: var(--ground) }` looks like a dark-mode

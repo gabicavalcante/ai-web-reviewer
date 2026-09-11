@@ -8,6 +8,7 @@ session was attached reaches the next one. Keeps a heartbeat the page reads to t
 import json
 import pathlib
 import signal
+import subprocess
 import sys
 import time
 
@@ -79,14 +80,34 @@ def is_skip(turn):
     return turn.get("kind") == "skip" or turn.get("text") == LEGACY_SKIP
 
 
+def current_branch():
+    """The branch checked out now, or "" when git cannot say."""
+    result = subprocess.run(["git", "rev-parse", "--abbrev-ref", "HEAD"],
+                            capture_output=True, text=True, cwd=str(paths.repo_root()))
+    name = result.stdout.strip()
+    return "" if result.returncode != 0 or name in ("", "HEAD") else name
+
+
 def backlog():
-    """Unresolved threads whose last turn is not Claude's, so still owed an answer."""
+    """Unresolved threads whose last turn is not Claude's, so still owed an answer.
+
+    Scoped to the branch checked out now. The store is keyed by repo, so without this a
+    session arming the watcher is handed every unanswered question from every branch ever
+    reviewed in this checkout, and cannot tell which belong to the review in front of it.
+
+    A thread with no branch is replayed. It was written before threads carried one, so
+    there is no way to place it, and an unanswered question is the worse thing to drop.
+    """
+    branch = current_branch()
     turns = turns_by_thread()
     resolved = resolved_ids()
     waiting = []
     for question in complete_rows(QUESTIONS):
         question_id = question.get("id")
         if question_id in resolved:
+            continue
+        asked_on = question.get("branch") or ""
+        if asked_on and branch and asked_on != branch:
             continue
         thread = turns.get(question_id, [])
         if thread and (thread[-1].get("role") == "claude" or is_skip(thread[-1])):

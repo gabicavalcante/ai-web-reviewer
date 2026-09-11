@@ -357,6 +357,9 @@
   .orphans { margin-top: 40px; padding-top: 26px; border-top: 1px solid var(--line); }
   .orphan { background: var(--surface); border: 1px solid var(--line); border-left: 2px solid var(--del); border-radius: 3px; padding: 15px 18px; display: flex; flex-direction: column; gap: 9px; }
   .orphan-list { display: flex; flex-direction: column; gap: 10px; }
+  #otherReviews summary { font-family: var(--mono); font-size: 11.5px; color: var(--ink-faint); cursor: pointer; padding: 4px 0; }
+  #otherReviews summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  #otherReviews details[open] summary { margin-bottom: 12px; }
   .orphan .where { font-family: var(--mono); font-size: 11px; color: var(--ink-faint); }
   .orphan .snippet { font-family: var(--mono); font-size: 12px; background: var(--surface-2); padding: 7px 10px; border-radius: 2px; overflow-x: auto; white-space: pre; }
   .reply { display: flex; flex-direction: column; gap: 8px; max-width: 76ch; }
@@ -422,6 +425,13 @@
   <section class="orphans" id="orphans" hidden>
     <h2>Threads on code that is no longer in this diff</h2>
     <div class="orphan-list" id="orphanList"></div>
+  </section>
+
+  <section class="orphans" id="otherReviews" hidden>
+    <details>
+      <summary id="otherReviewsSummary"></summary>
+      <div class="orphan-list" id="otherReviewList"></div>
+    </details>
   </section>
 
   <section class="openq" id="notesSection" hidden>
@@ -860,6 +870,17 @@
   let composerOpen = false;
   const anchorKey = d => [d.commit, d.file, d.side, d.line].join("\u0000");
 
+  /* The branch this page was built for. A thread carries the branch it was asked about,
+     so the two together say whether a thread belongs to this review at all. The store is
+     keyed by repo, so every review of this checkout shares it.
+
+     A thread with no branch was written before threads carried one, and a build on a
+     detached HEAD has no branch either. Neither can be claimed for this review, so the
+     match has to be a real one on both sides. */
+  const REVIEW_BRANCH = DATA.branch || "";
+  const sameReview = t => !!REVIEW_BRANCH && (t.branch || "") === REVIEW_BRANCH;
+  const fromThisReview = t => VALID_ANCHORS.has(anchorKey(t)) || sameReview(t);
+
   function threadsByAnchor() {
     const map = new Map();
     THREADS.forEach(t => {
@@ -870,30 +891,52 @@
     return map;
   }
 
+  function orphanCard(t, why) {
+    const box = el("div", "orphan");
+    box.appendChild(el("div", "where",
+      (t.commit || "?") + " · " + (t.file || "?") + ":" + (t.line || "?") + " · " + why));
+    if (t.code) box.appendChild(el("div", "snippet", t.code));
+    const q = el("div", "turn you");
+    q.appendChild(el("span", "who", "you"));
+    q.appendChild(el("div", "said", t.question));
+    box.appendChild(q);
+    (t.turns || []).forEach(turn => box.appendChild(renderTurn(turn)));
+    if (!t.resolved) {
+      box.appendChild(replyBox(t.id));
+    } else {
+      box.appendChild(el("div", "where", "resolved"));
+    }
+    return box;
+  }
+
   function paintOrphans() {
     const orphans = THREADS.filter(t => !VALID_ANCHORS.has(anchorKey(t)));
+    /* Two reasons a thread cannot be anchored, and they need different words. Its commit
+       was rewritten out of this branch, which is the case the section was written for. Or
+       it was asked about a different branch and shares this store, which is not this
+       review's business and is put away rather than mixed in. */
+    const mine = orphans.filter(sameReview);
+    const theirs = orphans.filter(t => !sameReview(t));
+
     const section = document.getElementById("orphans");
     const list = document.getElementById("orphanList");
-    section.hidden = orphans.length === 0;
+    section.hidden = mine.length === 0;
     list.replaceChildren();
-    orphans.forEach(t => {
-      const box = el("div", "orphan");
-      box.appendChild(el("div", "where",
-        (t.commit || "?") + " · " + (t.file || "?") + ":" + (t.line || "?") +
-        " · this commit is not part of the diff shown here"));
-      if (t.code) box.appendChild(el("div", "snippet", t.code));
-      const q = el("div", "turn you");
-      q.appendChild(el("span", "who", "you"));
-      q.appendChild(el("div", "said", t.question));
-      box.appendChild(q);
-      (t.turns || []).forEach(turn => box.appendChild(renderTurn(turn)));
-      if (!t.resolved) {
-        box.appendChild(replyBox(t.id));
-      } else {
-        box.appendChild(el("div", "where", "resolved"));
-      }
-      list.appendChild(box);
-    });
+    mine.forEach(t => list.appendChild(
+      orphanCard(t, "this commit is not part of the diff shown here")));
+
+    const other = document.getElementById("otherReviews");
+    const otherList = document.getElementById("otherReviewList");
+    other.hidden = theirs.length === 0;
+    otherList.replaceChildren();
+    if (theirs.length) {
+      const branches = [...new Set(theirs.map(t => t.branch).filter(Boolean))];
+      document.getElementById("otherReviewsSummary").textContent =
+        theirs.length + (theirs.length === 1 ? " thread" : " threads") + " from "
+        + (branches.length ? branches.join(", ") : "an earlier review of this repo");
+      theirs.forEach(t => otherList.appendChild(
+        orphanCard(t, t.branch ? "asked on " + t.branch : "asked before threads recorded a branch")));
+    }
   }
 
   /* One thread renderer for both layouts: the row under the line, and the docked panel.
@@ -1278,21 +1321,25 @@
         paintThreads();
         paintOrphans();
       }
-      const open = THREADS.filter(t => !t.resolved).length;
-      const unanswered = THREADS.filter(t => {
+      /* Counted over this review only. The store is shared by every review of this
+         repo, so counting all of it reported threads from another branch as questions
+         asked here, on a page where none had been. */
+      const here = THREADS.filter(fromThisReview);
+      const open = here.filter(t => !t.resolved).length;
+      const unanswered = here.filter(t => {
         if (t.resolved) return false;
         const turns = t.turns || [];
         const last = turns[turns.length - 1];
         if (isSkip(last)) return false;
         return !turns.length || last.role !== "claude";
       }).length;
-      const yourCall = THREADS.filter(t => {
+      const yourCall = here.filter(t => {
         if (t.resolved) return false;
         const last = (t.turns || [])[(t.turns || []).length - 1];
         return last && last.role === "claude" && last.kind === "ask";
       }).length;
-      setStatus(true, THREADS.length
-        ? `${THREADS.length} asked · ${open} open` +
+      setStatus(true, here.length
+        ? `${here.length} asked · ${open} open` +
           (unanswered ? (WATCHER_LIVE
             ? ` · ${unanswered} waiting for an answer`
             : ` · ${unanswered} undelivered · no session attached`) : "") +

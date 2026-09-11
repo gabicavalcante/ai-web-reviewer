@@ -156,6 +156,10 @@ Nothing removes them either, and they are yours to delete once you trust the res
 With no configuration the page takes its title from the branch, its figures from git, and
 each commit's rationale from that commit's own message.
 
+`review.py archive` moves the current threads into a timestamped subfolder, which is how
+you start clean in a checkout that has accumulated several reviews. Nothing is deleted and
+moving them back is one `mv`.
+
 `review.py narrate <range>` writes a scaffold next to the review's state: every commit
 keyed by sha with its subject, every field empty. Fill in what you know and rebuild, and
 it is picked up from then on without a flag. `--narrative FILE` points at one kept

@@ -4,6 +4,7 @@
     python3 review.py serve  [<range>] [--port N] [--narrative FILE]
     python3 review.py build  [<range>] [--narrative FILE]
     python3 review.py narrate [<range>] [--force]
+    python3 review.py archive
     python3 review.py where
 
 Range defaults to origin/main...HEAD. `serve` picks a free port when the one
@@ -17,6 +18,7 @@ import shutil
 import socket
 import subprocess
 import sys
+import time
 
 HERE = pathlib.Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
@@ -94,6 +96,31 @@ def smoke(page):
     if result.returncode != 0:
         raise SystemExit(result.stderr.strip() or "the page script failed its smoke check")
     print(result.stdout.strip())
+
+
+LOGS = ("questions.jsonl", "messages.jsonl", "answers.jsonl", "resolved.jsonl")
+
+
+def archive():
+    """Move this repo's threads into a timestamped subfolder, leaving the store empty.
+
+    The store is keyed by repo, so a long-lived checkout accumulates every review ever
+    run in it. This is the supported way to start clean without deleting anything: the
+    rows stay readable where they are put, and moving them back is one `mv`.
+    """
+    state = paths.state_dir()
+    present = [name for name in LOGS if (state / name).exists() and (state / name).stat().st_size]
+    if not present:
+        raise SystemExit(f"no threads to archive in {state}")
+
+    target = state / ("archived-" + time.strftime("%Y%m%d-%H%M%S"))
+    # Two runs inside the same second share a folder rather than failing on the second.
+    target.mkdir(exist_ok=True)
+    for name in present:
+        (state / name).rename(target / name)
+    print(f"moved {len(present)} file(s) to {target}")
+    print("Rebuild to see the page without them. Move them back with:")
+    print(f"  mv {target}/*.jsonl {state}/")
 
 
 def narrate(rng, force):
@@ -177,7 +204,8 @@ def free_port(preferred):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("action", choices=["serve", "build", "narrate", "where"])
+    parser.add_argument("action",
+                        choices=["serve", "build", "narrate", "archive", "where"])
     parser.add_argument("range", nargs="?", default="origin/main...HEAD")
     parser.add_argument("--port", type=int, default=8777)
     parser.add_argument("--narrative", default=None)
@@ -191,6 +219,10 @@ def main():
 
     if args.action == "narrate":
         narrate(args.range, args.force)
+        return
+
+    if args.action == "archive":
+        archive()
         return
 
     build(args.range, args.narrative)

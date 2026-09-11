@@ -80,6 +80,16 @@ def pushed_in_range(base):
 _revision = {"at": 0.0, "value": ""}
 
 
+def current_branch():
+    """The branch checked out now, or "" when git cannot say.
+
+    A detached HEAD has no branch name, and a thread asked from one is stamped empty. It
+    then groups with the threads whose origin is unknown, which is what it is.
+    """
+    name = git("rev-parse", "--abbrev-ref", "HEAD").stdout.strip()
+    return "" if name in ("", "HEAD") else name
+
+
 def watcher_alive():
     """Whether a Monitor is currently tailing the logs.
 
@@ -229,6 +239,13 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         row = {
             "id": uuid.uuid4().hex[:12],
             "asked_at": time.strftime("%Y-%m-%d %H:%M:%S"),
+            # Which review this thread belongs to. Read from git now rather than from the
+            # range this server started with, because the branch can change under a
+            # running server, and a thread belongs to the branch it was asked about.
+            #
+            # The branch, not the range: a range moves as its base advances, which would
+            # split one review into several.
+            "branch": current_branch(),
             "question": question[:4000],
             "commit": str(payload.get("commit", ""))[:40],
             "file": str(payload.get("file", ""))[:300],
