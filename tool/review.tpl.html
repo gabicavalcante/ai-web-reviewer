@@ -170,10 +170,17 @@
   .commit-btn[aria-current="true"] .cb-num { color: var(--accent-ink); }
   .cb-body { min-width: 0; display: flex; flex-direction: column; gap: 5px; }
   .cb-head { font-size: 14px; font-weight: 500; line-height: 1.32; }
+  .cb-headrow { display: flex; align-items: baseline; gap: 7px; flex-wrap: wrap; }
   .cb-meta { display: flex; align-items: center; gap: 9px; font-family: var(--mono); font-size: 11px; color: var(--ink-faint); }
   .cb-meta .plus { color: var(--add); }
   .cb-meta .minus { color: var(--del); }
   .cb-meta .done { color: var(--accent); }
+  .cb-tag { font-family: var(--mono); font-size: 10px; letter-spacing: .06em; text-transform: uppercase; padding: 1px 5px; border-radius: 2px; border: 1px solid currentColor; }
+  .cb-tag.start { color: var(--accent); }
+  .cb-tag.care { color: var(--del); }
+  .cb-tag.skim { color: var(--ink-faint); }
+  .cb-why { font-size: 12px; line-height: 1.35; color: var(--ink-faint); }
+  .commit-btn.is-skim .cb-head { color: var(--ink-soft); font-weight: 400; }
   .bar { display: flex; height: 3px; width: 46px; border-radius: 2px; overflow: hidden; background: var(--line-soft); }
   .bar i { display: block; height: 100%; }
   .bar .a { background: var(--add); }
@@ -590,7 +597,19 @@
     btn.type = "button";
     btn.appendChild(el("span", "cb-num", String(i + 1)));
     const body = el("div", "cb-body");
-    body.appendChild(el("span", "cb-head", c.headline));
+    /* The mark rides above the diff numbers, because it is what decides whether the
+       reader opens this commit at all. A skimmable one is dimmed rather than hidden:
+       still there to open, no longer competing for attention. */
+    if (c.read) {
+      btn.classList.add("is-" + c.read);
+      const head = el("div", "cb-headrow");
+      head.appendChild(el("span", "cb-tag " + c.read, c.read === "start" ? "start here" : c.read));
+      head.appendChild(el("span", "cb-head", c.headline));
+      body.appendChild(head);
+      if (c.readWhy) body.appendChild(el("div", "cb-why", c.readWhy));
+    } else {
+      body.appendChild(el("span", "cb-head", c.headline));
+    }
     const meta = el("div", "cb-meta");
     const total = Math.max(c.additions + c.deletions, 1);
     const bar = el("span", "bar");

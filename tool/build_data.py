@@ -102,6 +102,55 @@ def matches_commit(key, full, short):
     return full.startswith(key) or key.startswith(short)
 
 
+# Three words, not a taxonomy of change kinds. What sort of change it is belongs in the
+# one-line reason; these say only what the reviewer should do about it.
+READ_MARKS = ("start", "care", "skim")
+READ_WHY_MAX = 80
+
+
+def validate_read_marks(per_commit, commit_count, problems, warnings):
+    """Check the per-commit reading marks, and keep them scarce.
+
+    A marker that every commit carries tells the reviewer nothing, so the limits here are
+    the point rather than an afterthought: one commit may be the place to start, `skim`
+    has to say why it is safe to skim, and a branch where most commits are marked as
+    important has marked none of them.
+    """
+    starts = []
+    cares = 0
+    for key, value in per_commit.items():
+        if not isinstance(value, dict):
+            continue
+        mark = value.get("read", "")
+        why = value.get("readWhy", "")
+        if not mark:
+            if why:
+                warnings.append(f"{key}: has a 'readWhy' but no 'read', so nothing is drawn")
+            continue
+        if mark not in READ_MARKS:
+            problems.append(
+                f"{key}: read {mark!r} is not one of " + ", ".join(repr(m) for m in READ_MARKS))
+            continue
+        if mark == "start":
+            starts.append(key)
+        if mark == "care":
+            cares += 1
+        if mark == "skim" and not why:
+            problems.append(
+                f"{key}: read 'skim' needs a 'readWhy' saying why it is safe to skim")
+        if len(why) > READ_WHY_MAX:
+            problems.append(
+                f"{key}: 'readWhy' is {len(why)} characters, over the {READ_WHY_MAX} that fit "
+                "on one line in the rail")
+
+    if len(starts) > 1:
+        problems.append("read 'start': only one commit can be the place to start, found "
+                        + ", ".join(starts))
+    if commit_count and cares > max(1, commit_count // 3):
+        warnings.append(f"read 'care' is on {cares} of {commit_count} commits, which reads as "
+                        "no emphasis at all")
+
+
 def mark_number(mark):
     """A stage mark as a rail position, or None if it does not name one.
 
@@ -141,6 +190,8 @@ def validate_narrative(narrative, commits, fulls, shorts):
             warnings.append(f"{key!r} matches no commit in this range")
         elif len(hits) > 1:
             warnings.append(f"{key!r} is ambiguous, it matches {len(hits)} commits")
+
+    validate_read_marks(per_commit, len(commits), problems, warnings)
 
     seen = {}
     stages = narrative.get("stages") or []
@@ -291,6 +342,7 @@ def main():
         commits.append(dict(
             short=short, hash=full, kind=kind, headline=headline, subject=subject, body=body,
             stage=note.get("stage") or str(index + 1),
+            read=note.get("read", ""), readWhy=note.get("readWhy", ""),
             flow=note.get("flow", ""), why=note.get("why", ""),
             points=note.get("points", []), matrix=note.get("matrix"),
             matrixCaption=note.get("matrixCaption", ""),

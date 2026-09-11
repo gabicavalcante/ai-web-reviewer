@@ -17,6 +17,33 @@ Per commit: `stage` (the rail label, e.g. `2 · Arm`), `flow` (where it sits in 
 flow), `why` (one or two sentences), `points` (specific consequences), and `matrix`
 (rows of `[case, got, want, ok]` for a verification table).
 
+## Telling the reviewer what to read first
+
+`read` marks a commit in the rail, with `readWhy` giving the reason on one line. This is
+the comment a person leaves on a pull request: "this one is just tests", "start here".
+
+| `read` | Means |
+| --- | --- |
+| `start` | Read this first. One commit only. |
+| `care` | The important one. Read it closely. |
+| `skim` | Little to review. `readWhy` has to say why it is safe to skim. |
+
+```json
+"41a8d1143": { "read": "skim", "readWhy": "moved to another file, no behaviour change" }
+```
+
+A `skim` commit is dimmed in the rail rather than hidden, and can still be opened.
+
+Say what the change is in `readWhy`, not in the mark. Three words are deliberate: they say
+what the reviewer should do, and a longer list would turn into a classification exercise.
+
+The build enforces the limits, because a mark on every commit marks nothing:
+
+- More than one `start` fails the build.
+- `skim` without a `readWhy` fails the build.
+- A `readWhy` over 80 characters fails the build. It has one line in the rail.
+- `care` on more than a third of the commits warns.
+
 ## Starting one
 
 ```bash

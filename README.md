@@ -161,10 +161,17 @@ keyed by sha with its subject, every field empty. Fill in what you know and rebu
 it is picked up from then on without a flag. `--narrative FILE` points at one kept
 elsewhere.
 
-It adds a data-flow strip, per-commit rationale, verification tables and a list of open
-questions. Every field is optional and falls back to git, and sections with no content
-stay hidden, so a half-written narrative renders as the plain page rather than as empty
-frames. See [reference/narrative.md](reference/narrative.md).
+It adds a data-flow strip, per-commit rationale, verification tables, a list of open
+questions, and a mark on each commit saying where to start, what to read closely and what
+is safe to skim. Every field is optional and falls back to git, and sections with no
+content stay hidden, so a half-written narrative renders as the plain page rather than as
+empty frames. See [reference/narrative.md](reference/narrative.md).
+
+Write it while the branch is fresh. A session that has just built something can say what
+it was unsure about and what it did not check; a later one is reading the diff like anyone
+else, and a reconstructed reason is indistinguishable from a remembered one. So narrate early. A long
+session that has been answering review questions for an hour does not recall the work any
+better than a short one, and may recall it worse.
 
 ## Layout
 

@@ -131,6 +131,10 @@ def narrate(rng, force):
                 # Not read by the build. Here so whoever fills this in can tell the
                 # commits apart without keeping git log open beside it.
                 "subject": commit["subject"],
+                # "start" (one only), "care", or "skim" with a reason. Left empty means
+                # the commit is read in its turn like any other.
+                "read": "",
+                "readWhy": "",
                 "stage": "",
                 "flow": "",
                 "why": "",
