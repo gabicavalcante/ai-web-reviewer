@@ -105,8 +105,51 @@ consumer rather than a requirement.
 question back to the reviewer, which the page offers a button to answer; `--did` records
 a change with the commit it landed in.
 
-State lives outside the repo, keyed by the repo's path, so questions never land in git and
-survive rebuilds and restarts.
+State lives outside the repo, so questions never land in git and survive rebuilds and
+restarts. The next section says where it goes and what removes it.
+
+## Where state lives, and when it is cleaned
+
+Threads live outside the repo, in a directory named for the repo plus a hash of its
+absolute path, so two checkouts of the same project never collide:
+
+```
+~/.local/state/web-reviewer/<repo-name>-<hash>/
+```
+
+`python3 tool/review.py where` prints it.
+
+| File | What it holds |
+| --- | --- |
+| `questions.jsonl` | One row per thread: the question, and the commit, file, side and line it is anchored to |
+| `messages.jsonl` | Every turn after the opening question, each tagged with who wrote it |
+| `resolved.jsonl` | One row each time a thread is resolved or reopened |
+| `answers.jsonl` | An older reply format, still read so old reviews keep working |
+| `index.html` | The rendered page, rewritten by every build |
+
+The four logs are append-only, and a question is flushed and `fsync`ed before the browser
+is told it was accepted. Nothing rewrites a row. Resolving a thread appends a row saying
+so rather than removing anything, which is what makes it reversible, and `Hide resolved`
+filters data that is all still on disk.
+
+**Nothing ever cleans these files.** There is no retention rule, no pruning, and no
+command to forget a review. The only file the tool deletes is the watcher's heartbeat. A
+directory stays until you remove it:
+
+```bash
+rm -rf ~/.local/state/web-reviewer/<repo-name>-<hash>
+```
+
+That is cheap to live with, since a five-thread review is around 13 KB, but it
+accumulates one directory per repo path, including repos you have since moved or deleted.
+Moving a repo changes the hash, so the next run starts empty while the old threads stay
+under the old name.
+
+`index.html` is the part you can lose safely: `review.py build` regenerates it from git.
+The logs are the only thing here that cannot be reconstructed.
+
+The `pre-squash/<stamp>` branches a squash leaves behind are the same kind of leftover.
+Nothing removes them either, and they are yours to delete once you trust the result.
 
 ## The narrative layer
 
