@@ -9,8 +9,8 @@ the standard library.
 
 ## Why
 
-Reviewing a large branch by scrolling terminal diffs loses you. And a question about a
-diff usually arrives without the thing it needs most: which line it is about. This puts
+You lose your place scrolling terminal diffs through a large branch. And a question about
+a diff usually arrives without the thing it needs most: which line it is about. This puts
 the question on the line.
 
 ## What it does
@@ -27,6 +27,33 @@ the question on the line.
   long as the change is rather than as long as the review was.
 - Notices when the branch has moved under the page, and offers to build it again.
 - Squashes the fixups when the review is done, with guards and a backup branch.
+- Reads the branch two ways: commit by commit, or as the files it leaves behind.
+- Marks a commit or a file as where to start, what to read closely, what is safe to skim.
+
+## Two ways to read a branch
+
+**Commits** is the rail down the left: one commit at a time, in order, with its diff
+beside it. This is where questions are asked, because a line here has a commit behind it
+to anchor a thread to.
+
+**Files changed** is the branch as it stands now. On a long branch the commits are the
+wrong place to start, because later ones rewrite earlier ones and reading in order means
+reading code that is no longer there.
+
+With a narrative, the files tab is a rail of stages rather than files. Choosing one shows
+only the lines that stage wrote, wherever it wrote them, with three rows either side and
+the gaps counted. `git blame` on the tip of the range says which commit each surviving
+line came from, and each commit belongs to a stage, so a file touched by four stages
+appears under all four, showing different lines each time. No stage has to own a file.
+
+A stage can therefore have no lines left in the branch at all. The rail says so and names
+the commits that did the work, which is worth knowing before opening it.
+
+Files are ordered within a stage: the code, then what documents it, then what tests it,
+with a test moved to sit under the file whose name it matches. Each file can be opened
+whole from a button beneath it. Questions are asked on the Commits tab, not here.
+
+Without a narrative there are no stages, so the tab lists the files plainly.
 
 ## Requirements
 
@@ -53,6 +80,15 @@ Claude Code arms the watcher when it opens the review, following `SKILL.md`. It 
 `tool/watch.py`, which prints one line per new question or reply, and the session answers
 with `tool/answer.py`. If answers never arrive, that watcher is the first thing to check.
 
+The page does not hide this. While a watcher is attached a thread shows the pulsing
+"waiting for an answer"; with nothing attached it says so instead, and the question is
+kept. When a session arms the watcher later, the watcher replays every thread still owed
+an answer.
+
+A thread records the branch it was asked on. One repo can hold several reviews and they
+share a directory, so a thread from another branch collapses into its own group rather
+than mixing into this one.
+
 ## Controls
 
 | | |
@@ -65,6 +101,8 @@ with `tool/answer.py`. If answers never arrive, that watcher is the first thing 
 | `Wrap lines` | Wrap long lines instead of scrolling sideways |
 | `Hide resolved` | Drop resolved threads out of the page |
 | `Thread at the side` | Threads in a panel beside the diff, or as rows under the line |
+| `Mark reviewed` | Tick a commit off; the squash bar waits until every commit is ticked |
+| `Commits` / `Files changed` | The two ways of reading, above the rail |
 
 ## Change requests, and why fixups
 
@@ -90,7 +128,7 @@ See `git help rebase` for what `--fixup` and `--autosquash` do.
 
 ## Use it without Claude Code
 
-The page and the server stand alone. From inside any git repo:
+The page and the server run without Claude Code. From inside any git repo:
 
 ```bash
 python3 ~/.claude/skills/web-reviewer/tool/review.py serve origin/main...HEAD
@@ -146,9 +184,12 @@ accumulates one directory per repo path, including repos you have since moved or
 Moving a repo changes the hash, so the next run starts empty while the old threads stay
 under the old name.
 
-The rendered pages are the part you can lose safely: `review.py build` regenerates one
-from git.
-The logs are the only thing here that cannot be reconstructed.
+The rendered pages are the part you can lose safely, since `review.py build` regenerates
+one from git. The logs are the only thing here that cannot be reconstructed.
+
+`review.py archive` moves the current logs into a timestamped subfolder, which is how you
+empty a checkout that has collected several reviews. Nothing is deleted, and moving them
+back is one `mv`.
 
 The `pre-squash/<stamp>` branches a squash leaves behind are the same kind of leftover.
 Nothing removes them either, and they are yours to delete once you trust the result.
@@ -158,26 +199,31 @@ Nothing removes them either, and they are yours to delete once you trust the res
 With no configuration the page takes its title from the branch, its figures from git, and
 each commit's rationale from that commit's own message.
 
-`review.py archive` moves the current threads into a timestamped subfolder, which is how
-you start clean in a checkout that has accumulated several reviews. Nothing is deleted and
-moving them back is one `mv`.
-
 `review.py narrate <range>` writes a scaffold next to the review's state: every commit
-keyed by sha with its subject, every field empty. Fill in what you know and rebuild, and
-it is picked up from then on without a flag. `--narrative FILE` points at one kept
-elsewhere.
+keyed by sha with its subject, every file in the range by path, and every field empty.
+Fill in what you know and rebuild. Every later build reads that file without a flag.
+`--narrative FILE` points at one kept elsewhere.
 
-It adds a data-flow strip, per-commit rationale, verification tables, a list of open
-questions, and a mark on each commit saying where to start, what to read closely and what
-is safe to skim. Every field is optional and falls back to git, and sections with no
-content stay hidden, so a half-written narrative renders as the plain page rather than as
-empty frames. See [reference/narrative.md](reference/narrative.md).
+It adds a data-flow strip, per-commit rationale, verification tables and a list of open
+questions. It also carries the two things the tool cannot determine: a mark on each commit
+and each file saying where to start, what to read closely and what is safe to skim, and
+one line saying what a file is for in this change. The tool can order a file and weigh how
+much of the branch is in it. Only a person can say that `api/urls.py` is where the wizard
+is mounted.
+
+The build keeps the marks scarce. One commit may be the place to start, `skim` has to say
+why skipping is safe, and a reason runs to 80 characters. Reaching a limit means cutting
+the text rather than raising the limit.
+
+Every field is optional and falls back to git, and sections with no content stay hidden,
+so a half-written narrative renders as the plain page rather than as empty frames. See
+[reference/narrative.md](reference/narrative.md).
 
 Write it while the branch is fresh. A session that has just built something can say what
 it was unsure about and what it did not check; a later one is reading the diff like anyone
-else, and a reconstructed reason is indistinguishable from a remembered one. So narrate early. A long
-session that has been answering review questions for an hour does not recall the work any
-better than a short one, and may recall it worse.
+else, and a reconstructed reason is indistinguishable from a remembered one. So narrate
+early. A long session that has been answering review questions for an hour does not recall
+the work any better than a short one, and may recall it worse.
 
 ## Layout
 
