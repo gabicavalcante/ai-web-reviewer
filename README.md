@@ -1,7 +1,7 @@
 # web-reviewer
 
-Read a branch's diff in a browser and ask questions about individual lines, with the
-answers arriving beside the code they are about.
+Reading a branch's diff is becoming harder with AI. This tool aims to help with that: it
+shows the diff in a browser and allows you to ask questions about individual lines.
 
 Built as a [Claude Code](https://claude.com/claude-code) skill. The page is plain HTML
 served from a local Python process; there is no build step and no dependencies outside
@@ -29,7 +29,6 @@ line it is about. This tool attaches the question to the line.
   already carries a thread is marked in the gutter.
 - Threads reach your Claude Code session, and answers arrive in a panel beside the diff,
   so a long answer never pushes the code off the screen.
-- Answers render `code`, **bold** and fenced blocks.
 - Mark threads resolved, read a resolved one without reopening it, hide them entirely.
 - Tucks each `fixup!` commit inside the commit it corrects, so the list stays as long as
   the change instead of growing every time you fix something.
