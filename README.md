@@ -89,7 +89,9 @@ it.
 | A narrative, after it has read the branch | `now write the narrative and rebuild the page` |
 | A change you asked for in a thread | `do it` in the thread, or `yes, apply that` |
 | Rebuild after new commits | `rebuild the review page` |
-| Put old threads aside | `archive the threads in this repo and rebuild` |
+| Put this review's threads aside | `archive the threads for this review` |
+| Threads from an older layout | `move my old threads into the right review` |
+| Where the files are | `where does this review keep its files?` |
 | Finish | `squash the fixups and stop the review server` |
 
 The wording does not matter. Asking to read a diff in a browser, or to ask questions while
@@ -101,11 +103,13 @@ Asking on the page appends to a log. Nothing reads that log on its own, so a ses
 never started a watcher will leave every question unanswered with no sign that it is
 doing so.
 
-Claude Code arms the watcher when it opens the review, following `SKILL.md`. If answers
-never arrive, that watcher is the first thing to check.
+Claude Code arms the watcher when it opens the review, following `SKILL.md`. You do not
+run any of this. If answers stop arriving, say `no answers are coming through, check the
+watcher`.
+
+What it runs, once, for as long as the review lasts:
 
 ```bash
-# armed once, under a Monitor, for as long as the review lasts
 python3 tool/watch.py --range origin/main...my-branch
 ```
 
@@ -147,7 +151,8 @@ question asked while reading one branch never appears on the other's page.
 
 ## Change requests, and why fixups
 
-A request made in a thread lands as a fixup, never as an amend:
+Reply `do it` in the thread and the change lands as a fixup, never as an amend. What that
+means in git:
 
 ```bash
 git commit --fixup=b7aab66          # the reviewed commit keeps its sha
@@ -211,7 +216,7 @@ absolute path, so two checkouts of the same project never collide:
 ~/.local/state/web-reviewer/<repo-name>-<hash>/
 ```
 
-`python3 tool/review.py where` prints it.
+Ask Claude Code `where does this review keep its files?`, or run `review.py where`.
 
 Everything a review has is in one folder: the page, the narrative, and the threads asked
 while reading it.
@@ -278,8 +283,11 @@ so rather than removing anything, which is what makes it reversible, and `Hide r
 filters data that is all still on disk.
 
 **Nothing ever cleans these files.** There is no retention rule, no pruning, and no
-command to forget a review. The only file the tool deletes is the watcher's heartbeat. A
-directory stays until you remove it:
+command to forget a review. The only file the tool deletes is the watcher's heartbeat.
+
+To put a review's questions aside, ask for `archive the threads for this review`. To be
+rid of a checkout's state entirely, say so and Claude Code will show you the directory
+before removing it, or do it yourself:
 
 ```bash
 rm -rf ~/.local/state/web-reviewer/<repo-name>-<hash>
@@ -290,8 +298,8 @@ three replies, one of twelve threads. The directories are what accumulate, one p
 path, including repos you have since moved or deleted. Moving a repo changes the hash, so
 the next run starts empty while the old threads stay under the old name.
 
-`index.html` is the only file here that can be lost safely, because `review.py build`
-regenerates it from git and the narrative. Everything else was written by a person: the
+`index.html` is the only file here that can be lost safely: `rebuild the review page`
+makes it again from git and the narrative. Everything else was written by a person: the
 threads, and the narrative, which is prose somebody wrote about a branch and which no
 command produces again.
 
