@@ -178,12 +178,17 @@ absolute path, so two checkouts of the same project never collide:
 
 | File | What it holds |
 | --- | --- |
-| `questions.jsonl` | One row per thread: the question, and the commit, file, side and line it is anchored to |
-| `messages.jsonl` | Every turn after the opening question, each tagged with who wrote it |
+| `questions.jsonl` | One row per thread: the question, the branch it was asked on, and the commit, file, side and line it is anchored to |
+| `messages.jsonl` | Every turn after the opening question, with who wrote it and what kind of turn it is: an answer, a question back, a change that landed, or a yes or no to one |
 | `resolved.jsonl` | One row each time a thread is resolved or reopened |
-| `answers.jsonl` | An older reply format, still read so old reviews keep working |
+| `answers.jsonl` | An older reply format. Still read, so old reviews keep working, and nothing writes it now |
 | `index-<hash>.html` | The rendered page for one range, rewritten by every build |
-| `narrative-<hash>.json` | The narrative for one range, if it has one |
+| `narrative-<hash>.json` | The narrative for one range, if it has one. A plain `narrative.json` still works for a repo with a single review |
+| `watcher.alive` | A heartbeat, rewritten every second while a watcher runs, and removed when it stops. The page reads it to know whether anyone is listening |
+| `archived-<stamp>/` | Logs put aside by `review.py archive` |
+
+Anything else in the directory was put there by whoever started the server, not by the
+tool. It writes nothing outside this list.
 
 The four logs are append-only, and a question is flushed and `fsync`ed before the browser
 is told it was accepted. Nothing rewrites a row. Resolving a thread appends a row saying
@@ -198,10 +203,10 @@ directory stays until you remove it:
 rm -rf ~/.local/state/web-reviewer/<repo-name>-<hash>
 ```
 
-That is cheap to live with, since a five-thread review is around 13 KB, but it
-accumulates one directory per repo path, including repos you have since moved or deleted.
-Moving a repo changes the hash, so the next run starts empty while the old threads stay
-under the old name.
+The cost is small. Two reviews measured here, one of five threads and twenty three
+replies and one of twelve threads, are 33 KB each. What accumulates is directories, one
+per repo path, including repos you have since moved or deleted. Moving a repo changes the
+hash, so the next run starts empty while the old threads stay under the old name.
 
 The rendered pages are the part you can lose safely, since `review.py build` regenerates
 one from git. The logs are the only thing here that cannot be reconstructed.
