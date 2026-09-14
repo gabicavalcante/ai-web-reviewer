@@ -104,6 +104,36 @@ def smoke(page):
 LOGS = ("questions.jsonl", "messages.jsonl", "answers.jsonl", "resolved.jsonl")
 
 
+def announce_siblings(rng):
+    """Name the other reviews in this checkout when a new one starts empty.
+
+    A range is a review, so reading the same branch against a different base starts a
+    review with none of the earlier questions in it. That is right, and it was invisible:
+    a session that reopened a branch as "origin/main...main" instead of "e8e4bb6..main"
+    built a page with no threads on it, and nothing said the thirteen threads were one
+    folder over.
+
+    Only when this review is new and another one holds questions. A checkout where every
+    review is already known does not need the list every time the server starts.
+    """
+    here = paths.review_dir(rng, create=False)
+    if here.is_dir():
+        return
+    others = []
+    for folder in sorted(paths.state_dir().iterdir()):
+        if not folder.is_dir() or folder.name.startswith("archived-"):
+            continue
+        log = folder / "questions.jsonl"
+        threads = len(log.read_text().splitlines()) if log.exists() else 0
+        if threads:
+            others.append((folder.name, threads))
+    if not others:
+        return
+    print(f"{rng} is a new review, so it starts with no threads. This checkout also has:")
+    for name, threads in others:
+        print(f"  {name}  ({threads} thread(s))")
+
+
 def archive(rng):
     """Move one review's threads into a timestamped folder, leaving that review empty.
 
@@ -239,6 +269,7 @@ def main():
         archive(args.range)
         return
 
+    announce_siblings(args.range)
     build(args.range, args.narrative)
     if args.action == "build":
         return

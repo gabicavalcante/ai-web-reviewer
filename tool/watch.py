@@ -35,8 +35,32 @@ def review_range(argv):
         + "\n  ".join(sorted(p.name for p in folders)))
 
 
+def review_of(rng):
+    """The folder for a range, refusing rather than making one up.
+
+    The range is resolved first, for the same reason review.py resolves it: the flag is
+    copied from the serve command, the default is "origin/main...HEAD", and HEAD is not a
+    name. Watching the unresolved string put the heartbeat in one folder while the server
+    wrote questions to another, so the page reported no session attached and the watcher
+    sat over a file nothing appends to.
+
+    A missing folder is never a new review. The server makes a review; a watcher only
+    joins one. Creating it here is how a mistyped range became a watcher that was running
+    and silent at the same time.
+    """
+    where = paths.review_dir(paths.resolve_range(rng), create=False)
+    if not where.is_dir():
+        folders = sorted(p.name for p in paths.state_dir().iterdir()
+                         if p.is_dir() and not p.name.startswith("archived-"))
+        sys.exit(
+            f"no review here for {rng!r}. Start the server for it first.\n"
+            + ("reviews in this checkout:\n  " + "\n  ".join(folders) if folders
+               else "there are no reviews here yet."))
+    return where
+
+
 _arg = review_range(sys.argv[1:])
-WHERE = _arg[1] if isinstance(_arg, tuple) else paths.review_dir(_arg, create=True)
+WHERE = _arg[1] if isinstance(_arg, tuple) else review_of(_arg)
 QUESTIONS = WHERE / "questions.jsonl"
 MESSAGES = WHERE / "messages.jsonl"
 ANSWERS = WHERE / "answers.jsonl"

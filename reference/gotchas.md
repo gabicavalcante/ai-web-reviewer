@@ -26,6 +26,35 @@ Get either wrong and the search comes back empty while the server is still holdi
 port. The next start quietly picks a different one, and the reviewer opens a page nobody
 is listening to.
 
+## Resolve the range everywhere, or the watcher watches the wrong folder
+
+`review.py` resolves `HEAD` to the branch it names before keying a directory off it.
+`watch.py` and `answer.py` did not, and `SKILL.md` tells the session to pass the watcher
+"the range you served, the same string". That string is `origin/main...HEAD`.
+
+So the server wrote questions into `origin-main-main-<hash>` and the watcher sat over
+`origin-main-head-<hash>`, one folder it had just created itself. Both processes were
+running and correct about their own state. The reviewer got a page that said no session
+was attached, asked a question anyway, and the watcher never saw it.
+
+Two rules come out of that:
+
+- Resolve the range at the edge of every script that takes one, not just the one that
+  builds the page.
+- A script that joins a review passes `create=False`. Only the server makes a review. A
+  watcher that creates the folder it was pointed at turns a mistyped range into a process
+  that is running and silent at the same time, which is the hardest state to notice.
+
+## A range is a review, and nothing says so
+
+Reading the same branch against a different base is a different review, with none of the
+earlier questions in it. That is right, and it was invisible: a session that reopened a
+branch as `origin/main...main` instead of `e8e4bb6..main` got a page with no threads and
+no hint that thirteen of them were one folder over.
+
+`review.py serve` now names the other reviews in the checkout when the one it is starting
+does not exist yet.
+
 ## Bound every request
 
 A `curl` with no `--max-time` inside a compound command can hang the whole command until

@@ -50,7 +50,15 @@ def review_of(thread_id, rng=None):
     finds at most one.
     """
     if rng:
-        return paths.review_dir(rng, REPO, create=True)
+        # Resolved, because the flag is copied from the serve command and the default
+        # range ends in HEAD, which names a different branch on every checkout. Not
+        # created: a review the server has not made holds no thread, so making the
+        # folder here would only hide the wrong range behind an empty one.
+        where = paths.review_dir(paths.resolve_range(rng, REPO), REPO, create=False)
+        if where.is_dir():
+            return where
+        print(f"no review here for {rng!r}, looking for the thread instead",
+              file=sys.stderr)
     folders = sorted(p for p in STATE.iterdir()
                      if p.is_dir() and not p.name.startswith("archived-"))
     for folder in folders:
@@ -126,7 +134,9 @@ def main():
     where = review_of(question_id, rng)
     questions, messages = where / "questions.jsonl", where / "messages.jsonl"
     if question_id not in known_ids(questions):
-        sys.exit(f"no question with id {question_id} in {where.name}")
+        sys.exit(f"no question with id {question_id} in {where.name}.\n"
+                 "If that is the wrong review, drop --range and the id is looked for "
+                 "across all of them.")
 
     text = sys.stdin.read().strip()
     if not text:
