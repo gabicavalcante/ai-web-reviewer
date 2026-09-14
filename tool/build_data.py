@@ -106,6 +106,12 @@ def matches_commit(key, full, short):
 # one-line reason; these say only what the reviewer should do about it.
 READ_MARKS = ("start", "care", "skim")
 READ_WHY_MAX = 80
+
+# How many commits may ask to be read closely. A share of the branch was the first rule,
+# and it does not hold at the top: a third of forty is thirteen, and nobody holds thirteen.
+# What a reader can keep in mind does not grow with the branch, so the count is capped
+# too, and the stricter of the two applies.
+CARE_MAX = 5
 FILE_NOTE_MAX = 80
 
 # Measured from a narrative that reads well, set just above the longest field in it.
@@ -157,9 +163,12 @@ def validate_read_marks(per_commit, commit_count, problems, warnings):
     if len(starts) > 1:
         problems.append("read 'start': only one commit can be the place to start, found "
                         + ", ".join(starts))
-    if commit_count and cares > max(1, commit_count // 3):
-        warnings.append(f"read 'care' is on {cares} of {commit_count} commits, which reads as "
-                        "no emphasis at all")
+    if commit_count:
+        limit = min(CARE_MAX, max(1, commit_count // 3))
+        if cares > limit:
+            warnings.append(
+                f"read 'care' is on {cares} of {commit_count} commits, and {limit} is as many "
+                "as carries any emphasis")
 
 
 def git_maybe(repo, *args):

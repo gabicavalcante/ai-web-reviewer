@@ -63,7 +63,8 @@ The build enforces the limits, because a mark on every commit marks nothing:
 - More than one `start` fails the build.
 - `skim` without a `readWhy` fails the build.
 - A `readWhy` over 80 characters fails the build. It has one line in the rail.
-- `care` on more than a third of the commits warns.
+- `care` warns past a third of the commits, and past five however long the branch is. A
+  third of forty is thirteen, and nobody keeps thirteen in mind.
 
 ## Starting one
 
