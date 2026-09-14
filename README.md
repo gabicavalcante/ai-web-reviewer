@@ -380,6 +380,7 @@ the work any better than a short one, and may recall it worse.
 | --- | --- |
 | `SKILL.md` | Instructions for the agent |
 | `.claude-plugin/` | The plugin and marketplace manifests |
+| `.claude/skills/release/` | How to cut a release. Loads when working in this repo, and is not shipped to users |
 | `reference/narrative.md` | The optional editorial layer |
 | `reference/voice.md` | How the page's own copy is written |
 | `reference/gotchas.md` | Operational traps worth not rediscovering |
