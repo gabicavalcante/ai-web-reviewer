@@ -160,7 +160,7 @@ consumer rather than a requirement.
 
 `tool/answer.py` writes those turns. A plain turn is an answer; `--ask` marks it as a
 question back to the reviewer, which the page offers a button to answer; `--did` records
-a change with the commit it landed in.
+a change with the commit that carried it.
 
 State lives outside the repo, so questions never land in git and survive rebuilds and
 restarts. The next section says where it goes and what removes it.
@@ -179,9 +179,9 @@ absolute path, so two checkouts of the same project never collide:
 | File | What it holds |
 | --- | --- |
 | `questions.jsonl` | One row per thread: the question, the branch it was asked on, and the commit, file, side and line it is anchored to |
-| `messages.jsonl` | Every turn after the opening question, with who wrote it and what kind of turn it is: an answer, a question back, a change that landed, or a yes or no to one |
+| `messages.jsonl` | Every turn after the opening question, with who wrote it and what kind it is: an answer, a question back to the reviewer, a change that was made, or the reviewer's yes or no to one |
 | `resolved.jsonl` | One row each time a thread is resolved or reopened |
-| `answers.jsonl` | An older reply format. Still read, so old reviews keep working, and nothing writes it now |
+| `answers.jsonl` | An older reply format. Nothing writes it now, and it is still read, so old reviews still render |
 | `index-<hash>.html` | The rendered page for one range, rewritten by every build |
 | `narrative-<hash>.json` | The narrative for one range, if it has one. A plain `narrative.json` still works for a repo with a single review |
 | `watcher.alive` | A heartbeat, rewritten every second while a watcher runs, and removed when it stops. The page reads it to know whether anyone is listening |
@@ -203,10 +203,10 @@ directory stays until you remove it:
 rm -rf ~/.local/state/web-reviewer/<repo-name>-<hash>
 ```
 
-The cost is small. Two reviews measured here, one of five threads and twenty three
-replies and one of twelve threads, are 33 KB each. What accumulates is directories, one
-per repo path, including repos you have since moved or deleted. Moving a repo changes the
-hash, so the next run starts empty while the old threads stay under the old name.
+Two reviews on this machine are 33 KB each: one of five threads with twenty three
+replies, one of twelve threads. The directories are what accumulate, one per repo path,
+including repos you have since moved or deleted. Moving a repo changes the hash, so the
+next run starts empty while the old threads stay under the old name.
 
 The rendered pages are the part you can lose safely, since `review.py build` regenerates
 one from git. The logs are the only thing here that cannot be reconstructed.
