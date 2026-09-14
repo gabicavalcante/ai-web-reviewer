@@ -70,6 +70,25 @@ ln -s ~/development/personal/web-reviewer ~/.claude/skills/web-reviewer
 
 Then ask Claude Code to review a branch in the browser, or invoke `/web-reviewer`.
 
+## What to say
+
+You talk to Claude Code. It runs the scripts, and the commands named later in this file
+are what it runs, written down so you can run them yourself and so the page works without
+it.
+
+| What you want | Something that gets it |
+| --- | --- |
+| Start a review | `review this branch in the browser` |
+| A different base | `open the web reviewer for my branch against develop` |
+| A narrative, after it has read the branch | `now write the narrative and rebuild the page` |
+| A change you asked for in a thread | `do it` in the thread, or `yes, apply that` |
+| Rebuild after new commits | `rebuild the review page` |
+| Put old threads aside | `archive the threads in this repo and rebuild` |
+| Finish | `squash the fixups and stop the review server` |
+
+The wording does not matter. Asking to read a diff in a browser, or to ask questions while
+reading one, is enough for Claude Code to open the skill.
+
 ## How a question reaches Claude
 
 Asking on the page appends to a log. Nothing reads that log on its own, so a session that
@@ -187,9 +206,9 @@ under the old name.
 The rendered pages are the part you can lose safely, since `review.py build` regenerates
 one from git. The logs are the only thing here that cannot be reconstructed.
 
-`review.py archive` moves the current logs into a timestamped subfolder, which is how you
-empty a checkout that has collected several reviews. Nothing is deleted, and moving them
-back is one `mv`.
+Ask Claude Code to `archive the threads in this repo`, or run `review.py archive`. It
+moves the current logs into a timestamped subfolder, which is how you empty a checkout
+that has collected several reviews. Nothing is deleted, and moving them back is one `mv`.
 
 The `pre-squash/<stamp>` branches a squash leaves behind are the same kind of leftover.
 Nothing removes them either, and they are yours to delete once you trust the result.
@@ -199,8 +218,10 @@ Nothing removes them either, and they are yours to delete once you trust the res
 With no configuration the page takes its title from the branch, its figures from git, and
 each commit's rationale from that commit's own message.
 
-`review.py narrate <range>` writes a scaffold next to the review's state: every commit
-keyed by sha with its subject, every file in the range by path, and every field empty.
+Ask for it once the branch has been read: `now write the narrative and rebuild the page`.
+Claude Code runs `review.py narrate <range>`, which writes a scaffold next to the review's
+state: every commit keyed by sha with its subject, every file in the range by path, and
+every field empty.
 Fill in what you know and rebuild. Every later build reads that file without a flag.
 `--narrative FILE` points at one kept elsewhere.
 
