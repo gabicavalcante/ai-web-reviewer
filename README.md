@@ -37,12 +37,20 @@ the question on the line.
 - Squashes the fixups when the review is done, with guards and a backup branch.
 - Reads the branch two ways: commit by commit, or as the files it leaves behind.
 - Marks a commit or a file as where to start, what to read closely, what is safe to skim.
+- Says how much of each commit is still in the branch, and skims the ones a later commit
+  rewrote entirely.
 
 ## Two ways to read a branch
 
 **Commits** is the rail down the left: one commit at a time, in order, with its diff
 beside it. This is where questions are asked, because a line here has a commit behind it
 to anchor a thread to.
+
+The same blame pass that orders the files tab says how many of each commit's lines are
+still in the branch. A commit with less than half of them left carries `12 of 77 survive`
+beside its diff numbers, and one with none left is marked `skim`, unless a narrative has
+already given it a mark of its own. On a branch that was reworked in place, ten of fifteen
+commits can be work that no longer exists.
 
 **Files changed** is the branch as it stands now. On a long branch the commits are the
 wrong place to start, because later ones rewrite earlier ones and reading in order means

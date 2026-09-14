@@ -146,6 +146,11 @@ often three lines.
 If you cannot say why a commit is safe to skim in under 80 characters, it is probably not
 a skim.
 
+You do not have to mark superseded work. The build blames the tip of the range, marks a
+commit with nothing left as `skim`, and prints the surviving count on any commit that
+lost most of its lines. Marking such a commit yourself replaces that, so only do it when
+you have something better to say than the count.
+
 ## Where state lives
 
 A checkout gets a directory under `~/.local/state/web-reviewer/`, outside the repo so

@@ -57,6 +57,20 @@ const script = html.split("<script>")[1].split("</script>").slice(0, -1).join("<
 
 const count = (id) => (registry[id] ? registry[id].children.length : 0);
 
+// How many nodes anywhere under an element carry a class. The survival marker is nested
+// two levels inside a commit button, and it is drawn from a condition rather than from
+// the data, so counting the data would not tell us the branch was taken.
+const deep = (id, cls) => {
+  let n = 0;
+  const walk = (node) => {
+    const named = (node.className || "").split(" ");
+    if (named.includes(cls) || (node.classList && node.classList.contains(cls))) n += 1;
+    (node.children || []).forEach(walk);
+  };
+  if (registry[id]) registry[id].children.forEach(walk);
+  return n;
+};
+
 try {
   new Function(script)();
 } catch (error) {
@@ -89,6 +103,7 @@ const drew = {
   notes: count("notesList"),
   figures: count("figures"),
   pane: count("pane"),
+  survive: deep("commits", "survive"),
 };
 if (!drew.commits) {
   console.error("page script ran but drew no commits");
@@ -97,5 +112,6 @@ if (!drew.commits) {
 console.log(
   `smoke ok: ${drew.commits} commits, ${drew.pane} pane sections, ` +
   `${drew.stages} stages, ${drew.notes} notes, ${drew.figures} figures` +
+  (drew.survive ? `, ${drew.survive} commit${drew.survive === 1 ? "" : "s"} mostly rewritten` : "") +
   (stagesPressed ? `, ${stagesPressed} files-rail views` : "")
 );

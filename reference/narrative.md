@@ -66,6 +66,27 @@ The build enforces the limits, because a mark on every commit marks nothing:
 - `care` warns past a third of the commits, and past five however long the branch is. A
   third of forty is thirteen, and nobody keeps thirteen in mind.
 
+## What the rail marks on its own
+
+Blame at the tip of the range says how many of a commit's lines are still in the branch.
+Two marks follow from that, and neither needs a narrative:
+
+| What blame says | What the rail does |
+| --- | --- |
+| nothing left | marks the commit `skim`, reason `nothing it added is still in the branch` |
+| less than half left | prints `12 of 77 survive` beside the diff numbers |
+
+The first only fills a gap. A commit the narrative already marked keeps the mark it was
+given, and the counts are not printed underneath a line that has just said the same thing.
+
+On a branch that was reworked in place this covers most of the rail. Without it a reviewer
+reads fifteen commits before discovering that ten of them no longer exist.
+
+Blame runs with `-M`, so a block a later commit copied inside a file is still credited to
+the commit that wrote it, and a commit can be blamed for more lines than it added. One
+commit on a real branch added 271 lines to a test file and was blamed for 379. So the
+check is whether most of a commit is gone, not the difference between two numbers.
+
 ## Starting one
 
 ```bash

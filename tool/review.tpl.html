@@ -180,6 +180,7 @@
   .cb-meta .plus { color: var(--add); }
   .cb-meta .minus { color: var(--del); }
   .cb-meta .done { color: var(--accent); }
+  .cb-meta .survive { color: var(--ink-faint); }
   .cb-tag { font-family: var(--mono); font-size: 10px; letter-spacing: .06em; text-transform: uppercase; padding: 1px 5px; border-radius: 2px; border: 1px solid currentColor; }
   .cb-tag.start { color: var(--accent); }
   .cb-tag.care { color: var(--del); }
@@ -664,6 +665,13 @@
     meta.appendChild(bar);
     meta.appendChild(el("span", "plus", "+" + c.additions));
     meta.appendChild(el("span", "minus", "−" + c.deletions));
+    /* Blame credits a line to whoever touched it last, so a commit a later one rewrote
+       scores nothing here. That is the case worth seeing: on a long branch the rail is
+       full of work that no longer exists. Drawn only when most of it is gone, and never
+       under an auto-skim, which has already said the same thing in words. */
+    if (c.added > 0 && c.alive * 2 < c.added && !c.autoSkim) {
+      meta.appendChild(el("span", "survive", c.alive + " of " + c.added + " survive"));
+    }
     const doneTag = el("span", "done", "reviewed");
     doneTag.hidden = !reviewed.has(c.short);
     meta.appendChild(doneTag);

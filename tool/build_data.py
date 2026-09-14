@@ -232,6 +232,36 @@ def to_runs(numbers):
     return runs
 
 
+def mark_survival(commits, alive_by_sha):
+    """Say how much of each commit is still in the branch, and skim what is not.
+
+    A commit and the fixups folded into it are one entry on the rail, so they are counted
+    together. Blame credits a line to whoever touched it last, so a commit rewritten by a
+    later one scores nothing, which is the case worth seeing: on a long branch the rail is
+    full of work that no longer exists, and reading it in order means reading that.
+
+    A mark the narrative already set is left alone. This fills a gap, it does not overrule
+    a person.
+
+    Blame runs with -M, so a block a later commit copied inside a file is credited to the
+    commit that first wrote it, and a commit can be blamed for more lines than it added.
+    On a real branch a commit that added 271 lines to a test file was blamed for 379, the
+    difference being blocks a later commit copied. That is why the rail asks whether most
+    of a commit is gone rather than subtracting one number from the other.
+    """
+    for commit in commits:
+        sources = [commit] + list(commit.get("followups") or [])
+        added = sum(source.get("additions", 0) for source in sources)
+        alive = sum(alive_by_sha.get(source["hash"], 0) for source in sources)
+        commit["added"] = added
+        commit["alive"] = alive
+        if added and not alive and not commit.get("read"):
+            commit["read"] = "skim"
+            commit["readWhy"] = "nothing it added is still in the branch"
+            # So the rail does not print the counts underneath a line that already said it.
+            commit["autoSkim"] = True
+
+
 def file_tier(path):
     """Where a file sits in a reading order: the code, then what documents it, then what
     tests it. A test read before its subject is a list of assertions about nothing."""
@@ -298,6 +328,9 @@ def final_diff(repo, rng, commits, narrative):
     """
     files = parse_patch(git(repo, "diff", "--patch", "--unified=3", rng))
     if not files:
+        # A range whose diff is empty was undone by its own later commits, so every commit
+        # on the rail has nothing left. Say that rather than leaving the counts unset.
+        mark_survival(commits, {})
         return None
     tip = range_tip(rng)
 
@@ -330,6 +363,11 @@ def final_diff(repo, rng, commits, narrative):
                     touched.setdefault(entry["path"], [])
                     if stage["where"] not in touched[entry["path"]]:
                         touched[entry["path"]].append(stage["where"])
+
+    # Blame is already being run over every file below. Totalling it per commit as well
+    # costs nothing and answers the question the rail cannot: how much of what a commit
+    # added is still in the branch.
+    alive_by_sha = {}
 
     # What the narrative says about individual files. The tool can order a file and weigh
     # it; only a person can say what it is for in this change.
@@ -369,6 +407,7 @@ def final_diff(repo, rng, commits, narrative):
         weight, by_stage = {}, {}
         if entry["status"] != "deleted":
             for sha, numbers in surviving_lines(repo, tip, entry["path"]).items():
+                alive_by_sha[sha] = alive_by_sha.get(sha, 0) + len(numbers)
                 where = stage_of.get(sha)
                 if where:
                     weight[where] = weight.get(where, 0) + len(numbers)
@@ -401,6 +440,8 @@ def final_diff(repo, rng, commits, narrative):
         print(f"narrative: {warning}", file=sys.stderr)
     if problems:
         raise SystemExit("narrative: " + "\n           ".join(problems))
+
+    mark_survival(commits, alive_by_sha)
 
     rank = {where: i for i, where in enumerate(order)}
     files.sort(key=lambda e: (rank.get((e["stages"] or [None])[0], len(order)),
