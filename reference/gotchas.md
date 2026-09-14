@@ -16,7 +16,7 @@ done
 ```
 
 Two details that look like nits and are not. `review.py` execs the server by absolute
-path, so its `args` read `python3 /long/path/tool/server.py` — a pattern like
+path, so its `args` read `python3 /long/path/tool/server.py`. A pattern like
 `python3 server.py` matches nothing and you conclude it stopped. And it inherits the
 **repo** as its cwd, not the state directory, so that is what identifies which review a
 process belongs to. The bracketed `[s]` keeps the pattern from matching the `awk` that
@@ -37,7 +37,7 @@ failure looks like it happened somewhere it did not.
 `Monitor` lives as long as the Claude Code session. The page keeps serving and keeps
 appending questions to `questions.jsonl` after the session ends, but nothing wakes you.
 
-Two things make that survivable, and both have to keep working:
+Two things make that survivable, and both have to hold:
 
 `watch.py` replays on startup. It emits every unresolved thread whose last turn is not
 Claude's, prefixed `BACKLOG`, so questions asked while nothing was attached arrive when a
@@ -79,7 +79,7 @@ follows a branch switch, and a server that re-resolves serves a directory nobody
 ## The server serves no directory at all
 
 `SimpleHTTPRequestHandler` serves whatever directory it is given, and whatever lands in
-that directory goes with it. Rooted at the store, a GET of `/questions.jsonl` returned
+that directory is served with it. Rooted at the store, a GET of `/questions.jsonl` returned
 every question ever asked in the checkout. Rooted at the review's folder, it would do the
 same the moment the threads moved in beside the page.
 
@@ -116,7 +116,7 @@ the orphan section with their original anchor and code snippet preserved.
 ## Never check a port by connecting to it
 
 `connect_ex` to a closed loopback port hangs on WSL2 rather than returning
-`ECONNREFUSED` — the SYN is dropped, so nothing ever comes back. An unbounded check
+`ECONNREFUSED`, because the SYN is dropped and nothing ever returns. An unbounded check
 therefore blocks forever on the first free candidate, which is usually the port you
 wanted, and `review.py serve` never reaches the line that prints the URL. Ask by binding
 instead: it answers immediately and needs no network round trip.

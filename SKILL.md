@@ -43,7 +43,7 @@ printf '%s\n' "needs a repo sweep, want it?" | python3 $TOOL/answer.py --ask <th
 printf '%s\n' "renamed it" | python3 $TOOL/answer.py --did <thread-id> <sha>
 ```
 
-`--ask` asks permission to spend real time — a repo-wide sweep, subagents — before
+`--ask` asks permission to spend real time, a repo-wide sweep or subagents, before
 answering. It is not for offering a change: say that in a plain answer, because the page
 renders every `--ask` as a request to investigate. `--did` records a change with the
 commit that carried it, so the thread reads *asked → answered → changed*.
@@ -102,8 +102,8 @@ With no narrative the page is a good diff reader: title from the branch, figures
 
 After you have actually reviewed the branch, `python3 $TOOL/review.py narrate <range>`
 writes a scaffold into the state directory: every commit keyed by sha with its subject,
-and every field empty. Fill in what you worked out and rebuild. It is picked up on every
-later build without a flag, so `--narrative FILE` is only for keeping one somewhere else.
+and every field empty. Fill in what you worked out and rebuild. Every later build reads it
+without a flag, so `--narrative FILE` is only for keeping one somewhere else.
 
 Fill in nothing you have not worked out. Every field falls back to git when left empty, so
 a scaffold you only half understand renders as the plain page, which is the honest one. A
@@ -147,9 +147,10 @@ a skim.
 
 ## Where state lives
 
-Threads are append-only JSONL in `~/.local/state/web-reviewer/<repo>-<hash>/`, keyed by
-repo path, outside the repo so questions never land in git. They survive rebuilds,
-restarts and rebases. The rendered page sits in the same directory, named for its range, so two reviews of one repo do not overwrite each other.
+A checkout gets a directory under `~/.local/state/web-reviewer/`, outside the repo so
+questions never land in git, and each review gets a folder inside it named for its range.
+The page, the narrative and the threads for one review are all in that folder. Threads are
+append-only JSONL and survive rebuilds, restarts and rebases.
 
 Rebuild after new commits: `python3 $TOOL/review.py build <range>`, then reload.
 
@@ -180,7 +181,7 @@ done
 ```
 
 Then `TaskStop` the Monitor. Read [reference/gotchas.md](reference/gotchas.md) before
-adapting that loop — the pattern and the cwd are both easy to get wrong in ways that
+adapting that loop. The pattern and the cwd are both easy to get wrong in ways that
 silently find nothing.
 
 Stopping costs nothing: threads are on disk, and a later session that re-arms the watcher

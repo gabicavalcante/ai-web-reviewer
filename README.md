@@ -154,9 +154,9 @@ python3 ~/.claude/skills/web-reviewer/tool/review.py serve origin/main...HEAD
 ```
 
 You get the diff reader and the thread UI. Questions are appended to
-`~/.local/state/web-reviewer/<repo>-<hash>/questions.jsonl`, and anything that appends an
-answer to `messages.jsonl` shows up in the thread, so the Claude Code integration is one
-consumer rather than a requirement.
+`questions.jsonl` in that review's folder, and anything that appends an answer to
+`messages.jsonl` beside it shows up in the thread, so the Claude Code integration is one
+consumer rather than a requirement. The next section says where that folder is.
 
 `tool/answer.py` writes those turns. A plain turn is an answer; `--ask` marks it as a
 question back to the reviewer, which the page offers a button to answer; `--did` records
@@ -216,8 +216,6 @@ branch you review in a checkout writes to one directory and the second overwrite
 first. The resolved range is what the page and the server both carry, decided once when
 the review starts, so switching branches under a running server cannot move it.
 
-A `narrative.json` at the top still works for a repo with a single review.
-
 Reading a review costs what that review holds. When the threads were shared by the whole
 checkout, every poll parsed every question ever asked in it: at two thousand threads that
 was 3 MB read every second by the watcher and 3 MB sent every four by the server.
@@ -249,7 +247,8 @@ next run starts empty while the old threads stay under the old name.
 
 `index.html` is the only file here that can be lost safely, because `review.py build`
 regenerates it from git and the narrative. Everything else was written by a person: the
-threads, and the narrative, which is prose about a branch and comes back from nowhere.
+threads, and the narrative, which is prose somebody wrote about a branch and which no
+command produces again.
 
 Ask Claude Code to `archive the threads for this review`, or run `review.py archive
 <range>`. It moves that review's logs into a timestamped subfolder, so finishing one

@@ -71,9 +71,9 @@ The build enforces the limits, because a mark on every commit marks nothing:
 python3 review.py narrate <range>
 ```
 
-Writes `narrative.json` into the review's state directory with every commit keyed by its
+Writes `narrative.json` into the review's folder with every commit keyed by its
 sha and its subject beside it, and every field empty. The structure is the part a script
-can get right — which commits exist, how long the rail is, what the keys are called. What
+can get right: which commits exist, how long the rail is, what the keys are called. What
 it cannot get right is which stages the change moves through and why a commit is there, so
 those are left blank rather than guessed at.
 
@@ -94,7 +94,7 @@ the page draws beside each commit. Write them as strings.
 
 A narrative goes stale by design: rebasing and squashing rewrite shas, and the squash
 button rebuilds the page straight afterwards. So staleness never blocks a build, it warns
-on stderr — a key matching no commit, an ambiguous prefix, a mark past the end of the
+on stderr. A key matching no commit, an ambiguous prefix, a mark past the end of the
 rail, a commit claimed by two stages, a commit no stage claims.
 
 A malformed entry does refuse to build: a stage missing `where` or `what`, a figure
