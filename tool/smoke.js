@@ -95,6 +95,13 @@ let stagesPressed = 0;
 if (press(registry.tabFiles, "the files tab")) {
   const rail = registry.stageRail ? registry.stageRail.children : [];
   rail.forEach((btn, i) => { if (press(btn, `stage ${i} in the files rail`)) stagesPressed += 1; });
+  // A hidden rail leaves the grid, and the pane then lands in the column sized for the
+  // rail. There is no CSS here to catch that, so check the class the page sets instead.
+  const board = registry.filesBoard;
+  if (!rail.length && !(board && board.classList.contains("norail"))) {
+    console.error("the files rail is empty but the board still keeps its rail column");
+    process.exit(1);
+  }
 }
 
 const drew = {

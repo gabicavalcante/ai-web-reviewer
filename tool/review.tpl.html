@@ -158,6 +158,10 @@
     .side { position: fixed; top: 0; right: 0; bottom: 0; width: min(420px, 92vw); max-height: none; border-radius: 0; z-index: 30; }
   }
   @media (max-width: 940px) { .board { grid-template-columns: 1fr; } }
+  /* A review with no stages hides the rail, and a hidden grid item leaves the grid, so
+     the pane fell into the 340px column meant for the rail and rendered a full-width
+     diff in a third of the width. By id, to beat the side-thread column rules above. */
+  #filesBoard.norail { grid-template-columns: minmax(0, 1fr); }
 
   /* The rail is taller than the screen on a long branch, so sticky alone does nothing:
      reaching commit 20 scrolls the page, and the pane goes with it. The column is held
@@ -434,7 +438,7 @@
 
   <section class="filesview" id="filesView" hidden>
     <p class="filesnote" id="filesNote"></p>
-    <div class="board">
+    <div class="board" id="filesBoard">
       <nav class="rail" id="stageRailNav" aria-label="Stages">
         <h2>Read by stage</h2>
         <div class="commits" id="stageRail"></div>
@@ -1293,6 +1297,7 @@
        files are listed plainly and the rail says nothing. */
     if (!final.order.length) {
       document.getElementById("stageRailNav").hidden = true;
+      document.getElementById("filesBoard").classList.add("norail");
       paintAllFiles();
       document.getElementById("filesNote").textContent =
         final.files.length + " file(s) as they stand now. This review has no stages.";
