@@ -17,9 +17,9 @@ the standard library.
 
 ## Why
 
-You lose your place scrolling terminal diffs through a large branch. And a question about
-a diff usually arrives without the thing it needs most: which line it is about. This puts
-the question on the line.
+Scrolling a large diff in the terminal, you lose your place. And when you ask someone
+about a diff, the question usually travels without the one detail it needs most: which
+line it is about. This tool attaches the question to the line.
 
 ## What it does
 
@@ -31,8 +31,8 @@ the question on the line.
   so a long answer never pushes the code off the screen.
 - Answers render `code`, **bold** and fenced blocks.
 - Mark threads resolved, read a resolved one without reopening it, hide them entirely.
-- Folds `fixup!` commits into the commit they amend, so a branch under review reads as
-  long as the change is rather than as long as the review was.
+- Tucks each `fixup!` commit inside the commit it corrects, so the list stays as long as
+  the change instead of growing every time you fix something.
 - Notices when the branch has moved under the page, and offers to build it again.
 - Squashes the fixups when the review is done, with guards and a backup branch.
 - Reads the branch two ways: commit by commit, or as the files it leaves behind.
@@ -46,15 +46,20 @@ the question on the line.
 beside it. This is where questions are asked, because a line here has a commit behind it
 to anchor a thread to.
 
-The same blame pass that orders the files tab says how many of each commit's lines are
-still in the branch. A commit with less than half of them left carries `12 of 77 survive`
-beside its diff numbers, and one with none left is marked `skim`, unless a narrative has
-already given it a mark of its own. On a branch that was reworked in place, ten of fifteen
-commits can be work that no longer exists.
+Later commits often rewrite what earlier ones wrote. `git blame` tells you, for the branch
+as it stands now, which commit each line came from, so the page can count how much of each
+commit is still there.
 
-**Files changed** is the branch as it stands now. On a long branch the commits are the
-wrong place to start, because later ones rewrite earlier ones and reading in order means
-reading code that is no longer there.
+A commit with less than half its lines left shows `12 of 77 survive` next to its `+` and
+`−` counts. A commit with none left is labelled `skim`, so you know you can move past it.
+If you wrote a narrative and labelled that commit yourself, your label stays.
+
+On a branch that was rewritten many times this can be most of the list. One branch here
+has fifteen commits, and ten of them no longer exist in the final code.
+
+**Files changed** is the branch as it stands now. On a long branch it is the better place
+to start, for the reason above: reading the commits in order means reading code that is no
+longer there.
 
 With a narrative, the files tab is a rail of stages rather than files. Choosing one shows
 only the lines that stage wrote, wherever it wrote them, with three rows either side and
@@ -121,9 +126,9 @@ reading one, is enough for Claude Code to open the skill.
 
 ## How a question reaches Claude
 
-Asking on the page appends to a log. Nothing reads that log on its own, so a session that
-never started a watcher will leave every question unanswered with no sign that it is
-doing so.
+A question you ask on the page is written to a file, and nothing reads that file by
+itself. If the Claude Code session never started the watcher, every question sits there
+unanswered and nobody is told.
 
 Claude Code arms the watcher when it opens the review, following `SKILL.md`. You do not
 run any of this. If answers stop arriving, say `no answers are coming through, check the
@@ -271,18 +276,24 @@ api-bbfa229b/                                          the checkout
 
 ### How a review gets its name
 
-Two ranges of one repo are two reviews and cannot share a page: each server would report
-the other's build as stale, and each Rebuild would overwrite the other. The names keep
-plain filenames inside, so the narrative you edit by hand is `narrative.json` in a folder
-that says which review it belongs to. The directory name carries the range for a human
-reading `ls`, trimmed from the front because a range ends at the branch, plus a hash of it
-so two ranges cannot collide.
+If you review two different ranges of the same repo, those are two separate reviews and
+they need separate folders. Sharing one folder went wrong twice over: each server said the
+other's page was out of date, and each Rebuild button overwrote the other page.
 
-`HEAD` is resolved to the branch it names before any of that happens. A range is not an
-identifier until it is: `origin/main...HEAD` is the default, so without resolving it every
-branch you review in a checkout writes to one directory and the second overwrites the
-first. The resolved range is what the page and the server both carry, decided once when
-the review starts, so switching branches under a running server cannot move it.
+So each review gets its own folder, and the files inside keep ordinary names. The narrative
+you edit by hand is always `narrative.json`, and the folder around it tells you which
+review it belongs to.
+
+The folder is named after the range, so you can recognise it in `ls`, plus a short hash so
+two ranges can never produce the same name. Long names are trimmed from the front, because
+a range ends with the branch and that is the half worth reading.
+
+One thing happens first: `HEAD` is replaced with the name of the branch it currently points
+at. `HEAD` just means "wherever I am right now", so it is not a name for anything. The
+default range is `origin/main...HEAD`, and without this step every branch you reviewed in
+one checkout would write to the same folder, and the second would overwrite the first. The
+swap happens once, when the review starts, and both the page and the server carry the
+result. Switching branches while the server is running cannot move it.
 
 ### Why a review keeps its own threads
 
@@ -299,8 +310,9 @@ It writes nothing outside this list.
 
 ### What is never removed
 
-The four logs are append-only, and a question is flushed and `fsync`ed before the browser
-is told it was accepted. Nothing rewrites a row. Resolving a thread appends a row saying
+The four logs are only ever added to, never edited. A question is written the whole way to
+the disk before the browser is told it was accepted, so a crash straight afterwards cannot
+lose it. Nothing rewrites a row. Resolving a thread appends a row saying
 so rather than removing anything, which is what makes it reversible, and `Hide resolved`
 filters data that is all still on disk.
 
@@ -376,11 +388,12 @@ Every field is optional and falls back to git, and sections with no content stay
 so a half-written narrative renders as the plain page rather than as empty frames. See
 [reference/narrative.md](reference/narrative.md).
 
-Write it while the branch is fresh. A session that has just built something can say what
-it was unsure about and what it did not check; a later one is reading the diff like anyone
-else, and a reconstructed reason is indistinguishable from a remembered one. So narrate
-early. A long session that has been answering review questions for an hour does not recall
-the work any better than a short one, and may recall it worse.
+Write it while the branch is fresh. A session that has just built the code can tell you
+what it was unsure about and what it never checked. A later session is reading the diff
+like anyone else, and a reason it works out from the code looks exactly like a reason it
+remembers, so you cannot tell the two apart. A session that has spent an hour answering
+review questions does not remember the work any better than a new one, and may remember it
+worse.
 
 ## Layout
 
