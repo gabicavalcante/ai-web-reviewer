@@ -85,6 +85,19 @@ The page and the narrative are both named from a hash of the range now, and the 
 resolves `/` to its own range's page rather than to whatever was written last. Anything
 else added beside them needs the same treatment.
 
+## A range is not an identifier until HEAD is resolved
+
+`origin/main...HEAD` is the default range, and `HEAD` means a different commit on every
+branch. Keying anything off that string puts every review of a checkout in one place: two
+branches, one directory, and the second build overwrites the first page without a word.
+
+`paths.resolve_range` replaces an endpoint that is exactly `HEAD` with the branch it
+names. Only exactly `HEAD`, because `HEAD~3` resolves to a sha that moves whenever a
+commit lands, and a key that changes on every commit is no key.
+
+Resolve once, when the review starts, and pass the result down. Resolving again later
+follows a branch switch, and a server that re-resolves serves a directory nobody built.
+
 ## The server's root is the review, not the store
 
 `SimpleHTTPRequestHandler` serves whatever directory it is given. Rooted at the store, a

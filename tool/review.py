@@ -225,6 +225,11 @@ def main():
         print(paths.state_dir())
         return
 
+    # Once, here, before anything keys a directory off it or passes it to a subprocess.
+    # "origin/main...HEAD" names a different review on every branch, and resolving it
+    # twice could resolve it differently.
+    args.range = paths.resolve_range(args.range)
+
     if args.action == "narrate":
         narrate(args.range, args.force)
         return

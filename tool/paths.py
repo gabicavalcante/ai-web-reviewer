@@ -37,6 +37,34 @@ def state_dir(repo=None):
     return target
 
 
+def resolve_range(rng, repo=None):
+    """A range with HEAD replaced by the branch it currently names.
+
+    A range is not an identifier until this has happened. "origin/main...HEAD" is the
+    default, so every branch in a checkout reviewed without an explicit range produces the
+    same string, the same directory, and the second review overwrites the first page.
+
+    Only an endpoint that is exactly HEAD is replaced. HEAD~3 resolves to a sha that moves
+    every time a commit lands, and a key that changes on every commit is no key at all.
+
+    Resolve once, when a review starts, and pass the result down. Resolving again later
+    would follow a branch switch and point a running server at a directory nobody built.
+    """
+    sep = "..." if "..." in rng else ".." if ".." in rng else None
+    if sep is None:
+        return rng
+    name = subprocess.run(["git", "-C", str(repo or repo_root()), "rev-parse",
+                           "--abbrev-ref", "HEAD"], capture_output=True, text=True)
+    here = name.stdout.strip()
+    if name.returncode != 0 or not here:
+        return rng
+    if here == "HEAD":
+        sha = subprocess.run(["git", "-C", str(repo or repo_root()), "rev-parse", "--short", "HEAD"],
+                             capture_output=True, text=True)
+        here = sha.stdout.strip() or "HEAD"
+    return sep.join(here if part.strip() == "HEAD" else part for part in rng.split(sep))
+
+
 def review_dir(rng, repo=None, create=False):
     """One directory per review, inside the repo's state directory.
 

@@ -209,6 +209,12 @@ that says which review it belongs to. The directory name carries the range for a
 reading `ls`, trimmed from the front because a range ends at the branch, plus a hash of it
 so two ranges cannot collide.
 
+`HEAD` is resolved to the branch it names before any of that happens. A range is not an
+identifier until it is: `origin/main...HEAD` is the default, so without resolving it every
+branch you review in a checkout writes to one directory and the second overwrites the
+first. The resolved range is what the page and the server both carry, decided once when
+the review starts, so switching branches under a running server cannot move it.
+
 A `narrative.json` at the top still works for a repo with a single review.
 
 The server serves one of those directories, not the store, so the threads are not
