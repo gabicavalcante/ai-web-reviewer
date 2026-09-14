@@ -7,6 +7,12 @@ Built as a [Claude Code](https://claude.com/claude-code) skill. The page is plai
 served from a local Python process; there is no build step and no dependencies outside
 the standard library.
 
+**[Install](#install)** · **[What to say](#what-to-say)** · **[Two ways to read a
+branch](#two-ways-to-read-a-branch)** · **[Controls](#controls)** · **[Where state
+lives](#where-state-lives-and-when-it-is-cleaned)** · **[The narrative
+layer](#the-narrative-layer)** · **[Without Claude
+Code](#use-it-without-claude-code)**
+
 ## Why
 
 You lose your place scrolling terminal diffs through a large branch. And a question about
@@ -95,18 +101,34 @@ Asking on the page appends to a log. Nothing reads that log on its own, so a ses
 never started a watcher will leave every question unanswered with no sign that it is
 doing so.
 
-Claude Code arms the watcher when it opens the review, following `SKILL.md`. It runs
-`tool/watch.py`, which prints one line per new question or reply, and the session answers
-with `tool/answer.py`. If answers never arrive, that watcher is the first thing to check.
+Claude Code arms the watcher when it opens the review, following `SKILL.md`. If answers
+never arrive, that watcher is the first thing to check.
+
+```bash
+# armed once, under a Monitor, for as long as the review lasts
+python3 tool/watch.py --range origin/main...my-branch
+```
+
+Every question and reply becomes one line on its stdout:
+
+```
+QUESTION cb8d21a9b6ad · commit b7aab66 · index.md:47 (add) · Where are those checks applied?
+REPLY in thread cb8d21a9b6ad [skip] · No, skip the investigation.
+```
+
+The session answers into the thread by id:
+
+```bash
+printf '%s\n' "Inside Postgres, on every query." | python3 tool/answer.py cb8d21a9b6ad
+```
 
 The page does not hide this. While a watcher is attached a thread shows the pulsing
 "waiting for an answer"; with nothing attached it says so instead, and the question is
 kept. When a session arms the watcher later, the watcher replays every thread still owed
 an answer.
 
-A thread records the branch it was asked on. One repo can hold several reviews and they
-share a directory, so a thread from another branch collapses into its own group rather
-than mixing into this one.
+A review's threads are its own. Two reviews of one checkout keep separate logs, so a
+question asked while reading one branch never appears on the other's page.
 
 ## Controls
 
@@ -125,19 +147,32 @@ than mixing into this one.
 
 ## Change requests, and why fixups
 
-A request made in a thread lands as `git commit --fixup=<sha>`, never as an amend. A
-thread is anchored to a commit's sha, so amending a reviewed commit changes that sha and
+A request made in a thread lands as a fixup, never as an amend:
+
+```bash
+git commit --fixup=b7aab66          # the reviewed commit keeps its sha
+git rebase -i --autosquash e8e4bb6  # once the review is over
+```
+
+A thread is anchored to a commit's sha, so amending a reviewed commit changes that sha and
 orphans every thread on it. A fixup leaves the reviewed commits alone.
 
 The page folds each fixup into the commit it amends and marks it as one, so the rail
 stays as long as the change rather than growing with every correction. A fixup whose
 target is outside the range stays a commit of its own.
 
-When every commit is ticked, the page offers to squash. It refuses on a dirty working
-tree, on a rebase already in progress, when there is nothing to squash, and when the
-range contains commits that are already pushed, which is the only refusal it will let you
-override. It writes a `pre-squash/<stamp>` branch first, and a rebase that does not apply
-is aborted and rolled back rather than left half done.
+When every commit is ticked, the page offers to squash. It refuses when:
+
+| | |
+| --- | --- |
+| the range has no base commit | nothing to rebase onto |
+| a tracked file has uncommitted changes | untracked files do not count, since a rebase does not care about them |
+| a rebase is already in progress | |
+| there are no fixups in the range | nothing to squash |
+| commits in the range are already pushed | the only refusal it offers to override, after saying what a force push costs |
+
+It writes a `pre-squash/<stamp>` branch first, and a rebase that does not apply is aborted
+and rolled back rather than left half done.
 
 Squashing rewrites every commit in the range, so the threads on them are orphaned. They
 are not lost: the page keeps them in their own section, and they stay readable and
@@ -167,6 +202,8 @@ restarts. The next section says where it goes and what removes it.
 
 ## Where state lives, and when it is cleaned
 
+### Where it goes
+
 Threads live outside the repo, in a directory named for the repo plus a hash of its
 absolute path, so two checkouts of the same project never collide:
 
@@ -178,6 +215,8 @@ absolute path, so two checkouts of the same project never collide:
 
 Everything a review has is in one folder: the page, the narrative, and the threads asked
 while reading it.
+
+### What each file holds
 
 | File | What it holds |
 | --- | --- |
@@ -203,6 +242,8 @@ api-bbfa229b/                                          the checkout
     narrative.json
 ```
 
+### How a review gets its name
+
 Two ranges of one repo are two reviews and cannot share a page: each server would report
 the other's build as stale, and each Rebuild would overwrite the other. The names keep
 plain filenames inside, so the narrative you edit by hand is `narrative.json` in a folder
@@ -216,6 +257,8 @@ branch you review in a checkout writes to one directory and the second overwrite
 first. The resolved range is what the page and the server both carry, decided once when
 the review starts, so switching branches under a running server cannot move it.
 
+### Why a review keeps its own threads
+
 Reading a review costs what that review holds. When the threads were shared by the whole
 checkout, every poll parsed every question ever asked in it: at two thousand threads that
 was 3 MB read every second by the watcher and 3 MB sent every four by the server.
@@ -226,6 +269,8 @@ review folder can be fetched over the port.
 
 Anything else in the store was put there by whoever started the server, not by the tool.
 It writes nothing outside this list.
+
+### What is never removed
 
 The four logs are append-only, and a question is flushed and `fsync`ed before the browser
 is told it was accepted. Nothing rewrites a row. Resolving a thread appends a row saying
@@ -240,10 +285,10 @@ directory stays until you remove it:
 rm -rf ~/.local/state/web-reviewer/<repo-name>-<hash>
 ```
 
-Two reviews on this machine are 33 KB each: one of five threads with twenty three
-replies, one of twelve threads. The directories are what accumulate, one per repo path,
-including repos you have since moved or deleted. Moving a repo changes the hash, so the
-next run starts empty while the old threads stay under the old name.
+Two reviews measured on this machine are 33 KB each: one of five threads with twenty
+three replies, one of twelve threads. The directories are what accumulate, one per repo
+path, including repos you have since moved or deleted. Moving a repo changes the hash, so
+the next run starts empty while the old threads stay under the old name.
 
 `index.html` is the only file here that can be lost safely, because `review.py build`
 regenerates it from git and the narrative. Everything else was written by a person: the
@@ -271,11 +316,27 @@ Fill in what you know and rebuild. Every later build reads that file without a f
 `--narrative FILE` points at one kept elsewhere.
 
 It adds a data-flow strip, per-commit rationale, verification tables and a list of open
-questions. It also carries the two things the tool cannot determine: a mark on each commit
-and each file saying where to start, what to read closely and what is safe to skim, and
-one line saying what a file is for in this change. The tool can order a file and weigh how
-much of the branch is in it. Only a person can say that `api/urls.py` is where the wizard
-is mounted.
+questions. It also carries the two things the tool cannot determine: where to start, and
+what a file is for.
+
+```json
+{
+  "title": "MFA for Django Admin",
+  "stages": [
+    { "where": "every admin request", "what": "AdminSite.has_permission covers admin views",
+      "marks": ["1", "12", "13"] }
+  ],
+  "commits": {
+    "41a8d1143": { "read": "care", "readWhy": "the wizard asks its step conditions twice" }
+  },
+  "files": {
+    "api/urls.py": { "read": "start", "note": "where the wizard is mounted" }
+  }
+}
+```
+
+The tool can order a file and weigh how much of the branch is in it. Only a person can say
+that `api/urls.py` is where the wizard is mounted.
 
 The build keeps the marks scarce. One commit may be the place to start, `skim` has to say
 why skipping is safe, and a reason runs to 80 characters. Reaching a limit means cutting
@@ -303,7 +364,7 @@ the work any better than a short one, and may recall it worse.
 | `tool/build_data.py` | Git range to page data |
 | `tool/paths.py` | Where the repo is and where state lives |
 | `tool/review.tpl.html` | The page |
-| `tool/server.py` | Static files plus `/thread` `/ask` `/reply` `/resolve` `/rebuild` `/squash` |
+| `tool/server.py` | The page at `/`, plus `/thread` `/ask` `/reply` `/resolve` `/rebuild` `/squash` |
 | `tool/answer.py` | Write a turn into a thread |
 | `tool/watch.py` | Emit new questions and replies as events |
 | `tool/smoke.js` | Run the built page's script, so a page that throws is not served |
