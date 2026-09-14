@@ -106,9 +106,14 @@ def narrative(rng, repo=None, create=False):
     return review_dir(rng, repo, create) / "narrative.json"
 
 
-def logs(repo=None):
-    """The append-only thread logs for this repo's review."""
-    where = state_dir(repo)
+def logs(rng, repo=None, create=False):
+    """The append-only thread logs for one review.
+
+    Beside the page and the narrative, because everything a review has belongs together.
+    Reading them then costs what this review holds rather than every question ever asked
+    in the checkout, which is what made the cost of a poll grow without limit.
+    """
+    where = review_dir(rng, repo, create)
     return {
         "questions": where / "questions.jsonl",
         "messages": where / "messages.jsonl",

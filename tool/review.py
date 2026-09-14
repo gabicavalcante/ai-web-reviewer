@@ -4,7 +4,7 @@
     python3 review.py serve  [<range>] [--port N] [--narrative FILE]
     python3 review.py build  [<range>] [--narrative FILE]
     python3 review.py narrate [<range>] [--force]
-    python3 review.py archive
+    python3 review.py archive [<range>]
     python3 review.py where
 
 Range defaults to origin/main...HEAD. `serve` picks a free port when the one
@@ -45,14 +45,13 @@ SKELETON = """<!doctype html>
 def build(rng, narrative):
     repo = paths.repo_root()
     state = paths.state_dir(repo)
-    # A narrative written for this review lives beside its state, so it is picked up on
-    # every rebuild without repeating the flag. The range's own file first: one repo can
-    # hold two reviews, and a shared narrative.json puts one review's title on the other.
+    # A narrative written for this review lives beside its page, so it is picked up on
+    # every rebuild without repeating the flag. One place, because a fallback at the top
+    # of the store put one review's title on another's page.
     if not narrative:
-        for candidate in (paths.narrative(rng, repo), state / "narrative.json"):
-            if candidate.exists():
-                narrative = candidate
-                break
+        candidate = paths.narrative(rng, repo)
+        if candidate.exists():
+            narrative = candidate
     command = [sys.executable, str(HERE / "build_data.py")]
     if narrative:
         command += ["--narrative", str(pathlib.Path(narrative).resolve())]
@@ -105,14 +104,16 @@ def smoke(page):
 LOGS = ("questions.jsonl", "messages.jsonl", "answers.jsonl", "resolved.jsonl")
 
 
-def archive():
-    """Move this repo's threads into a timestamped subfolder, leaving the store empty.
+def archive(rng):
+    """Move one review's threads into a timestamped folder, leaving that review empty.
 
-    The store is keyed by repo, so a long-lived checkout accumulates every review ever
-    run in it. This is the supported way to start clean without deleting anything: the
-    rows stay readable where they are put, and moving them back is one `mv`.
+    One review, not the checkout. Finishing a branch and putting its questions aside has
+    no business touching the review of another branch you are still reading.
+
+    Nothing is deleted: the rows stay readable where they are put, and moving them back
+    is one `mv`.
     """
-    state = paths.state_dir()
+    state = paths.review_dir(rng, create=True)
     present = [name for name in LOGS if (state / name).exists() and (state / name).stat().st_size]
     if not present:
         raise SystemExit(f"no threads to archive in {state}")
@@ -235,7 +236,7 @@ def main():
         return
 
     if args.action == "archive":
-        archive()
+        archive(args.range)
         return
 
     build(args.range, args.narrative)

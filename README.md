@@ -176,8 +176,8 @@ absolute path, so two checkouts of the same project never collide:
 
 `python3 tool/review.py where` prints it.
 
-The threads sit at the top, because they belong to the repo. A thread outlives the range
-it was asked in, and one question can matter to two reviews.
+Everything a review has is in one folder: the page, the narrative, and the threads asked
+while reading it.
 
 | File | What it holds |
 | --- | --- |
@@ -185,18 +185,19 @@ it was asked in, and one question can matter to two reviews.
 | `messages.jsonl` | Every turn after the opening question, with who wrote it and what kind it is: an answer, a question back to the reviewer, a change that was made, or the reviewer's yes or no to one |
 | `resolved.jsonl` | One row each time a thread is resolved or reopened |
 | `answers.jsonl` | An older reply format. Nothing writes it now, and it is still read, so old reviews still render |
+| `narrative.json` | The narrative for this review, if it has one |
+| `index.html` | The rendered page, rewritten by every build |
 | `watcher.alive` | A heartbeat, rewritten every second while a watcher runs, and removed when it stops. The page reads it to know whether anyone is listening |
 | `archived-<stamp>/` | Logs put aside by `review.py archive` |
 
-Each review then gets a directory of its own, named for its range:
-
 ```
-api-bbfa229b/
-  questions.jsonl
-  messages.jsonl
-  origin-main-head-50fe69b9/
+api-bbfa229b/                                          the checkout
+  origin-main-ft-868m0r34p-django-mfa-46000731/        one review
     index.html
     narrative.json
+    questions.jsonl
+    messages.jsonl
+    resolved.jsonl
   7568e62a7547c0295d1cb-ci-check-unsafe-migrations-9ce5ede9/
     index.html
     narrative.json
@@ -217,8 +218,13 @@ the review starts, so switching branches under a running server cannot move it.
 
 A `narrative.json` at the top still works for a repo with a single review.
 
-The server serves one of those directories, not the store, so the threads are not
-reachable as files over the port.
+Reading a review costs what that review holds. When the threads were shared by the whole
+checkout, every poll parsed every question ever asked in it: at two thousand threads that
+was 3 MB read every second by the watcher and 3 MB sent every four by the server.
+
+The server reads those logs and never serves them. It answers six endpoints and returns
+`index.html` at `/`, and there is no directory behind it, so nothing that lands in a
+review folder can be fetched over the port.
 
 Anything else in the store was put there by whoever started the server, not by the tool.
 It writes nothing outside this list.
@@ -245,9 +251,10 @@ next run starts empty while the old threads stay under the old name.
 regenerates it from git and the narrative. Everything else was written by a person: the
 threads, and the narrative, which is prose about a branch and comes back from nowhere.
 
-Ask Claude Code to `archive the threads in this repo`, or run `review.py archive`. It
-moves the current logs into a timestamped subfolder, which is how you empty a checkout
-that has collected several reviews. Nothing is deleted, and moving them back is one `mv`.
+Ask Claude Code to `archive the threads for this review`, or run `review.py archive
+<range>`. It moves that review's logs into a timestamped subfolder, so finishing one
+branch does not touch the review of another you are still reading. Nothing is deleted,
+and moving them back is one `mv`.
 
 The `pre-squash/<stamp>` branches a squash leaves behind are the same kind of leftover.
 Nothing removes them either, and they are yours to delete once you trust the result.

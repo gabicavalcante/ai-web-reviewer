@@ -8,7 +8,6 @@ session was attached reaches the next one. Keeps a heartbeat the page reads to t
 import json
 import pathlib
 import signal
-import subprocess
 import sys
 import time
 
@@ -17,12 +16,32 @@ sys.path.insert(0, str(HERE))
 
 import paths  # noqa: E402
 
-STATE = paths.state_dir()
-QUESTIONS = STATE / "questions.jsonl"
-MESSAGES = STATE / "messages.jsonl"
-ANSWERS = STATE / "answers.jsonl"
-RESOLVED = STATE / "resolved.jsonl"
-HEARTBEAT = STATE / "watcher.alive"
+def review_range(argv):
+    """The review this watcher belongs to, from --range.
+
+    A watcher has to be told. It is started beside the server rather than by it, so it
+    inherits nothing, and a review is a range. With one review in the checkout there is
+    nothing to choose between, so that case does not need the flag.
+    """
+    if "--range" in argv:
+        return argv[argv.index("--range") + 1]
+    folders = [p for p in paths.state_dir().iterdir()
+               if p.is_dir() and not p.name.startswith("archived-")]
+    if len(folders) == 1:
+        return None, folders[0]
+    sys.exit(
+        "which review? pass --range, the same one the server was started with.\n"
+        + "reviews in this checkout:\n  "
+        + "\n  ".join(sorted(p.name for p in folders)))
+
+
+_arg = review_range(sys.argv[1:])
+WHERE = _arg[1] if isinstance(_arg, tuple) else paths.review_dir(_arg, create=True)
+QUESTIONS = WHERE / "questions.jsonl"
+MESSAGES = WHERE / "messages.jsonl"
+ANSWERS = WHERE / "answers.jsonl"
+RESOLVED = WHERE / "resolved.jsonl"
+HEARTBEAT = WHERE / "watcher.alive"
 # What the page's "No, skip it" button sent before replies carried a kind, so threads
 # declined before then are recognised too.
 LEGACY_SKIP = "No, skip the investigation."
@@ -80,34 +99,19 @@ def is_skip(turn):
     return turn.get("kind") == "skip" or turn.get("text") == LEGACY_SKIP
 
 
-def current_branch():
-    """The branch checked out now, or "" when git cannot say."""
-    result = subprocess.run(["git", "rev-parse", "--abbrev-ref", "HEAD"],
-                            capture_output=True, text=True, cwd=str(paths.repo_root()))
-    name = result.stdout.strip()
-    return "" if result.returncode != 0 or name in ("", "HEAD") else name
-
-
 def backlog():
     """Unresolved threads whose last turn is not Claude's, so still owed an answer.
 
-    Scoped to the branch checked out now. The store is keyed by repo, so without this a
-    session arming the watcher is handed every unanswered question from every branch ever
-    reviewed in this checkout, and cannot tell which belong to the review in front of it.
-
-    A thread with no branch is replayed. It was written before threads carried one, so
-    there is no way to place it, and an unanswered question is the worse thing to drop.
+    Every thread here belongs to this review, because the logs are the review's own. The
+    branch a question was asked on is not consulted: a branch can change under a running
+    server, and the thread still belongs to the review that was open at the time.
     """
-    branch = current_branch()
     turns = turns_by_thread()
     resolved = resolved_ids()
     waiting = []
     for question in complete_rows(QUESTIONS):
         question_id = question.get("id")
         if question_id in resolved:
-            continue
-        asked_on = question.get("branch") or ""
-        if asked_on and branch and asked_on != branch:
             continue
         thread = turns.get(question_id, [])
         if thread and (thread[-1].get("role") == "claude" or is_skip(thread[-1])):

@@ -29,18 +29,21 @@ sys.path.insert(0, str(HERE))
 import paths  # noqa: E402
 
 STATE = paths.state_dir()
-QUESTIONS = STATE / "questions.jsonl"
-ANSWERS = STATE / "answers.jsonl"
-RESOLVED = STATE / "resolved.jsonl"
-MESSAGES = STATE / "messages.jsonl"
-HEARTBEAT = STATE / "watcher.alive"
+REPO = paths.repo_root()
+# review.py passes the range it served, already resolved. The default matches its own.
+RANGE = os.environ.get("REVIEW_RANGE") or "origin/main...HEAD"
+
+LOGS = paths.logs(RANGE, REPO, create=True)
+QUESTIONS = LOGS["questions"]
+ANSWERS = LOGS["answers"]
+RESOLVED = LOGS["resolved"]
+MESSAGES = LOGS["messages"]
+PAGE = paths.page(RANGE, REPO)
+HEARTBEAT = paths.review_dir(RANGE, REPO) / "watcher.alive"
 # watch.py refreshes the heartbeat every second, so a few missed ticks still read as
 # attached while a stopped watcher goes stale before the page next polls.
 WATCHER_STALE_AFTER = 10
 MAX_BODY = 64 * 1024
-REPO = paths.repo_root()
-# review.py passes the range it served. The default matches its own.
-RANGE = os.environ.get("REVIEW_RANGE") or "origin/main...HEAD"
 
 FIXUP_PREFIXES = ("fixup!", "squash!", "amend!")
 
@@ -141,12 +144,13 @@ def read_jsonl(path):
     return rows
 
 
-class Handler(http.server.SimpleHTTPRequestHandler):
-    def __init__(self, *args, **kwargs):
-        # The review's own directory, not the store. The store holds the threads for
-        # every review of this repo, and serving it put them all on the port: a GET of
-        # /questions.jsonl returned every question ever asked in this checkout.
-        super().__init__(*args, directory=str(paths.review_dir(RANGE, REPO, create=True)), **kwargs)
+class Handler(http.server.BaseHTTPRequestHandler):
+    """Serves one page and six endpoints, and nothing off the disk.
+
+    It used to serve a directory, which meant whatever was in that directory was on the
+    port: with the threads beside the page, a GET of /questions.jsonl returned them. The
+    page loads nothing but itself, so there is no directory to serve.
+    """
 
     def log_message(self, fmt, *args):
         # The page polls /thread every few seconds; logging it buries everything else.
@@ -204,7 +208,19 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                 "revision": revision(),
                 "watcher": watcher_alive(),
             })
-        return super().do_GET()
+
+        if self.path.split("?")[0] in ("/", "/index.html"):
+            if not PAGE.exists():
+                return self._json({"error": "no page built for this range yet"}, 404)
+            body = PAGE.read_bytes()
+            self.send_response(200)
+            self.send_header("Content-Type", "text/html; charset=utf-8")
+            self.send_header("Content-Length", str(len(body)))
+            self.send_header("Cache-Control", "no-store")
+            self.end_headers()
+            return self.wfile.write(body)
+
+        return self._json({"error": "not found"}, 404)
 
     def _body(self):
         length = int(self.headers.get("Content-Length") or 0)

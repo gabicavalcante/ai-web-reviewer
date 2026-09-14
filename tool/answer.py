@@ -21,6 +21,9 @@ in, so the thread reads as asked -> answered -> changed.
 
 --long allows an answer past the length ceiling, for the few that need it.
 
+--range names the review the thread is in. Without it the id is looked for across
+the reviews in this checkout.
+
 Reads the body from stdin, so it can be long and contain any quoting.
 """
 import json
@@ -36,8 +39,28 @@ import paths  # noqa: E402
 
 REPO = paths.repo_root()
 STATE = paths.state_dir()
-QUESTIONS = STATE / "questions.jsonl"
-MESSAGES = STATE / "messages.jsonl"
+
+
+def review_of(thread_id, rng=None):
+    """The review a thread belongs to, as its directory.
+
+    A range can be passed, and the session that opened the review knows it. Without one
+    the id is looked for across the reviews in this checkout, because the alternative is
+    an answer that goes nowhere when a flag is forgotten. Ids are random, so a search
+    finds at most one.
+    """
+    if rng:
+        return paths.review_dir(rng, REPO, create=True)
+    folders = sorted(p for p in STATE.iterdir()
+                     if p.is_dir() and not p.name.startswith("archived-"))
+    for folder in folders:
+        questions = folder / "questions.jsonl"
+        if questions.exists() and f'"{thread_id}"' in questions.read_text():
+            return folder
+    sys.exit(
+        f"no review in this checkout has a thread {thread_id}.\n"
+        + ("reviews here:\n  " + "\n  ".join(p.name for p in folders) if folders
+           else "there are no reviews here yet."))
 
 # Long enough for a proposal with four parts, a quoted replacement sentence and a closing
 # question, measured from one that did that well. Short enough to refuse the version of
@@ -49,7 +72,7 @@ MESSAGES = STATE / "messages.jsonl"
 ANSWER_MAX = 1200
 
 
-def known_ids():
+def known_ids(QUESTIONS):
     if not QUESTIONS.exists():
         return set()
     ids = set()
@@ -80,6 +103,11 @@ def main():
     args = sys.argv[1:]
     allow_long = "--long" in args
     args = [a for a in args if a != "--long"]
+    rng = None
+    if "--range" in args:
+        at = args.index("--range")
+        rng = args[at + 1]
+        args = args[:at] + args[at + 2:]
     kind = "answer"
     extra = {}
     if args and args[0] == "--ask":
@@ -95,8 +123,10 @@ def main():
     if len(args) != 1:
         sys.exit(__doc__)
     question_id = args[0]
-    if question_id not in known_ids():
-        sys.exit(f"no question with id {question_id}")
+    where = review_of(question_id, rng)
+    questions, messages = where / "questions.jsonl", where / "messages.jsonl"
+    if question_id not in known_ids(questions):
+        sys.exit(f"no question with id {question_id} in {where.name}")
 
     text = sys.stdin.read().strip()
     if not text:
@@ -116,7 +146,7 @@ def main():
         "at": time.strftime("%Y-%m-%d %H:%M:%S"),
         **extra,
     }
-    with MESSAGES.open("a") as handle:
+    with messages.open("a") as handle:
         handle.write(json.dumps(row) + "\n")
     print(f"{kind} in thread {question_id} ({len(text)} chars)")
 

@@ -49,41 +49,19 @@ The page shows the pulsing "waiting for an answer" only when that is fresh; othe
 says no session is attached. Judge the heartbeat by mtime, not existence: `kill -9` leaves
 the file behind.
 
-## The store is keyed by repo, so a thread says which branch it came from
+## One repo, several reviews, and nothing shared between them
 
-Every review of a checkout appends to the same four logs, because `state_dir()` keys on
-the repo path. Without something on the row saying where it came from, a thread from an
-earlier review of another branch is indistinguishable from one whose commit was rebased
-away from this one, and both land in the orphan section.
+A checkout holds one store, and a store holds a folder per review. Everything a review has
+is in its folder: the page, the narrative, and the threads asked while reading it. Nothing
+at the top of the store is read by a page.
 
-`/ask` stamps `branch` from git at the moment the question is asked, not from the range
-the server started with, because the branch changes under a running server. The page then
-splits orphans in two: rebased away from this review, and a collapsed group from other
-reviews. The status line counts only this review, or it reports questions asked on another
-branch as questions asked here.
+That was not always so. The threads were shared by the whole checkout and each row carried
+a `branch` so the page could tell its own from another review's. The branch is still
+recorded, because it says where a question was asked, but nothing routes on it: the folder
+answers that now, and a branch can change under a running server while the review does not.
 
-Two places have to agree on what "no branch" means. A detached HEAD gives `HEAD` from
-`rev-parse --abbrev-ref`, and both `server.py` and `build_data.py` turn that into `""`. If
-one of them kept the literal string, the page would compare `HEAD` against real branch
-names and file every orphan under another review.
-
-Renaming a branch strands its threads under the old name. There is no fix for that in this
-design, and `review.py archive` is the way out.
-
-## One repo can hold two reviews, and they must not share a file
-
-The state directory is keyed by repo, so reviewing two branches of one checkout puts both
-in it. Anything named for the directory rather than the range is then shared by two
-reviews that disagree.
-
-It happened twice. A single `index.html` meant each server reported the other's build as
-stale, and clicking Rebuild overwrote the other page, so two open tabs took turns
-demanding a rebuild. A single `narrative.json` put one review's title and stage strip on
-the other's page, which built cleanly and read as though it were right.
-
-The page and the narrative are both named from a hash of the range now, and the server
-resolves `/` to its own range's page rather than to whatever was written last. Anything
-else added beside them needs the same treatment.
+A store written before the change has its logs at the top, where no page will find them.
+`SKILL.md` says how to move them.
 
 ## A range is not an identifier until HEAD is resolved
 
@@ -98,14 +76,24 @@ commit lands, and a key that changes on every commit is no key.
 Resolve once, when the review starts, and pass the result down. Resolving again later
 follows a branch switch, and a server that re-resolves serves a directory nobody built.
 
-## The server's root is the review, not the store
+## The server serves no directory at all
 
-`SimpleHTTPRequestHandler` serves whatever directory it is given. Rooted at the store, a
-GET of `/questions.jsonl` returned every question ever asked in that checkout, from every
-branch, over the port. It is rooted at the review's own directory now, which holds the
-page and its narrative and nothing else.
+`SimpleHTTPRequestHandler` serves whatever directory it is given, and whatever lands in
+that directory goes with it. Rooted at the store, a GET of `/questions.jsonl` returned
+every question ever asked in the checkout. Rooted at the review's folder, it would do the
+same the moment the threads moved in beside the page.
 
-Anything added beside the page is served. Anything added beside the threads is not.
+The page loads nothing but itself: its only requests are to six endpoints, and the fonts
+come from Google. So there is no directory to serve. `/` returns `index.html` from disk,
+everything else is a 404, and no file put in a review folder later can be fetched.
+
+## A watcher has to be told which review it is watching
+
+It is started beside the server, not by it, so it inherits no environment. Its logs live
+in the review's folder, and a review is a range, so `watch.py` takes `--range` and is
+given the same string the server was. With one review in the checkout there is nothing to
+choose between and the flag can be left off. With two it refuses rather than guessing,
+because guessing means watching a log nobody is writing to.
 
 ## Theme colors come from tokens, never from a `[data-theme]` guard
 

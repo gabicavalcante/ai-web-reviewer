@@ -26,9 +26,13 @@ It prints the URL, picking the next free port when 8777 is taken. Run it with
 will ever reach you:
 
 ```
-Monitor(command: "python3 $HOME/.claude/skills/web-reviewer/tool/watch.py",
+Monitor(command: "python3 $HOME/.claude/skills/web-reviewer/tool/watch.py --range <range>",
         description: "questions on the diff review page", persistent: true)
 ```
+
+Pass the range you served, the same string. A watcher is started beside the server rather
+than by it, so it inherits nothing, and a review is a range. With one review in the
+checkout the flag can be left off; with two it refuses rather than guessing.
 
 Each new question or reply arrives as an event carrying the thread id, commit, file and
 line. Reply into the thread:
@@ -148,6 +152,17 @@ repo path, outside the repo so questions never land in git. They survive rebuild
 restarts and rebases. The rendered page sits in the same directory, named for its range, so two reviews of one repo do not overwrite each other.
 
 Rebuild after new commits: `python3 $TOOL/review.py build <range>`, then reload.
+
+## Threads from an older layout
+
+Threads used to live at the top of the checkout's state directory, shared by every review
+of that repo. They live in the review's own folder now, so a store written before that has
+questions nobody's page will load.
+
+Asked to move them, match each thread's `branch` to the review whose range ends at that
+branch. With one review folder in the store, everything goes there. If a thread matches
+none, or more than one, ask rather than guess. Move, never delete: getting it wrong should
+cost another `mv`.
 
 ## When the review is over
 
