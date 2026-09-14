@@ -78,7 +78,7 @@ def build(rng, narrative):
     page = template.replace("/*__DATA__*/", payload)
     split = page.index('<div class="shell">')
     out = SKELETON + page[:split] + "</head>\n<body>\n" + page[split:] + "\n</body>\n</html>\n"
-    target = paths.page(rng, repo)
+    target = paths.page(rng, repo, create=True)
     target.write_text(out)
     print(f"built {target} ({len(out):,} bytes)")
     smoke(target)
@@ -137,7 +137,7 @@ def narrate(rng, force):
     back to git, so a half-filled scaffold renders as the plain page rather than as blanks.
     """
     repo = paths.repo_root()
-    target = paths.narrative(rng, repo)
+    target = paths.narrative(rng, repo, create=True)
     if target.exists() and not force:
         raise SystemExit(
             f"{target} already exists.\n"

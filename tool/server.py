@@ -146,7 +146,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         # The review's own directory, not the store. The store holds the threads for
         # every review of this repo, and serving it put them all on the port: a GET of
         # /questions.jsonl returned every question ever asked in this checkout.
-        super().__init__(*args, directory=str(paths.review_dir(RANGE, REPO)), **kwargs)
+        super().__init__(*args, directory=str(paths.review_dir(RANGE, REPO, create=True)), **kwargs)
 
     def log_message(self, fmt, *args):
         # The page polls /thread every few seconds; logging it buries everything else.

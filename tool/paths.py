@@ -37,7 +37,7 @@ def state_dir(repo=None):
     return target
 
 
-def review_dir(rng, repo=None):
+def review_dir(rng, repo=None, create=False):
     """One directory per review, inside the repo's state directory.
 
     Two ranges of one repo are two reviews, and they cannot share a page: each server
@@ -51,6 +51,10 @@ def review_dir(rng, repo=None):
 
     The threads stay one level up. They are keyed by repo, and a thread outlives the
     range it was asked in.
+
+    Asking for the path does not create it. Only the two callers that write a file pass
+    create, because a function that makes a directory when asked where something would go
+    leaves one behind every time anything wonders.
     """
     # Trimmed from the front, because a range ends at the branch and that is the half
     # worth reading. "long-sha..ci/check-unsafe-migrations" cut to its first 48 characters
@@ -59,18 +63,19 @@ def review_dir(rng, repo=None):
     slug = (slug[-48:].strip("-") if len(slug) > 48 else slug) or "review"
     digest = hashlib.sha256(rng.encode()).hexdigest()[:8]
     target = state_dir(repo) / f"{slug}-{digest}"
-    target.mkdir(parents=True, exist_ok=True)
+    if create:
+        target.mkdir(parents=True, exist_ok=True)
     return target
 
 
-def page(rng, repo=None):
+def page(rng, repo=None, create=False):
     """The built page for one range."""
-    return review_dir(rng, repo) / "index.html"
+    return review_dir(rng, repo, create) / "index.html"
 
 
-def narrative(rng, repo=None):
+def narrative(rng, repo=None, create=False):
     """The narrative for one range, next to the page it renders."""
-    return review_dir(rng, repo) / "narrative.json"
+    return review_dir(rng, repo, create) / "narrative.json"
 
 
 def logs(repo=None):
