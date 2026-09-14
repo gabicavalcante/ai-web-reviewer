@@ -5,6 +5,7 @@ hardcoding a path.
 """
 import hashlib
 import os
+import re
 import pathlib
 import subprocess
 
@@ -36,21 +37,40 @@ def state_dir(repo=None):
     return target
 
 
-def page(rng, repo=None):
-    """The built page for one range, inside that repo's state directory.
+def review_dir(rng, repo=None):
+    """One directory per review, inside the repo's state directory.
 
-    Named from the range rather than fixed, because the state directory is keyed by repo
-    and two ranges of one repo are two reviews. Sharing a single index.html made each
-    server report the other's build as stale, and each Rebuild overwrote the other page.
+    Two ranges of one repo are two reviews, and they cannot share a page: each server
+    reported the other's build as stale, and each Rebuild overwrote the other page.
+
+    A directory rather than a hashed filename, so the files inside keep plain names. A
+    narrative is meant to be opened and edited by hand, and `narrative-50fe69b9.json`
+    beside `narrative-9ce5ede9.json` does not say which review it belongs to. The name
+    carries the range for a human reading `ls`, plus a hash of it so two ranges that
+    sanitise to the same text do not collide.
+
+    The threads stay one level up. They are keyed by repo, and a thread outlives the
+    range it was asked in.
     """
+    # Trimmed from the front, because a range ends at the branch and that is the half
+    # worth reading. "long-sha..ci/check-unsafe-migrations" cut to its first 48 characters
+    # is all sha and no branch.
+    slug = re.sub(r"[^A-Za-z0-9]+", "-", rng).strip("-").lower()
+    slug = (slug[-48:].strip("-") if len(slug) > 48 else slug) or "review"
     digest = hashlib.sha256(rng.encode()).hexdigest()[:8]
-    return state_dir(repo) / f"index-{digest}.html"
+    target = state_dir(repo) / f"{slug}-{digest}"
+    target.mkdir(parents=True, exist_ok=True)
+    return target
+
+
+def page(rng, repo=None):
+    """The built page for one range."""
+    return review_dir(rng, repo) / "index.html"
 
 
 def narrative(rng, repo=None):
-    """The narrative for one range. Same reason as page(): one repo, two reviews."""
-    digest = hashlib.sha256(rng.encode()).hexdigest()[:8]
-    return state_dir(repo) / f"narrative-{digest}.json"
+    """The narrative for one range, next to the page it renders."""
+    return review_dir(rng, repo) / "narrative.json"
 
 
 def logs(repo=None):

@@ -85,6 +85,15 @@ The page and the narrative are both named from a hash of the range now, and the 
 resolves `/` to its own range's page rather than to whatever was written last. Anything
 else added beside them needs the same treatment.
 
+## The server's root is the review, not the store
+
+`SimpleHTTPRequestHandler` serves whatever directory it is given. Rooted at the store, a
+GET of `/questions.jsonl` returned every question ever asked in that checkout, from every
+branch, over the port. It is rooted at the review's own directory now, which holds the
+page and its narrative and nothing else.
+
+Anything added beside the page is served. Anything added beside the threads is not.
+
 ## Theme colors come from tokens, never from a `[data-theme]` guard
 
 `:root:not([data-theme="light"]) .btn { color: var(--ground) }` looks like a dark-mode

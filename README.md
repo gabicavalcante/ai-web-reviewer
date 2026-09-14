@@ -176,19 +176,46 @@ absolute path, so two checkouts of the same project never collide:
 
 `python3 tool/review.py where` prints it.
 
+The threads sit at the top, because they belong to the repo. A thread outlives the range
+it was asked in, and one question can matter to two reviews.
+
 | File | What it holds |
 | --- | --- |
 | `questions.jsonl` | One row per thread: the question, the branch it was asked on, and the commit, file, side and line it is anchored to |
 | `messages.jsonl` | Every turn after the opening question, with who wrote it and what kind it is: an answer, a question back to the reviewer, a change that was made, or the reviewer's yes or no to one |
 | `resolved.jsonl` | One row each time a thread is resolved or reopened |
 | `answers.jsonl` | An older reply format. Nothing writes it now, and it is still read, so old reviews still render |
-| `index-<hash>.html` | The rendered page for one range, rewritten by every build |
-| `narrative-<hash>.json` | The narrative for one range, if it has one. A plain `narrative.json` still works for a repo with a single review |
 | `watcher.alive` | A heartbeat, rewritten every second while a watcher runs, and removed when it stops. The page reads it to know whether anyone is listening |
 | `archived-<stamp>/` | Logs put aside by `review.py archive` |
 
-Anything else in the directory was put there by whoever started the server, not by the
-tool. It writes nothing outside this list.
+Each review then gets a directory of its own, named for its range:
+
+```
+api-bbfa229b/
+  questions.jsonl
+  messages.jsonl
+  origin-main-head-50fe69b9/
+    index.html
+    narrative.json
+  7568e62a7547c0295d1cb-ci-check-unsafe-migrations-9ce5ede9/
+    index.html
+    narrative.json
+```
+
+Two ranges of one repo are two reviews and cannot share a page: each server would report
+the other's build as stale, and each Rebuild would overwrite the other. The names keep
+plain filenames inside, so the narrative you edit by hand is `narrative.json` in a folder
+that says which review it belongs to. The directory name carries the range for a human
+reading `ls`, trimmed from the front because a range ends at the branch, plus a hash of it
+so two ranges cannot collide.
+
+A `narrative.json` at the top still works for a repo with a single review.
+
+The server serves one of those directories, not the store, so the threads are not
+reachable as files over the port.
+
+Anything else in the store was put there by whoever started the server, not by the tool.
+It writes nothing outside this list.
 
 The four logs are append-only, and a question is flushed and `fsync`ed before the browser
 is told it was accepted. Nothing rewrites a row. Resolving a thread appends a row saying
