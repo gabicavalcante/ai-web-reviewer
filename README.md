@@ -241,8 +241,9 @@ replies, one of twelve threads. The directories are what accumulate, one per rep
 including repos you have since moved or deleted. Moving a repo changes the hash, so the
 next run starts empty while the old threads stay under the old name.
 
-The rendered pages are the part you can lose safely, since `review.py build` regenerates
-one from git. The logs are the only thing here that cannot be reconstructed.
+`index.html` is the only file here that can be lost safely, because `review.py build`
+regenerates it from git and the narrative. Everything else was written by a person: the
+threads, and the narrative, which is prose about a branch and comes back from nowhere.
 
 Ask Claude Code to `archive the threads in this repo`, or run `review.py archive`. It
 moves the current logs into a timestamped subfolder, which is how you empty a checkout
