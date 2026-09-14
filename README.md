@@ -7,11 +7,13 @@ Built as a [Claude Code](https://claude.com/claude-code) skill. The page is plai
 served from a local Python process; there is no build step and no dependencies outside
 the standard library.
 
-**[Install](#install)** · **[What to say](#what-to-say)** · **[Two ways to read a
-branch](#two-ways-to-read-a-branch)** · **[Controls](#controls)** · **[Where state
-lives](#where-state-lives-and-when-it-is-cleaned)** · **[The narrative
-layer](#the-narrative-layer)** · **[Without Claude
-Code](#use-it-without-claude-code)**
+- **[Install](#install)** 
+- **[What to say](#what-to-say)** 
+- **[Two ways to read a branch](#two-ways-to-read-a-branch)** 
+- **[Controls](#controls)** 
+- **[Where state lives](#where-state-lives-and-when-it-is-cleaned)** 
+- **[The narrative layer](#the-narrative-layer)** 
+- **[Without Claude Code](#use-it-without-claude-code)**
 
 ## Why
 
@@ -69,8 +71,20 @@ a message.
 
 ## Install
 
+As a plugin:
+
+```
+/plugin marketplace add gabicavalcante/ai-web-reviewer
+/plugin install ai-web-reviewer@ai-web-reviewer
+```
+
+The plugin is `ai-web-reviewer` and the skill inside it is `web-reviewer`, which is the
+name you will see and invoke.
+
+Or as a checkout you can edit, which is the same files:
+
 ```bash
-git clone https://github.com/<you>/web-reviewer ~/development/personal/web-reviewer
+git clone https://github.com/gabicavalcante/ai-web-reviewer ~/development/personal/web-reviewer
 ln -s ~/development/personal/web-reviewer ~/.claude/skills/web-reviewer
 ```
 
@@ -365,6 +379,7 @@ the work any better than a short one, and may recall it worse.
 | Path | What it is |
 | --- | --- |
 | `SKILL.md` | Instructions for the agent |
+| `.claude-plugin/` | The plugin and marketplace manifests |
 | `reference/narrative.md` | The optional editorial layer |
 | `reference/voice.md` | How the page's own copy is written |
 | `reference/gotchas.md` | Operational traps worth not rediscovering |
@@ -377,6 +392,19 @@ the work any better than a short one, and may recall it worse.
 | `tool/watch.py` | Emit new questions and replies as events |
 | `tool/smoke.js` | Run the built page's script, so a page that throws is not served |
 | `tool/narrative.example.json` | A narrative to copy from |
+
+## What a version promises
+
+Three surfaces are covered by the version in
+[`.claude-plugin/plugin.json`](.claude-plugin/plugin.json), and will not change under you
+without a major bump:
+
+- The prompts in [What to say](#what-to-say).
+- The narrative file: its keys, its marks, and its length limits.
+- The command line of `review.py`, `answer.py` and `watch.py`.
+
+The state directory's layout is not one of them. It is internal, and a page rebuilds from
+git. [CHANGELOG.md](CHANGELOG.md) records what moved and when.
 
 ## Scope
 

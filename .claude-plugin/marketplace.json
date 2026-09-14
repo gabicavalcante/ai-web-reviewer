@@ -1,0 +1,14 @@
+{
+  "name": "ai-web-reviewer",
+  "description": "The web-reviewer skill: a branch's diff as a local page with inline question threads.",
+  "owner": {
+    "name": "Gabriela Cavalcante"
+  },
+  "plugins": [
+    {
+      "name": "ai-web-reviewer",
+      "source": "./",
+      "description": "Read a branch's diff in a browser and ask questions about individual lines, with the answers arriving beside the code they are about."
+    }
+  ]
+}
