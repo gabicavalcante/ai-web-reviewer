@@ -325,6 +325,11 @@ class Handler(http.server.BaseHTTPRequestHandler):
         if pushed and not force:
             return (f"{pushed} commit(s) in this range are already pushed. Squashing "
                     "rewrites them, so the branch would need a force push.", 409, True)
+        # The caller needs the count it just walked, so it is handed back rather than
+        # counted again. Extracting the guards and leaving "before = len(subjects)"
+        # behind them threw a NameError after the rebase had already run: history
+        # rewritten, page never rebuilt, reviewer told the squash failed.
+        self._squash_subjects = subjects
         return None
 
     def _squash(self):
@@ -336,6 +341,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
         """
         asked = self._body() or {}
         base = review_base()
+        self._squash_subjects = []
         blocked = self._squash_block(force=bool(asked.get("force")))
         if blocked:
             message, status, needs_force = blocked
@@ -364,7 +370,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 "backup": backup,
             }, 409)
 
-        before = len(subjects)
+        before = len(self._squash_subjects)
         after = len([s for s in git("log", "--format=%s", f"{base}..HEAD").stdout.split("\n") if s])
         built = subprocess.run([sys.executable, str(HERE / "review.py"), "build", "--", RANGE],
                                capture_output=True, text=True, cwd=str(REPO))
