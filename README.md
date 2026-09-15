@@ -21,7 +21,8 @@ Scrolling a large diff in the terminal, you lose your place. And when you ask so
 about a diff, the question usually travels without the one detail it needs most: which
 line it is about. This tool attaches the question to the line.
 
-![alt text](image.png)
+![The commits rail on the left, a diff in the middle, and a thread on the right where a
+question about line 161 has been answered beside the code it is about.](docs/screenshot.png)
 
 ## What it does
 
