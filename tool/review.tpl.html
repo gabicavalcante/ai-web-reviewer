@@ -188,6 +188,7 @@
   .cb-meta .minus { color: var(--del); }
   .cb-meta .done { color: var(--accent); }
   .cb-meta .survive { color: var(--ink-faint); }
+  .cb-meta .fixups { color: var(--accent); }
   .cb-tag { font-family: var(--mono); font-size: 10px; letter-spacing: .06em; text-transform: uppercase; padding: 1px 5px; border-radius: 2px; border: 1px solid currentColor; }
   .cb-tag.start { color: var(--accent); }
   .cb-tag.care { color: var(--del); }
@@ -678,6 +679,15 @@
        under an auto-skim, which has already said the same thing in words. */
     if (c.added > 0 && c.alive * 2 < c.added && !c.autoSkim) {
       meta.appendChild(el("span", "survive", c.alive + " of " + c.added + " survive"));
+    }
+    /* Folding a fixup into its target is what keeps the rail as long as the change.
+       It also hid the only reason the squash bar appears: the rail showed two ordinary
+       commits, the bar offered to squash two fixups, and the two did not look related.
+       The count goes where the reader is deciding what to open. */
+    const folded = (c.followups || []).length;
+    if (folded) {
+      meta.appendChild(el("span", "fixups",
+        folded === 1 ? "1 fixup inside" : folded + " fixups inside"));
     }
     const doneTag = el("span", "done", "reviewed");
     doneTag.hidden = !reviewed.has(c.short);

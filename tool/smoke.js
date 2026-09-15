@@ -111,6 +111,7 @@ const drew = {
   figures: count("figures"),
   pane: count("pane"),
   survive: deep("commits", "survive"),
+  fixups: deep("commits", "fixups"),
 };
 if (!drew.commits) {
   console.error("page script ran but drew no commits");
@@ -120,5 +121,6 @@ console.log(
   `smoke ok: ${drew.commits} commits, ${drew.pane} pane sections, ` +
   `${drew.stages} stages, ${drew.notes} notes, ${drew.figures} figures` +
   (drew.survive ? `, ${drew.survive} commit${drew.survive === 1 ? "" : "s"} mostly rewritten` : "") +
+  (drew.fixups ? `, ${drew.fixups} commit${drew.fixups === 1 ? "" : "s"} with fixups folded in` : "") +
   (stagesPressed ? `, ${stagesPressed} files-rail views` : "")
 );
