@@ -86,6 +86,9 @@
   .stale .btn { margin-left: auto; flex: none; }
   /* The end of a review, not a step in it: shown only once every commit is ticked. */
   .stale.squash { border-color: var(--add); background: var(--add-bg); }
+  /* A refusal in the same green bar as the offer read as the button doing nothing. */
+  .stale.squash.blocked { border-color: var(--del); background: var(--del-bg); }
+  .stale .btn[disabled] { opacity: .5; cursor: not-allowed; }
 
   /* ---------- header ---------- */
   .masthead { display: flex; flex-direction: column; gap: 14px; padding-bottom: 26px; border-bottom: 1px solid var(--line); }
@@ -699,12 +702,24 @@
 
   /* Squashing is what you do after reading everything, so the bar waits until every
      commit is ticked. Before that it would be one more thing to ignore. */
+  /* Why the server would refuse a squash right now, from the poll. null until it has
+     answered once, so the button is not disabled on a guess. */
+  let SQUASH_BLOCK = null;
+
   function refreshSquash(reviewedCount) {
     const bar = document.getElementById("squash");
+    const button = document.getElementById("squashRun");
     if (!FIXUP_COUNT || reviewedCount < DATA.commits.length) { bar.hidden = true; return; }
-    document.getElementById("squashText").textContent =
-      "Every commit reviewed. " + FIXUP_COUNT + (FIXUP_COUNT === 1 ? " fixup" : " fixups")
-      + " can be squashed into " + FIXUP_TARGETS + (FIXUP_TARGETS === 1 ? " commit." : " commits.");
+    if (button.dataset.done === "true") { bar.hidden = false; return; }
+    /* The reason comes from the same guards the press runs, so the button is unavailable
+       for a stated reason rather than available and then refusing. Being told after the
+       click that the working tree is dirty reads as a broken button. */
+    bar.classList.toggle("blocked", !!SQUASH_BLOCK);
+    button.disabled = !!SQUASH_BLOCK;
+    document.getElementById("squashText").textContent = SQUASH_BLOCK
+      ? "Cannot squash yet: " + SQUASH_BLOCK
+      : "Every commit reviewed. " + FIXUP_COUNT + (FIXUP_COUNT === 1 ? " fixup" : " fixups")
+        + " can be squashed into " + FIXUP_TARGETS + (FIXUP_TARGETS === 1 ? " commit." : " commits.");
     bar.hidden = false;
   }
 
@@ -1675,10 +1690,18 @@
 
   async function refresh() {
     try {
-      const res = await fetch("/thread", { cache: "no-store" });
+      // The squash guards cost a git status, so they are asked for only while the bar
+      // that needs them is on screen.
+      const wantSquash = !document.getElementById("squash").hidden;
+      const res = await fetch("/thread" + (wantSquash ? "?squash=1" : ""), { cache: "no-store" });
       if (!res.ok) throw new Error("HTTP " + res.status);
       const body = await res.json();
       setStale(body.revision);
+      if (body.squash) {
+        const was = SQUASH_BLOCK;
+        SQUASH_BLOCK = body.squash.ready ? null : (body.squash.why || "the server refused");
+        if (SQUASH_BLOCK !== was) refreshProgress();
+      }
       const watcherWas = WATCHER_LIVE;
       WATCHER_LIVE = body.watcher !== false;
       const next = JSON.stringify(body.threads);
@@ -1784,6 +1807,7 @@
       delete button.dataset.done;
       // Next to the button as well as in the status strip: a refusal that only lands in
       // the strip reads as the button doing nothing at all.
+      document.getElementById("squash").classList.add("blocked");
       document.getElementById("squashText").textContent = "Could not squash: " + err.message;
       setStatus(false, "could not squash: " + err.message);
     }

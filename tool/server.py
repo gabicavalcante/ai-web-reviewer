@@ -203,11 +203,19 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 }
                 for question in read_jsonl(QUESTIONS)
             ]
-            return self._json({
+            payload = {
                 "threads": threads,
                 "revision": revision(),
                 "watcher": watcher_alive(),
-            })
+            }
+            # Only when asked. The page asks while the squash bar is on screen, which is
+            # after every commit is ticked, so a git status does not run every four
+            # seconds in every tab for a button nobody can see yet.
+            if "squash=1" in self.path:
+                blocked = self._squash_block()
+                payload["squash"] = ({"ready": True} if not blocked
+                                     else {"ready": False, "why": blocked[0]})
+            return self._json(payload)
 
         if self.path.split("?")[0] in ("/", "/index.html"):
             if not PAGE.exists():
@@ -280,6 +288,45 @@ class Handler(http.server.BaseHTTPRequestHandler):
         return self._json({"ok": True, "id": row["id"]})
 
 
+    def _squash_block(self, force=False):
+        """Why a squash cannot run now, or None.
+
+        Split out of the press so the page can ask the same question before offering the
+        button. A refusal that only arrives after the click reads as the button being
+        broken, which is what it looked like: the message landed in a bar styled for
+        success and changed nothing else about the page.
+
+        Returns (message, http status, needs_force).
+        """
+        base = review_base()
+        if not base:
+            return (f"no base commit in the range {RANGE}", 400, False)
+
+        # --untracked-files=no because a rebase only refuses over tracked changes. Counting
+        # untracked files here blocked the button on a scratch directory beside the post
+        # being reviewed, which has nothing to do with the commits being squashed.
+        dirty = [line for line in
+                 git("status", "--porcelain", "--untracked-files=no").stdout.split("\n") if line]
+        if dirty:
+            return (f"{len(dirty)} tracked file(s) have uncommitted changes. Commit or "
+                    "stash them first.", 409, False)
+
+        git_dir = pathlib.Path(git("rev-parse", "--git-dir").stdout.strip() or ".git")
+        if not git_dir.is_absolute():
+            git_dir = REPO / git_dir
+        if (git_dir / "rebase-merge").exists() or (git_dir / "rebase-apply").exists():
+            return ("a rebase is already in progress here", 409, False)
+
+        subjects = [s for s in git("log", "--format=%s", f"{base}..HEAD").stdout.split("\n") if s]
+        if not any(s.startswith(FIXUP_PREFIXES) for s in subjects):
+            return ("nothing to squash: no fixups in this range", 400, False)
+
+        pushed = pushed_in_range(base)
+        if pushed and not force:
+            return (f"{pushed} commit(s) in this range are already pushed. Squashing "
+                    "rewrites them, so the branch would need a force push.", 409, True)
+        return None
+
     def _squash(self):
         """Run git rebase --autosquash over the reviewed range.
 
@@ -289,32 +336,13 @@ class Handler(http.server.BaseHTTPRequestHandler):
         """
         asked = self._body() or {}
         base = review_base()
-        if not base:
-            return self._json({"error": f"no base commit in the range {RANGE}"}, 400)
-
-        # --untracked-files=no because a rebase only refuses over tracked changes. Counting
-        # untracked files here blocked the button on a scratch directory beside the post
-        # being reviewed, which has nothing to do with the commits being squashed.
-        if git("status", "--porcelain", "--untracked-files=no").stdout.strip():
-            return self._json({"error": "the working tree has uncommitted changes: commit or stash them first"}, 409)
-
-        git_dir = pathlib.Path(git("rev-parse", "--git-dir").stdout.strip() or ".git")
-        if not git_dir.is_absolute():
-            git_dir = REPO / git_dir
-        if (git_dir / "rebase-merge").exists() or (git_dir / "rebase-apply").exists():
-            return self._json({"error": "a rebase is already in progress here"}, 409)
-
-        subjects = [s for s in git("log", "--format=%s", f"{base}..HEAD").stdout.split("\n") if s]
-        if not any(s.startswith(FIXUP_PREFIXES) for s in subjects):
-            return self._json({"error": "nothing to squash: no fixups in this range"}, 400)
-
-        pushed = pushed_in_range(base)
-        if pushed and not asked.get("force"):
-            return self._json({
-                "error": f"{pushed} commit(s) in this range are already pushed. Squashing "
-                         "rewrites them, so the branch would need a force push.",
-                "needsForce": True,
-            }, 409)
+        blocked = self._squash_block(force=bool(asked.get("force")))
+        if blocked:
+            message, status, needs_force = blocked
+            payload = {"error": message}
+            if needs_force:
+                payload["needsForce"] = True
+            return self._json(payload, status)
 
         head = git("rev-parse", "HEAD").stdout.strip()
         backup = "pre-squash/" + time.strftime("%Y%m%d-%H%M%S")
