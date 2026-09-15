@@ -104,34 +104,37 @@ def smoke(page):
 LOGS = ("questions.jsonl", "messages.jsonl", "answers.jsonl", "resolved.jsonl")
 
 
+def thread_count(folder):
+    log = folder / "questions.jsonl"
+    return len(log.read_text().splitlines()) if log.exists() else 0
+
+
 def announce_siblings(rng):
-    """Name the other reviews in this checkout when a new one starts empty.
+    """Name the other reviews in this checkout when this one has no threads.
 
     A range is a review, so reading the same branch against a different base starts a
     review with none of the earlier questions in it. That is right, and it was invisible:
     a session that reopened a branch as "origin/main...main" instead of "e8e4bb6..main"
-    built a page with no threads on it, and nothing said the thirteen threads were one
-    folder over.
+    got a page with no threads on it, and nothing said the thirteen threads were one
+    folder over. The two ranges held the same two commits.
 
-    Only when this review is new and another one holds questions. A checkout where every
-    review is already known does not need the list every time the server starts.
+    Keyed on having no threads rather than on being new. The first version only spoke up
+    for a folder that did not exist yet, and the empty review was already on disk from the
+    session before, so it said nothing in the one case that had already gone wrong.
     """
     here = paths.review_dir(rng, create=False)
-    if here.is_dir():
+    if here.is_dir() and thread_count(here):
         return
-    others = []
-    for folder in sorted(paths.state_dir().iterdir()):
-        if not folder.is_dir() or folder.name.startswith("archived-"):
-            continue
-        log = folder / "questions.jsonl"
-        threads = len(log.read_text().splitlines()) if log.exists() else 0
-        if threads:
-            others.append((folder.name, threads))
+    others = [(folder.name, thread_count(folder))
+              for folder in sorted(paths.state_dir().iterdir())
+              if folder.is_dir() and folder != here
+              and not folder.name.startswith("archived-") and thread_count(folder)]
     if not others:
         return
-    print(f"{rng} is a new review, so it starts with no threads. This checkout also has:")
+    print(f"{rng} has no threads. This checkout also has:")
     for name, threads in others:
         print(f"  {name}  ({threads} thread(s))")
+    print("Ask to move them here if this is the same review under another range.")
 
 
 def archive(rng):

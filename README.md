@@ -21,6 +21,8 @@ Scrolling a large diff in the terminal, you lose your place. And when you ask so
 about a diff, the question usually travels without the one detail it needs most: which
 line it is about. This tool attaches the question to the line.
 
+![alt text](image.png)
+
 ## What it does
 
 - Renders a git range as a page: commits in a rail, diffs with line numbers, files
