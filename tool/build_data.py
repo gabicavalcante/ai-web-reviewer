@@ -174,10 +174,16 @@ def validate_read_marks(per_commit, commit_count, problems, warnings):
 def git_maybe(repo, *args):
     """git, returning None instead of exiting when the command fails.
 
-    Blame fails for good reasons: a file the branch deleted has no final content, and a
-    binary one has no lines. Neither is a build error.
+    Blame fails for good reasons: a file the branch deleted has no final content. That is
+    not a build error.
+
+    errors="replace" because blame on a binary file does not fail. It succeeds and prints
+    the bytes, and decoding them as UTF-8 threw, so a branch that touched a PNG could not
+    be built at all. Binary files are skipped before they get here, and this is the second
+    line: no git output should be able to stop a build by not being text.
     """
-    result = subprocess.run(["git", "-C", str(repo), *args], capture_output=True, text=True)
+    result = subprocess.run(["git", "-C", str(repo), *args],
+                            capture_output=True, text=True, errors="replace")
     return result.stdout if result.returncode == 0 else None
 
 
@@ -334,14 +340,22 @@ def final_diff(repo, rng, commits, narrative):
         return None
     tip = range_tip(rng)
 
-    stats = {}
+    # numstat writes "-" for both counts of a binary file, which is how git says the file
+    # has no lines. Blame does not say that: it prints the bytes and leaves the caller to
+    # find out. So the paths are collected here and never blamed.
+    stats, binary = {}, set()
     for row in git(repo, "diff", "--numstat", rng).strip().split("\n"):
         parts = row.split("\t")
-        if len(parts) == 3 and parts[0] != "-":
+        if len(parts) != 3:
+            continue
+        if parts[0] == "-":
+            binary.add(parts[2])
+        else:
             stats[parts[2]] = (int(parts[0]), int(parts[1]))
     for entry in files:
         add, dele = stats.get(entry["path"], (0, 0))
         entry["additions"], entry["deletions"] = add, dele
+        entry["binary"] = entry["path"] in binary
         entry["collapsed"] = entry["status"] == "deleted" and dele > COLLAPSE_DELETIONS_OVER
 
     # Which stages reach a file, and which commit belongs to which stage. A mark is a rail
@@ -405,7 +419,7 @@ def final_diff(repo, rng, commits, narrative):
         # Placing a file under the first stage to mention it put two thirds of this
         # branch under its first stage and left one stage with no files at all.
         weight, by_stage = {}, {}
-        if entry["status"] != "deleted":
+        if entry["status"] != "deleted" and not entry["binary"]:
             for sha, numbers in surviving_lines(repo, tip, entry["path"]).items():
                 alive_by_sha[sha] = alive_by_sha.get(sha, 0) + len(numbers)
                 where = stage_of.get(sha)
