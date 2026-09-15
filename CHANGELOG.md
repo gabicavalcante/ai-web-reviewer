@@ -2,6 +2,72 @@
 
 Dates are the day the change landed. Versions follow [semver](https://semver.org).
 
+## 1.1.0
+
+Upgrade if you are on 1.0.0. Questions asked on the page never reached Claude in that
+release, and the page could not tell you so.
+
+### The watcher was reading the wrong folder
+
+`review.py` resolves `HEAD` to the branch it names before keying a directory off it, and
+`watch.py` and `answer.py` did not. `SKILL.md` tells the session to pass the watcher "the
+range you served, the same string", and the default range is `origin/main...HEAD`. So the
+server wrote questions into `origin-main-<branch>-<hash>` and the watcher sat over
+`origin-main-head-<hash>`, a folder it had just created for itself.
+
+Both processes ran, both were right about their own state, and no question was ever
+delivered. The page reported no session attached, because it looks for the watcher's
+heartbeat in its own folder. Reproduced on a new repo with 1.0.0: first branch, first
+question, nothing.
+
+Nothing to do but upgrade. Any stray `*-head-*` folder in your state directory is an
+artifact of this and holds nothing.
+
+A script that joins a review now refuses when the folder is missing, listing the reviews
+that exist, instead of creating one. Only the server makes a review.
+
+### A branch that touched an image could not be built at all
+
+`git blame` on a binary file does not fail. It succeeds and prints the bytes, and decoding
+them as UTF-8 threw, so the build died on any range containing a PNG, a font or a PDF:
+
+```
+UnicodeDecodeError: 'utf-8' codec can't decode byte 0x89 in position 383
+```
+
+Binary files are now found from `git diff --numstat`, which writes `-` for both counts,
+and are never blamed.
+
+### The rail says how much of each commit is still in the branch
+
+The same `git blame` pass that orders the files tab now counts, per commit, how many of
+its lines survive to the tip of the range.
+
+- A commit with less than half left shows `12 of 77 survive` beside its diff numbers.
+- A commit with none left is marked `skim`. A commit your narrative already marked keeps
+  the mark you gave it.
+
+On a branch that was reworked in place this is most of the rail. One branch measured here
+has fifteen commits and ten of them no longer exist.
+
+### `care` is capped at five
+
+`care` warned past a third of the commits, which does not hold on a long branch: a third
+of forty is thirteen, and nobody keeps thirteen in mind. It now warns past a third **or**
+past five, whichever is fewer. Still a warning, so every existing narrative builds
+unchanged.
+
+### Also
+
+- A review with no stages gets the full width. The hidden stage rail left the grid, and
+  the file pane fell into the 340px column meant for it, so the diff rendered in a third
+  of the page with paths truncated.
+- `review.py serve` names the other reviews in the checkout when the one it is starting
+  has no threads. Reading one branch against two different bases is two reviews with
+  separate questions, which is correct and was invisible.
+- The README's densest passages are rewritten in plain English, and it now shows a
+  screenshot of the page.
+
 ## 1.0.0
 
 First release, and the first version anyone other than its two users can install.
