@@ -3,6 +3,7 @@
 Kept apart from the cases so the pure-function checks and the end-to-end ones can share a
 sandbox without one importing the other.
 """
+
 import contextlib
 import os
 import pathlib
@@ -60,9 +61,12 @@ def scratch_repo(where):
     Cheap enough to make per case that needs one, which keeps cases independent: a test
     that leaves state behind turns the next failure into a puzzle.
     """
+
     def run(*args):
-        return subprocess.run(["git", "-C", str(where), *args],
-                              capture_output=True, text=True, check=True)
+        return subprocess.run(
+            ["git", "-C", str(where), *args], capture_output=True, text=True, check=True
+        )
+
     run("init", "-q", "-b", "main")
     run("config", "user.email", "t@t")
     run("config", "user.name", "T")
@@ -73,15 +77,23 @@ def scratch_repo(where):
     return run
 
 
-
 def commit(short, subject, additions=0):
     """A rail entry shaped the way build_data builds one, empty marks included.
 
     The empty strings matter: a helper that left them out made mark_survival look wrong
     when it was the fake commit that was unfaithful.
     """
-    return dict(short=short, hash=short * 8, subject=subject, headline=subject,
-                read="", readWhy="", additions=additions, deletions=0, files=[])
+    return dict(
+        short=short,
+        hash=short * 8,
+        subject=subject,
+        headline=subject,
+        read="",
+        readWhy="",
+        additions=additions,
+        deletions=0,
+        files=[],
+    )
 
 
 def run(only=""):
@@ -100,5 +112,3 @@ def run(only=""):
         print(f"FAIL {name}\n  {problem}\n", file=sys.stderr)
     print(f"{len(chosen) - len(failed)} of {len(chosen)} passed")
     return 1 if failed else 0
-
-

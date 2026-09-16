@@ -3,12 +3,14 @@
 No server and no page. Every case names the failure it holds down, so a case that starts
 failing says what is about to go wrong rather than only that something did.
 """
+
 import build_data
 import paths
 
 from harness import case, commit, eq, Failed, sandbox
 
 # --------------------------------------------------------------------------- paths
+
 
 @case
 def paths_resolve_range_replaces_head():
@@ -20,10 +22,16 @@ def paths_resolve_range_replaces_head():
     """
     with sandbox() as (repo, run):
         run("checkout", "-qb", "feature/login")
-        eq(paths.resolve_range("origin/main...HEAD", repo), "origin/main...feature/login",
-           "a three dot range ending in HEAD")
-        eq(paths.resolve_range("e8e4bb6..HEAD", repo), "e8e4bb6..feature/login",
-           "a two dot range ending in HEAD")
+        eq(
+            paths.resolve_range("origin/main...HEAD", repo),
+            "origin/main...feature/login",
+            "a three dot range ending in HEAD",
+        )
+        eq(
+            paths.resolve_range("e8e4bb6..HEAD", repo),
+            "e8e4bb6..feature/login",
+            "a two dot range ending in HEAD",
+        )
 
 
 @case
@@ -60,8 +68,11 @@ def paths_review_dir_does_not_create():
         where = paths.review_dir("origin/main...main", repo)
         if where.exists():
             raise Failed(f"review_dir created {where} without create=True")
-        eq(paths.review_dir("origin/main...main", repo, create=True).is_dir(), True,
-           "create=True should make it")
+        eq(
+            paths.review_dir("origin/main...main", repo, create=True).is_dir(),
+            True,
+            "create=True should make it",
+        )
 
 
 @case
@@ -100,15 +111,18 @@ def paths_logs_live_in_the_review():
 
 # ----------------------------------------------------------------------- fold_fixups
 
+
 @case
 def fold_fixups_folds_onto_its_target():
     """A fixup moves inside the commit it amends, so the rail stays as long as the change
     rather than as long as the review."""
-    kept = build_data.fold_fixups([
-        commit("aaaaaaa", "Add the login form"),
-        commit("bbbbbbb", "fixup! Add the login form"),
-        commit("ccccccc", "Something else"),
-    ])
+    kept = build_data.fold_fixups(
+        [
+            commit("aaaaaaa", "Add the login form"),
+            commit("bbbbbbb", "fixup! Add the login form"),
+            commit("ccccccc", "Something else"),
+        ]
+    )
     eq([c["short"] for c in kept], ["aaaaaaa", "ccccccc"], "the rail after folding")
     eq([f["short"] for f in kept[0]["followups"]], ["bbbbbbb"], "what folded into commit 1")
 
@@ -116,10 +130,12 @@ def fold_fixups_folds_onto_its_target():
 @case
 def fold_fixups_unwraps_stacked_prefixes():
     """`git commit --fixup` onto a fixup stacks them: fixup! fixup! <subject>."""
-    kept = build_data.fold_fixups([
-        commit("aaaaaaa", "Add the login form"),
-        commit("bbbbbbb", "fixup! fixup! Add the login form"),
-    ])
+    kept = build_data.fold_fixups(
+        [
+            commit("aaaaaaa", "Add the login form"),
+            commit("bbbbbbb", "fixup! fixup! Add the login form"),
+        ]
+    )
     eq(len(kept), 1, "a stacked fixup should still fold")
     eq([f["short"] for f in kept[0]["followups"]], ["bbbbbbb"], "the folded fixup")
 
@@ -134,14 +150,17 @@ def fold_fixups_keeps_an_orphan():
 @case
 def fold_fixups_does_not_fold_forwards():
     """A target that comes later is not the commit this fixup amends."""
-    kept = build_data.fold_fixups([
-        commit("bbbbbbb", "fixup! Add the login form"),
-        commit("aaaaaaa", "Add the login form"),
-    ])
+    kept = build_data.fold_fixups(
+        [
+            commit("bbbbbbb", "fixup! Add the login form"),
+            commit("aaaaaaa", "Add the login form"),
+        ]
+    )
     eq(len(kept), 2, "a fixup before its target stays separate")
 
 
 # --------------------------------------------------------------------- mark_survival
+
 
 @case
 def mark_survival_skims_a_commit_with_nothing_left():
@@ -196,6 +215,7 @@ def mark_survival_survives_blame_counting_more_than_was_added():
 
 
 # ---------------------------------------------------------------- read marks, limits
+
 
 def read_marks(per_commit, commit_count):
     problems, warnings = [], []
@@ -268,6 +288,7 @@ def read_marks_reject_an_unknown_mark():
 
 # ------------------------------------------------------------------- reading order
 
+
 @case
 def file_tier_puts_tests_last():
     """The code, then what documents it, then what tests it. A test read before its
@@ -294,6 +315,7 @@ def to_runs_joins_neighbours():
 
 # ------------------------------------------------------------------ narrative keys
 
+
 @case
 def matches_commit_takes_any_unambiguous_prefix():
     full, short = "10c7342051cb884ec3974974406082afb13c9a7b", "10c7342"
@@ -316,4 +338,8 @@ def mark_number_reads_both_forms():
 @case
 def is_placeholder_only_matches_an_untouched_scaffold():
     eq(build_data.is_placeholder({"where": "", "what": "", "marks": []}), True, "untouched")
-    eq(build_data.is_placeholder({"where": "CI", "what": "", "marks": []}), False, "half filled")
+    eq(
+        build_data.is_placeholder({"where": "CI", "what": "", "marks": []}),
+        False,
+        "half filled",
+    )

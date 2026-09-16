@@ -6,6 +6,7 @@
 Defaults to `origin/main...HEAD`. Everything the page shows comes from git; a
 narrative file only adds the editorial layer on top (see narrative.example.json).
 """
+
 import argparse
 import json
 import pathlib
@@ -29,8 +30,9 @@ def git(repo, *args):
 
 def check_range(repo, rng):
     """Fail with something actionable, rather than passing git's usage text along."""
-    probe = subprocess.run(["git", "-C", str(repo), "rev-list", "--count", rng],
-                           capture_output=True, text=True)
+    probe = subprocess.run(
+        ["git", "-C", str(repo), "rev-list", "--count", rng], capture_output=True, text=True
+    )
     if probe.returncode == 0:
         return
     hint = "try an explicit range such as HEAD~3..HEAD"
@@ -146,7 +148,8 @@ def validate_read_marks(per_commit, commit_count, problems, warnings):
             continue
         if mark not in READ_MARKS:
             problems.append(
-                f"{key}: read {mark!r} is not one of " + ", ".join(repr(m) for m in READ_MARKS))
+                f"{key}: read {mark!r} is not one of " + ", ".join(repr(m) for m in READ_MARKS)
+            )
             continue
         if mark == "start":
             starts.append(key)
@@ -154,21 +157,26 @@ def validate_read_marks(per_commit, commit_count, problems, warnings):
             cares += 1
         if mark == "skim" and not why:
             problems.append(
-                f"{key}: read 'skim' needs a 'readWhy' saying why it is safe to skim")
+                f"{key}: read 'skim' needs a 'readWhy' saying why it is safe to skim"
+            )
         if len(why) > READ_WHY_MAX:
             problems.append(
                 f"{key}: 'readWhy' is {len(why)} characters, over the {READ_WHY_MAX} that fit "
-                "on one line in the rail")
+                "on one line in the rail"
+            )
 
     if len(starts) > 1:
-        problems.append("read 'start': only one commit can be the place to start, found "
-                        + ", ".join(starts))
+        problems.append(
+            "read 'start': only one commit can be the place to start, found "
+            + ", ".join(starts)
+        )
     if commit_count:
         limit = min(CARE_MAX, max(1, commit_count // 3))
         if cares > limit:
             warnings.append(
                 f"read 'care' is on {cares} of {commit_count} commits, and {limit} is as many "
-                "as carries any emphasis")
+                "as carries any emphasis"
+            )
 
 
 def git_maybe(repo, *args):
@@ -182,8 +190,9 @@ def git_maybe(repo, *args):
     be built at all. Binary files are skipped before they get here, and this is the second
     line: no git output should be able to stop a build by not being text.
     """
-    result = subprocess.run(["git", "-C", str(repo), *args],
-                            capture_output=True, text=True, errors="replace")
+    result = subprocess.run(
+        ["git", "-C", str(repo), *args], capture_output=True, text=True, errors="replace"
+    )
     return result.stdout if result.returncode == 0 else None
 
 
@@ -403,15 +412,21 @@ def final_diff(repo, rng, commits, narrative):
         entry["read"] = said.get("read", "")
         entry["note"] = said.get("note", "")
         if entry["read"] and entry["read"] not in READ_MARKS:
-            problems.append(f"files[{entry['path']}]: read {entry['read']!r} is not one of "
-                            + ", ".join(repr(m) for m in READ_MARKS))
+            problems.append(
+                f"files[{entry['path']}]: read {entry['read']!r} is not one of "
+                + ", ".join(repr(m) for m in READ_MARKS)
+            )
             entry["read"] = ""
         if entry["read"] == "skim" and not entry["note"]:
-            problems.append(f"files[{entry['path']}]: read 'skim' needs a note saying why it "
-                            "is safe to skim")
+            problems.append(
+                f"files[{entry['path']}]: read 'skim' needs a note saying why it "
+                "is safe to skim"
+            )
         if len(entry["note"]) > FILE_NOTE_MAX:
-            problems.append(f"files[{entry['path']}]: note is {len(entry['note'])} characters, "
-                            f"over the {FILE_NOTE_MAX} that fit beside a path")
+            problems.append(
+                f"files[{entry['path']}]: note is {len(entry['note'])} characters, "
+                f"over the {FILE_NOTE_MAX} that fit beside a path"
+            )
 
     for entry in files:
         reaching = touched.get(entry["path"], [])
@@ -448,8 +463,10 @@ def final_diff(repo, rng, commits, narrative):
             starts.setdefault(owner, []).append(entry["path"])
     for owner, paths in starts.items():
         if len(paths) > 1:
-            problems.append(f"files: {len(paths)} files marked 'start' under "
-                            f"{owner or 'no stage'}: " + ", ".join(paths))
+            problems.append(
+                f"files: {len(paths)} files marked 'start' under "
+                f"{owner or 'no stage'}: " + ", ".join(paths)
+            )
     for warning in warnings:
         print(f"narrative: {warning}", file=sys.stderr)
     if problems:
@@ -458,9 +475,14 @@ def final_diff(repo, rng, commits, narrative):
     mark_survival(commits, alive_by_sha)
 
     rank = {where: i for i, where in enumerate(order)}
-    files.sort(key=lambda e: (rank.get((e["stages"] or [None])[0], len(order)),
-                              file_tier(e["path"]),
-                              -sum(e.get("lines", {}).values()), e["path"]))
+    files.sort(
+        key=lambda e: (
+            rank.get((e["stages"] or [None])[0], len(order)),
+            file_tier(e["path"]),
+            -sum(e.get("lines", {}).values()),
+            e["path"],
+        )
+    )
 
     # Pairing happens inside a group, because a test and its subject being in different
     # stages is a fact about the change and not something to reorder away.
@@ -522,7 +544,8 @@ def validate_narrative(narrative, commits, fulls, shorts):
         why = (entry or {}).get("why") or "" if isinstance(entry, dict) else ""
         if len(why) > WHY_MAX:
             problems.append(
-                f"{key}: 'why' is {len(why)} characters, over {WHY_MAX}. One or two sentences")
+                f"{key}: 'why' is {len(why)} characters, over {WHY_MAX}. One or two sentences"
+            )
         hits = [f for f, s in zip(fulls, shorts) if matches_commit(key, f, s)]
         if not hits:
             warnings.append(f"{key!r} matches no commit in this range")
@@ -543,9 +566,11 @@ def validate_narrative(narrative, commits, fulls, shorts):
             problems.append(f"stages[{position}]: needs both 'where' and 'what'")
             continue
         if len(stage["what"]) > STAGE_WHAT_MAX:
-            problems.append(f"stages[{position}] ({stage['where']!r}): 'what' is "
-                            f"{len(stage['what'])} characters, over {STAGE_WHAT_MAX}. It is "
-                            "one line in a box")
+            problems.append(
+                f"stages[{position}] ({stage['where']!r}): 'what' is "
+                f"{len(stage['what'])} characters, over {STAGE_WHAT_MAX}. It is "
+                "one line in a box"
+            )
         marks = stage.get("marks") or []
         if not isinstance(marks, list):
             problems.append(f"stages[{position}] ({stage['where']!r}): 'marks' must be a list")
@@ -554,11 +579,13 @@ def validate_narrative(narrative, commits, fulls, shorts):
             number = mark_number(mark)
             if number is None:
                 problems.append(
-                    f"stages[{position}] ({stage['where']!r}): mark {mark!r} is not a number")
+                    f"stages[{position}] ({stage['where']!r}): mark {mark!r} is not a number"
+                )
             elif not 1 <= number <= len(commits):
                 warnings.append(
                     f"stage {stage['where']!r} marks commit {number}, "
-                    f"but the rail is {len(commits)} long")
+                    f"but the rail is {len(commits)} long"
+                )
             else:
                 seen.setdefault(number, []).append(stage["where"])
 
@@ -574,13 +601,14 @@ def validate_narrative(narrative, commits, fulls, shorts):
 
     for mark, wheres in sorted(seen.items()):
         if len(wheres) > 1:
-            warnings.append(f"commit {mark} is claimed by {len(wheres)} stages: "
-                            + ", ".join(repr(w) for w in wheres))
+            warnings.append(
+                f"commit {mark} is claimed by {len(wheres)} stages: "
+                + ", ".join(repr(w) for w in wheres)
+            )
     if seen:
         missing = [n for n in range(1, len(commits) + 1) if n not in seen]
         if missing:
-            warnings.append("no stage claims commit(s) "
-                            + ", ".join(str(n) for n in missing))
+            warnings.append("no stage claims commit(s) " + ", ".join(str(n) for n in missing))
 
     for warning in warnings:
         print(f"narrative: {warning}", file=sys.stderr)
@@ -590,7 +618,9 @@ def validate_narrative(narrative, commits, fulls, shorts):
 
 def fallback_narrative(index, subject, body):
     first_para = body.split("\n\n")[0].replace("\n", " ").strip() if body else ""
-    return dict(stage=f"{index + 1}", flow="", why=first_para or subject, points=[], matrix=None)
+    return dict(
+        stage=f"{index + 1}", flow="", why=first_para or subject, points=[], matrix=None
+    )
 
 
 FIXUP_RE = re.compile(r"^(fixup!|squash!|amend!)\s+")
@@ -624,7 +654,11 @@ def fold_fixups(commits):
         target = first_with_subject.get(target_subject)
         # Only fold backwards, onto a commit already kept. A target that comes later is
         # not the one this fixup amends.
-        if target_subject != commit["subject"] and target is not None and id(target) in kept_ids:
+        if (
+            target_subject != commit["subject"]
+            and target is not None
+            and id(target) in kept_ids
+        ):
             target.setdefault("followups", []).append(commit)
             continue
 
@@ -650,7 +684,9 @@ def main():
     per_commit = narrative.get("commits", {})
 
     check_range(repo, rng)
-    shas = [s for s in git(repo, "log", "--format=%h", "--reverse", rng).strip().split("\n") if s]
+    shas = [
+        s for s in git(repo, "log", "--format=%h", "--reverse", rng).strip().split("\n") if s
+    ]
     if not shas:
         raise SystemExit(f"no commits in range {rng}")
 
@@ -674,7 +710,9 @@ def main():
         for entry in files:
             add, dele = stats.get(entry["path"], (0, 0))
             entry["additions"], entry["deletions"] = add, dele
-            entry["collapsed"] = entry["status"] == "deleted" and dele > COLLAPSE_DELETIONS_OVER
+            entry["collapsed"] = (
+                entry["status"] == "deleted" and dele > COLLAPSE_DELETIONS_OVER
+            )
 
         # A narrative may key a commit by any unambiguous prefix of its sha. Empty values
         # are skipped so a scaffold that has only been half filled in leaves the commit's
@@ -685,17 +723,27 @@ def main():
                 note = {**note, **{k: v for k, v in value.items() if v not in ("", [], None)}}
                 break
 
-        commits.append(dict(
-            short=short, hash=full, kind=kind, headline=headline, subject=subject, body=body,
-            stage=note.get("stage") or str(index + 1),
-            read=note.get("read", ""), readWhy=note.get("readWhy", ""),
-            flow=note.get("flow", ""), why=note.get("why", ""),
-            points=note.get("points", []), matrix=note.get("matrix"),
-            matrixCaption=note.get("matrixCaption", ""),
-            additions=sum(f["additions"] for f in files),
-            deletions=sum(f["deletions"] for f in files),
-            files=files,
-        ))
+        commits.append(
+            dict(
+                short=short,
+                hash=full,
+                kind=kind,
+                headline=headline,
+                subject=subject,
+                body=body,
+                stage=note.get("stage") or str(index + 1),
+                read=note.get("read", ""),
+                readWhy=note.get("readWhy", ""),
+                flow=note.get("flow", ""),
+                why=note.get("why", ""),
+                points=note.get("points", []),
+                matrix=note.get("matrix"),
+                matrixCaption=note.get("matrixCaption", ""),
+                additions=sum(f["additions"] for f in files),
+                deletions=sum(f["deletions"] for f in files),
+                files=files,
+            )
+        )
 
     commits = fold_fixups(commits)
     folded = sum(len(c.get("followups", [])) for c in commits)
@@ -722,25 +770,30 @@ def main():
     if folded:
         default_figures.insert(1, {"k": "follow-ups", "v": str(folded)})
 
-    print(json.dumps(dict(
-        commits=commits,
-        branch=branch,
-        base=base,
-        range=rng,
-        repo=repo.name,
-        totals=git(repo, "diff", "--shortstat", rng).strip(),
-        title=narrative.get("title") or title_from_branch(branch),
-        dek=narrative.get("dek") or (
-            f"{len(commits)} commit{'s' if len(commits) != 1 else ''} on {branch}, "
-            f"compared against {base}."
-        ),
-        eyebrow=narrative.get("eyebrow", ""),
-        final=final_diff(repo, rng, commits, narrative),
-        figures=[f for f in (narrative.get("figures") or []) if not is_placeholder(f)]
+    print(
+        json.dumps(
+            dict(
+                commits=commits,
+                branch=branch,
+                base=base,
+                range=rng,
+                repo=repo.name,
+                totals=git(repo, "diff", "--shortstat", rng).strip(),
+                title=narrative.get("title") or title_from_branch(branch),
+                dek=narrative.get("dek")
+                or (
+                    f"{len(commits)} commit{'s' if len(commits) != 1 else ''} on {branch}, "
+                    f"compared against {base}."
+                ),
+                eyebrow=narrative.get("eyebrow", ""),
+                final=final_diff(repo, rng, commits, narrative),
+                figures=[f for f in (narrative.get("figures") or []) if not is_placeholder(f)]
                 or default_figures,
-        stages=[s for s in (narrative.get("stages") or []) if not is_placeholder(s)],
-        notes=[n for n in (narrative.get("notes") or []) if not is_placeholder(n)],
-    )))
+                stages=[s for s in (narrative.get("stages") or []) if not is_placeholder(s)],
+                notes=[n for n in (narrative.get("notes") or []) if not is_placeholder(n)],
+            )
+        )
+    )
 
 
 if __name__ == "__main__":

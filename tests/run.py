@@ -15,6 +15,7 @@ after rewriting history were all outside any page.
 
 Importing a case file is what registers its cases, so a new one goes in the list below.
 """
+
 import pathlib
 import sys
 

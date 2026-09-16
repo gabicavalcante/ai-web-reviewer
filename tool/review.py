@@ -10,6 +10,7 @@
 Range defaults to origin/main...HEAD. `serve` picks a free port when the one
 asked for is taken, and prints the URL it settled on.
 """
+
 import argparse
 import json
 import os
@@ -125,10 +126,14 @@ def announce_siblings(rng):
     here = paths.review_dir(rng, create=False)
     if here.is_dir() and thread_count(here):
         return
-    others = [(folder.name, thread_count(folder))
-              for folder in sorted(paths.state_dir().iterdir())
-              if folder.is_dir() and folder != here
-              and not folder.name.startswith("archived-") and thread_count(folder)]
+    others = [
+        (folder.name, thread_count(folder))
+        for folder in sorted(paths.state_dir().iterdir())
+        if folder.is_dir()
+        and folder != here
+        and not folder.name.startswith("archived-")
+        and thread_count(folder)
+    ]
     if not others:
         return
     print(f"{rng} has no threads. This checkout also has:")
@@ -147,7 +152,9 @@ def archive(rng):
     is one `mv`.
     """
     state = paths.review_dir(rng, create=True)
-    present = [name for name in LOGS if (state / name).exists() and (state / name).stat().st_size]
+    present = [
+        name for name in LOGS if (state / name).exists() and (state / name).stat().st_size
+    ]
     if not present:
         raise SystemExit(f"no threads to archive in {state}")
 
@@ -175,10 +182,15 @@ def narrate(rng, force):
     if target.exists() and not force:
         raise SystemExit(
             f"{target} already exists.\n"
-            "Edit it, or pass --force to replace it with an empty scaffold.")
+            "Edit it, or pass --force to replace it with an empty scaffold."
+        )
 
-    data = subprocess.run([sys.executable, str(HERE / "build_data.py"), "--", rng],
-                          capture_output=True, text=True, cwd=repo)
+    data = subprocess.run(
+        [sys.executable, str(HERE / "build_data.py"), "--", rng],
+        capture_output=True,
+        text=True,
+        cwd=repo,
+    )
     if data.returncode != 0:
         raise SystemExit(data.stderr.strip() or "build_data.py failed")
     page = json.loads(data.stdout)
@@ -217,7 +229,9 @@ def narrate(rng, force):
     }
     target.write_text(json.dumps(scaffold, indent=2, ensure_ascii=False) + "\n")
     print(f"scaffold written to {target}")
-    print(f"{len(commits)} commit(s) on the rail, numbered 1 to {len(commits)} for stage marks.")
+    print(
+        f"{len(commits)} commit(s) on the rail, numbered 1 to {len(commits)} for stage marks."
+    )
     print("Every key is optional. Anything left empty falls back to git, so fill in only")
     print("what you have actually worked out, then run `review.py build` to see it.")
     print("The blank figure, stage and note show the shape; untouched ones are dropped.")
@@ -246,13 +260,13 @@ def free_port(preferred):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("action",
-                        choices=["serve", "build", "narrate", "archive", "where"])
+    parser.add_argument("action", choices=["serve", "build", "narrate", "archive", "where"])
     parser.add_argument("range", nargs="?", default="origin/main...HEAD")
     parser.add_argument("--port", type=int, default=8777)
     parser.add_argument("--narrative", default=None)
-    parser.add_argument("--force", action="store_true",
-                        help="narrate: replace an existing narrative.json")
+    parser.add_argument(
+        "--force", action="store_true", help="narrate: replace an existing narrative.json"
+    )
     args = parser.parse_args()
 
     if args.action == "where":

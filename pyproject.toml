@@ -1,0 +1,11 @@
+# Formatting only. The tool itself has no dependencies and this file adds none: nothing
+# here is read at runtime, and nobody installing the plugin needs black or this file.
+# It exists so that two people editing the skill format it the same way.
+#
+#   uvx black .            format
+#   uvx black --check .    what CI runs
+#
+# 95 because that is where this code already sat. The default 88 rewrote 504 lines to say
+# the same thing, which buries the next real change in a blame full of rewrapping.
+[tool.black]
+line-length = 95

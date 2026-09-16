@@ -26,6 +26,7 @@ the reviews in this checkout.
 
 Reads the body from stdin, so it can be long and contain any quoting.
 """
+
 import json
 import pathlib
 import subprocess
@@ -57,18 +58,23 @@ def review_of(thread_id, rng=None):
         where = paths.review_dir(paths.resolve_range(rng, REPO), REPO, create=False)
         if where.is_dir():
             return where
-        print(f"no review here for {rng!r}, looking for the thread instead",
-              file=sys.stderr)
-    folders = sorted(p for p in STATE.iterdir()
-                     if p.is_dir() and not p.name.startswith("archived-"))
+        print(f"no review here for {rng!r}, looking for the thread instead", file=sys.stderr)
+    folders = sorted(
+        p for p in STATE.iterdir() if p.is_dir() and not p.name.startswith("archived-")
+    )
     for folder in folders:
         questions = folder / "questions.jsonl"
         if questions.exists() and f'"{thread_id}"' in questions.read_text():
             return folder
     sys.exit(
         f"no review in this checkout has a thread {thread_id}.\n"
-        + ("reviews here:\n  " + "\n  ".join(p.name for p in folders) if folders
-           else "there are no reviews here yet."))
+        + (
+            "reviews here:\n  " + "\n  ".join(p.name for p in folders)
+            if folders
+            else "there are no reviews here yet."
+        )
+    )
+
 
 # Long enough for a proposal with four parts, a quoted replacement sentence and a closing
 # question, measured from one that did that well. Short enough to refuse the version of
@@ -96,9 +102,12 @@ def known_ids(QUESTIONS):
 
 def describe_commit(sha):
     """Subject and shortstat for a commit, so the thread records what actually landed."""
+
     def git(*extra):
-        return subprocess.run(["git", "-C", REPO, *extra],
-                              capture_output=True, text=True, check=True).stdout.strip()
+        return subprocess.run(
+            ["git", "-C", REPO, *extra], capture_output=True, text=True, check=True
+        ).stdout.strip()
+
     try:
         subject = git("show", "-s", "--format=%h %s", sha)
         stat = git("show", "--shortstat", "--format=", sha).strip()
@@ -115,7 +124,7 @@ def main():
     if "--range" in args:
         at = args.index("--range")
         rng = args[at + 1]
-        args = args[:at] + args[at + 2:]
+        args = args[:at] + args[at + 2 :]
     kind = "answer"
     extra = {}
     if args and args[0] == "--ask":
@@ -134,9 +143,11 @@ def main():
     where = review_of(question_id, rng)
     questions, messages = where / "questions.jsonl", where / "messages.jsonl"
     if question_id not in known_ids(questions):
-        sys.exit(f"no question with id {question_id} in {where.name}.\n"
-                 "If that is the wrong review, drop --range and the id is looked for "
-                 "across all of them.")
+        sys.exit(
+            f"no question with id {question_id} in {where.name}.\n"
+            "If that is the wrong review, drop --range and the id is looked for "
+            "across all of them."
+        )
 
     text = sys.stdin.read().strip()
     if not text:
@@ -146,7 +157,8 @@ def main():
             f"this answer is {len(text)} characters, over the {ANSWER_MAX} a thread reply "
             f"gets.\n"
             "Lead with the answer, make the list of changes a list, and cut the part that\n"
-            "explains why the fix works. If it still needs the room, pass --long.")
+            "explains why the fix works. If it still needs the room, pass --long."
+        )
 
     row = {
         "thread_id": question_id,

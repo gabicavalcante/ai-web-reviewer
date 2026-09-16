@@ -5,6 +5,7 @@ Replays the threads still owed an answer at startup, so a question asked while n
 session was attached reaches the next one. Keeps a heartbeat the page reads to tell
 "Claude is thinking" apart from "nobody is listening".
 """
+
 import json
 import pathlib
 import signal
@@ -16,6 +17,7 @@ sys.path.insert(0, str(HERE))
 
 import paths  # noqa: E402
 
+
 def review_range(argv):
     """The review this watcher belongs to, from --range.
 
@@ -25,14 +27,18 @@ def review_range(argv):
     """
     if "--range" in argv:
         return argv[argv.index("--range") + 1]
-    folders = [p for p in paths.state_dir().iterdir()
-               if p.is_dir() and not p.name.startswith("archived-")]
+    folders = [
+        p
+        for p in paths.state_dir().iterdir()
+        if p.is_dir() and not p.name.startswith("archived-")
+    ]
     if len(folders) == 1:
         return None, folders[0]
     sys.exit(
         "which review? pass --range, the same one the server was started with.\n"
         + "reviews in this checkout:\n  "
-        + "\n  ".join(sorted(p.name for p in folders)))
+        + "\n  ".join(sorted(p.name for p in folders))
+    )
 
 
 def review_of(rng):
@@ -50,12 +56,19 @@ def review_of(rng):
     """
     where = paths.review_dir(paths.resolve_range(rng), create=False)
     if not where.is_dir():
-        folders = sorted(p.name for p in paths.state_dir().iterdir()
-                         if p.is_dir() and not p.name.startswith("archived-"))
+        folders = sorted(
+            p.name
+            for p in paths.state_dir().iterdir()
+            if p.is_dir() and not p.name.startswith("archived-")
+        )
         sys.exit(
             f"no review here for {rng!r}. Start the server for it first.\n"
-            + ("reviews in this checkout:\n  " + "\n  ".join(folders) if folders
-               else "there are no reviews here yet."))
+            + (
+                "reviews in this checkout:\n  " + "\n  ".join(folders)
+                if folders
+                else "there are no reviews here yet."
+            )
+        )
     return where
 
 
@@ -91,18 +104,22 @@ def turns_by_thread():
     """Every turn on every thread, oldest first, the way the server assembles them."""
     turns = {}
     for answer in complete_rows(ANSWERS):
-        turns.setdefault(answer.get("question_id"), []).append({
-            "role": "claude",
-            "text": answer.get("answer", ""),
-            "at": answer.get("answered_at", ""),
-        })
+        turns.setdefault(answer.get("question_id"), []).append(
+            {
+                "role": "claude",
+                "text": answer.get("answer", ""),
+                "at": answer.get("answered_at", ""),
+            }
+        )
     for message in complete_rows(MESSAGES):
-        turns.setdefault(message.get("thread_id"), []).append({
-            "role": message.get("role", "you"),
-            "kind": message.get("kind", "answer"),
-            "text": message.get("text", ""),
-            "at": message.get("at", ""),
-        })
+        turns.setdefault(message.get("thread_id"), []).append(
+            {
+                "role": message.get("role", "you"),
+                "kind": message.get("kind", "answer"),
+                "text": message.get("text", ""),
+                "at": message.get("at", ""),
+            }
+        )
     for thread in turns.values():
         thread.sort(key=lambda turn: turn.get("at", ""))
     return turns
@@ -188,9 +205,12 @@ def main():
         while True:
             try:
                 HEARTBEAT.write_text(str(time.time()))
-                for path, describe in ((QUESTIONS, describe_question), (MESSAGES, describe_reply)):
+                for path, describe in (
+                    (QUESTIONS, describe_question),
+                    (MESSAGES, describe_reply),
+                ):
                     rows = complete_rows(path)
-                    for row in rows[seen[path]:]:
+                    for row in rows[seen[path] :]:
                         # Claude's own turns are written by answer.py; do not echo them back.
                         if path is MESSAGES and row.get("role") != "you":
                             continue

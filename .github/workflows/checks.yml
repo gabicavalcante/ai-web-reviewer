@@ -30,6 +30,11 @@ jobs:
           git config --global user.email checks@example.invalid
           git config --global user.name checks
 
+      # black is the one thing here that is not in the standard library, and it is
+      # installed for this job only. Nobody installing the plugin needs it.
+      - name: formatting
+        run: pipx run black --check .
+
       - name: unit checks
         run: python3 tests/run.py
 

@@ -94,6 +94,18 @@ python3 tests/run.py paths     # only cases whose name contains "paths"
 No dependencies, and every case names the failure it holds down. GitHub Actions runs them
 with the page build on every push and pull request.
 
+## Formatting, if you are changing the skill
+
+The python is formatted with [black](https://black.readthedocs.io), at the line length in
+`pyproject.toml`. It is the only thing in this repo that is not in the standard library,
+it is needed to change the skill rather than to use it, and it does not have to be
+installed:
+
+```bash
+uvx black .            # or: pipx run black .
+uvx black --check .    # what CI runs
+```
+
 ## Install
 
 As a plugin:
@@ -429,6 +441,7 @@ worse.
 | `tests/run.py` | Run the checks. `python3 tests/run.py` |
 | `tests/harness.py` | What a case file needs: the sandbox, the comparison, the loop |
 | `tests/units.py` | Checks over the pure parts, no server and no page |
+| `pyproject.toml` | The black line length, and nothing else. Not read at runtime |
 
 ## What a version promises
 

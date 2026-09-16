@@ -13,6 +13,7 @@ POST /resolve  mark a thread resolved, or reopen it
 Bound to 127.0.0.1 only. There is no auth: anything that can reach the port can
 read and append questions, so do not bind it to a routable interface.
 """
+
 import http.server
 import json
 import os
@@ -49,7 +50,9 @@ FIXUP_PREFIXES = ("fixup!", "squash!", "amend!")
 
 
 def git(*args, **kwargs):
-    return subprocess.run(["git", "-C", str(REPO), *args], capture_output=True, text=True, **kwargs)
+    return subprocess.run(
+        ["git", "-C", str(REPO), *args], capture_output=True, text=True, **kwargs
+    )
 
 
 def review_base():
@@ -120,10 +123,13 @@ def revision(fresh=False):
         return _revision["value"]
     result = subprocess.run(
         ["git", "-C", str(REPO), "rev-list", "--max-count=500", RANGE],
-        capture_output=True, text=True,
+        capture_output=True,
+        text=True,
     )
     # An unresolvable range is not something to nag about: the page treats "" as unknown.
-    _revision["value"] = ",".join(sorted(result.stdout.split())) if result.returncode == 0 else ""
+    _revision["value"] = (
+        ",".join(sorted(result.stdout.split())) if result.returncode == 0 else ""
+    )
     _revision["at"] = now
     return _revision["value"]
 
@@ -172,21 +178,25 @@ class Handler(http.server.BaseHTTPRequestHandler):
             turns = {}
             # answers.jsonl predates threading; its rows are Claude turns.
             for answer in read_jsonl(ANSWERS):
-                turns.setdefault(answer.get("question_id"), []).append({
-                    "role": "claude",
-                    "kind": "answer",
-                    "text": answer.get("answer", ""),
-                    "at": answer.get("answered_at", ""),
-                })
+                turns.setdefault(answer.get("question_id"), []).append(
+                    {
+                        "role": "claude",
+                        "kind": "answer",
+                        "text": answer.get("answer", ""),
+                        "at": answer.get("answered_at", ""),
+                    }
+                )
             for message in read_jsonl(MESSAGES):
-                turns.setdefault(message.get("thread_id"), []).append({
-                    "role": message.get("role", "you"),
-                    "kind": message.get("kind", "answer"),
-                    "text": message.get("text", ""),
-                    "at": message.get("at", ""),
-                    "commit": message.get("commit", ""),
-                    "stat": message.get("stat", ""),
-                })
+                turns.setdefault(message.get("thread_id"), []).append(
+                    {
+                        "role": message.get("role", "you"),
+                        "kind": message.get("kind", "answer"),
+                        "text": message.get("text", ""),
+                        "at": message.get("at", ""),
+                        "commit": message.get("commit", ""),
+                        "stat": message.get("stat", ""),
+                    }
+                )
             for thread_turns in turns.values():
                 thread_turns.sort(key=lambda turn: turn.get("at", ""))
 
@@ -213,8 +223,9 @@ class Handler(http.server.BaseHTTPRequestHandler):
             # seconds in every tab for a button nobody can see yet.
             if "squash=1" in self.path:
                 blocked = self._squash_block()
-                payload["squash"] = ({"ready": True} if not blocked
-                                     else {"ready": False, "why": blocked[0]})
+                payload["squash"] = (
+                    {"ready": True} if not blocked else {"ready": False, "why": blocked[0]}
+                )
             return self._json(payload)
 
         if self.path.split("?")[0] in ("/", "/index.html"):
@@ -287,7 +298,6 @@ class Handler(http.server.BaseHTTPRequestHandler):
             os.fsync(handle.fileno())
         return self._json({"ok": True, "id": row["id"]})
 
-
     def _squash_block(self, force=False):
         """Why a squash cannot run now, or None.
 
@@ -305,11 +315,18 @@ class Handler(http.server.BaseHTTPRequestHandler):
         # --untracked-files=no because a rebase only refuses over tracked changes. Counting
         # untracked files here blocked the button on a scratch directory beside the post
         # being reviewed, which has nothing to do with the commits being squashed.
-        dirty = [line for line in
-                 git("status", "--porcelain", "--untracked-files=no").stdout.split("\n") if line]
+        dirty = [
+            line
+            for line in git("status", "--porcelain", "--untracked-files=no").stdout.split("\n")
+            if line
+        ]
         if dirty:
-            return (f"{len(dirty)} tracked file(s) have uncommitted changes. Commit or "
-                    "stash them first.", 409, False)
+            return (
+                f"{len(dirty)} tracked file(s) have uncommitted changes. Commit or "
+                "stash them first.",
+                409,
+                False,
+            )
 
         git_dir = pathlib.Path(git("rev-parse", "--git-dir").stdout.strip() or ".git")
         if not git_dir.is_absolute():
@@ -317,14 +334,20 @@ class Handler(http.server.BaseHTTPRequestHandler):
         if (git_dir / "rebase-merge").exists() or (git_dir / "rebase-apply").exists():
             return ("a rebase is already in progress here", 409, False)
 
-        subjects = [s for s in git("log", "--format=%s", f"{base}..HEAD").stdout.split("\n") if s]
+        subjects = [
+            s for s in git("log", "--format=%s", f"{base}..HEAD").stdout.split("\n") if s
+        ]
         if not any(s.startswith(FIXUP_PREFIXES) for s in subjects):
             return ("nothing to squash: no fixups in this range", 400, False)
 
         pushed = pushed_in_range(base)
         if pushed and not force:
-            return (f"{pushed} commit(s) in this range are already pushed. Squashing "
-                    "rewrites them, so the branch would need a force push.", 409, True)
+            return (
+                f"{pushed} commit(s) in this range are already pushed. Squashing "
+                "rewrites them, so the branch would need a force push.",
+                409,
+                True,
+            )
         # The caller needs the count it just walked, so it is handed back rather than
         # counted again. Extracting the guards and leaving "before = len(subjects)"
         # behind them threw a NameError after the rebase had already run: history
@@ -354,37 +377,63 @@ class Handler(http.server.BaseHTTPRequestHandler):
         backup = "pre-squash/" + time.strftime("%Y%m%d-%H%M%S")
         made = git("branch", backup, head)
         if made.returncode != 0:
-            return self._json({"error": "could not make a backup branch: " + made.stderr.strip()[:200]}, 500)
+            return self._json(
+                {"error": "could not make a backup branch: " + made.stderr.strip()[:200]}, 500
+            )
 
         # true as the editor takes the todo list and the messages as git wrote them.
         env = dict(os.environ, GIT_SEQUENCE_EDITOR="true", GIT_EDITOR="true")
-        run = subprocess.run(["git", "-C", str(REPO), "rebase", "-i", "--autosquash", base],
-                             capture_output=True, text=True, env=env)
+        run = subprocess.run(
+            ["git", "-C", str(REPO), "rebase", "-i", "--autosquash", base],
+            capture_output=True,
+            text=True,
+            env=env,
+        )
         if run.returncode != 0:
             # Never leave a repo mid rebase because a button was pressed.
-            subprocess.run(["git", "-C", str(REPO), "rebase", "--abort"], capture_output=True, text=True)
+            subprocess.run(
+                ["git", "-C", str(REPO), "rebase", "--abort"], capture_output=True, text=True
+            )
             git("reset", "--hard", head)
-            return self._json({
-                "error": "the rebase did not apply and was rolled back: "
-                         + (run.stderr or run.stdout).strip()[:400],
-                "backup": backup,
-            }, 409)
+            return self._json(
+                {
+                    "error": "the rebase did not apply and was rolled back: "
+                    + (run.stderr or run.stdout).strip()[:400],
+                    "backup": backup,
+                },
+                409,
+            )
 
         before = len(self._squash_subjects)
-        after = len([s for s in git("log", "--format=%s", f"{base}..HEAD").stdout.split("\n") if s])
-        built = subprocess.run([sys.executable, str(HERE / "review.py"), "build", "--", RANGE],
-                               capture_output=True, text=True, cwd=str(REPO))
+        after = len(
+            [s for s in git("log", "--format=%s", f"{base}..HEAD").stdout.split("\n") if s]
+        )
+        built = subprocess.run(
+            [sys.executable, str(HERE / "review.py"), "build", "--", RANGE],
+            capture_output=True,
+            text=True,
+            cwd=str(REPO),
+        )
         if built.returncode != 0:
-            return self._json({
-                "error": "the squash worked but the page did not build: "
-                         + (built.stderr or built.stdout).strip()[:400],
-                "backup": backup,
-            }, 500)
+            return self._json(
+                {
+                    "error": "the squash worked but the page did not build: "
+                    + (built.stderr or built.stdout).strip()[:400],
+                    "backup": backup,
+                },
+                500,
+            )
 
-        return self._json({
-            "ok": True, "before": before, "after": after,
-            "backup": backup, "head": head, "revision": revision(fresh=True),
-        })
+        return self._json(
+            {
+                "ok": True,
+                "before": before,
+                "after": after,
+                "backup": backup,
+                "head": head,
+                "revision": revision(fresh=True),
+            }
+        )
 
     def _rebuild(self):
         """Rebuild index.html for the same range, so a reload shows the new commits.
@@ -394,7 +443,9 @@ class Handler(http.server.BaseHTTPRequestHandler):
         """
         result = subprocess.run(
             [sys.executable, str(HERE / "review.py"), "build", "--", RANGE],
-            capture_output=True, text=True, cwd=str(REPO),
+            capture_output=True,
+            text=True,
+            cwd=str(REPO),
         )
         if result.returncode != 0:
             problem = (result.stderr or result.stdout).strip() or "build failed"
