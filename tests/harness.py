@@ -225,28 +225,59 @@ def build(repo, rng):
     return json.loads(done.stdout)
 
 
-def in_page(page, threads):
-    """Hand a built page a set of threads and report which ones it could not place.
+def in_page(page, threads, reviewed=None):
+    """Hand a built page some threads and ticks, and report what it made of them.
 
-    Needs node, like the build's own smoke check. Returns None when node is absent so a
-    case can skip rather than fail for the wrong reason.
+    Fails without node rather than returning quietly: a case that returns early counts as
+    passed, and a check that can skip itself is not a check. CI installs node for exactly
+    this reason.
     """
     if not shutil.which("node"):
-        return None
-    with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False) as handle:
-        json.dump(threads, handle)
-        where = handle.name
+        raise Failed("node is needed to run the page, and is not installed")
+    handles = []
+    for payload in (threads, reviewed):
+        if payload is None:
+            handles.append(None)
+            continue
+        with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False) as handle:
+            json.dump(payload, handle)
+            handles.append(handle.name)
+    argv = [str(page), handles[0]] + ([handles[1]] if handles[1] else [])
     try:
         done = subprocess.run(
-            ["node", str(HERE / "inpage.js"), str(page), where],
-            capture_output=True,
-            text=True,
+            ["node", str(HERE / "inpage.js"), *argv], capture_output=True, text=True
         )
     finally:
-        os.unlink(where)
+        for name in handles:
+            if name:
+                os.unlink(name)
     if done.returncode != 0:
         raise Failed(f"the page script failed:\n{done.stdout}{done.stderr}")
-    return json.loads(done.stdout)
+    drew = json.loads(done.stdout)
+    # refresh() swallows a paint that throws into the status line, so a case counting
+    # orphan cards would pass against a page that drew nothing. Checked here, once.
+    if "Not connected" in drew.get("status", ""):
+        raise Failed(f"the page never painted: {drew['status']!r}")
+    drew["reviewed"] = int(drew.get("reviewed") or 0)
+    return drew
+
+
+def page_with_shorts(page, mapping):
+    """A copy of a built page with some commits' short shas rewritten.
+
+    Two commits whose abbreviations collide need a repo of a few hundred commits to occur
+    naturally, which is not a thing to build inside a check. The page reads every sha from
+    DATA, so rewriting DATA is the same input by the time the matching runs.
+    """
+    text = page.read_text()
+    for was, now in mapping.items():
+        old = f'"short": "{was}"'
+        if old not in text:
+            raise Failed(f"{was} is not a commit on this page")
+        text = text.replace(old, f'"short": "{now}"')
+    out = page.with_name("collides.html")
+    out.write_text(text)
+    return out
 
 
 def log(run, rng):

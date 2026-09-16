@@ -61,7 +61,9 @@ globalThis.document = {
   addEventListener: () => {},
   hidden: false,
 };
-globalThis.localStorage = { getItem: () => null, setItem: () => {} };
+// The reviewed ticks live in localStorage, keyed by sha, so a case can seed them.
+const stored = process.argv[4] ? fs.readFileSync(process.argv[4], "utf8") : null;
+globalThis.localStorage = { getItem: () => stored, setItem: () => {} };
 globalThis.window = { confirm: () => false, location: { reload() {} } };
 globalThis.setInterval = () => 0;
 
@@ -89,16 +91,23 @@ try {
 setTimeout(() => {
   const text = (n) =>
     (n.children || []).length ? (n.children || []).map(text).join(" ") : (n.textContent || "");
-  // An orphan card is identified by the question it carries, not by the thread id: the
-  // card never prints the id, so looking for it found nothing and every thread read as
-  // anchored whatever the page had actually done with it.
+  // An orphan card is identified by the anchor printed in its header, not by the thread
+  // id, which the card never prints, and not by the question, which is a substring match:
+  // a card for "Q10" contains "Q1", so one thread was reported orphaned because another
+  // one was.
   const cards = (registry.orphanList ? registry.orphanList.children : []).map(text);
+  const header = (t) => `${t.commit || "?"} · ${t.file || "?"}:${t.line || "?"}`;
   const orphans = threads
-    .filter((t) => cards.some((card) => card.includes(t.question)))
+    .filter((t) => cards.some((card) => card.includes(header(t))))
     .map((t) => t.id);
+  // A paint that throws is swallowed by refresh()'s catch into the status line, and every
+  // case that only counts orphan cards then passes against a page that drew nothing at
+  // all. The status is reported so a case can tell those apart.
   console.log(JSON.stringify({
     cards: cards.length,
     orphans,
     anchored: threads.map((t) => t.id).filter((id) => !orphans.includes(id)),
+    status: registry.qnaStatus ? registry.qnaStatus.textContent : "",
+    reviewed: (registry.progressText ? registry.progressText.textContent : "").split(" ")[0],
   }));
 }, 50);

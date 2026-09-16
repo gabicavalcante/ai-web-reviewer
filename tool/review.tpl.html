@@ -493,11 +493,48 @@
 
   const STAGES = DATA.stages || [];
 
+  const withFollowups = c => [c, ...(c.followups || [])];
+
+  /* A thread records the commit it was asked on as git's abbreviated sha, and git picks
+     that width from how many objects the repo holds. A repo that grows, or a colleague
+     with core.abbrev set, changes it. Comparing the recorded string to the built one
+     exactly meant a change in width moved every thread in the review into the orphan
+     list, saying the commit is not part of this diff when it is, and there is no way
+     back: the short string is frozen in questions.jsonl.
+
+     So a sha is resolved to the one this page was built with before anything is
+     compared, the way foldedInto already does for the shas --did writes. Both the short
+     and the full hash are held, so a thread written at any width finds its line, and one
+     whose commit really was rewritten away finds nothing and stays an orphan. */
+  const BUILT_SHAS = new Set();
+  DATA.commits.forEach(c => withFollowups(c).forEach(src => BUILT_SHAS.add(src.short)));
+  const canonicalSha = sha => {
+    if (!sha || BUILT_SHAS.has(sha)) return sha;
+    // Four is the shortest git will abbreviate to, so anything below that is truncation
+    // rather than a sha, and resolving it lands on whichever commit sorts first.
+    if (sha.length < 4) return sha;
+    let found = null;
+    for (const known of BUILT_SHAS) {
+      if (!known.startsWith(sha) && !sha.startsWith(known)) continue;
+      // Two commits share a prefix once a sha is recorded narrower than the repo now
+      // needs, which is the case this exists for. Guessing files the question under
+      // another commit's code at the same line with nothing on screen saying so. Left an
+      // orphan it is visible, and it can be read.
+      if (found) return sha;
+      found = known;
+    }
+    return found || sha;
+  };
+
   const STORE = `web-reviewer/${DATA.repo}/${DATA.range}/reviewed`;
   const reviewed = new Set();
   try {
     const saved = JSON.parse(localStorage.getItem(STORE) || "[]");
-    if (Array.isArray(saved)) saved.forEach(s => reviewed.add(s));
+      // Through the same resolver the anchors use. A tick is stored as the abbreviated
+      // sha it was ticked at, and git widens that as a repo grows, so an exact lookup
+      // un-ticked every commit, reset the progress bar, and hid the squash bar, which
+      // only appears once every commit is ticked.
+      if (Array.isArray(saved)) saved.forEach(s => reviewed.add(canonicalSha(s)));
   } catch (e) { /* private window or blocked storage: start empty */ }
 
   const save = () => {
@@ -558,7 +595,6 @@
      renderCommit calls it during the first render, well above the anchor block where it
      used to live, and a const in its temporal dead zone throws and leaves a half-drawn
      page. */
-  const withFollowups = c => [c, ...(c.followups || [])];
 
   /* A fixup's sha stops existing when git squashes it, so a thread that recorded its
      change against one is pointing at something with a shelf life. The commit it folds
@@ -568,11 +604,17 @@
   const foldedInto = sha => {
     if (!sha) return null;
     if (FOLDED_INTO.has(sha)) return FOLDED_INTO.get(sha);
-    // --did and the diff can abbreviate to different lengths.
+    // --did and the diff can abbreviate to different lengths. One match or none, for the
+    // same reason canonicalSha wants one: naming the wrong commit is worse than saying
+    // nothing.
+    if (sha.length < 4) return null;
+    let found = null;
     for (const [short, target] of FOLDED_INTO) {
-      if (short.startsWith(sha) || sha.startsWith(short)) return target;
+      if (!short.startsWith(sha) && !sha.startsWith(short)) continue;
+      if (found) return null;
+      found = target;
     }
-    return null;
+    return found;
   };
 
   let selected = 0;
@@ -956,26 +998,6 @@
     VALID_ANCHORS.add([src.short, f.path, r.t, String(r.t === "del" ? r.o : r.n)].join("\u0000"));
   }))));
   let composerOpen = false;
-    /* A thread records the commit it was asked on as git's abbreviated sha, and git picks
-       that width from how many objects the repo holds. A repo that grows, or a colleague
-       with core.abbrev set, changes it. Comparing the recorded string to the built one
-       exactly meant a change in width moved every thread in the review into the orphan
-       list, saying the commit is not part of this diff when it is, and there is no way
-       back: the short string is frozen in questions.jsonl.
-
-       So a sha is resolved to the one this page was built with before anything is
-       compared, the way foldedInto already does for the shas --did writes. Both the short
-       and the full hash are held, so a thread written at any width finds its line, and one
-       whose commit really was rewritten away finds nothing and stays an orphan. */
-    const BUILT_SHAS = new Set();
-    DATA.commits.forEach(c => withFollowups(c).forEach(src => BUILT_SHAS.add(src.short)));
-    const canonicalSha = sha => {
-      if (!sha || BUILT_SHAS.has(sha)) return sha;
-      for (const known of BUILT_SHAS) {
-        if (known.startsWith(sha) || sha.startsWith(known)) return known;
-      }
-      return sha;
-    };
   const anchorKey = d => [canonicalSha(d.commit), d.file, d.side, d.line].join("\u0000");
 
   /* Threads live in the commits view only, so every scan for a row runs over that

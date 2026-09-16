@@ -27,6 +27,7 @@ from harness import (
     get,
     in_page,
     log,
+    page_with_shorts,
     post,
     sandbox,
     serving,
@@ -775,8 +776,6 @@ def a_thread_stays_on_its_line_when_the_sha_is_written_longer():
         make_fixup(repo, run)
         page, thread = page_with_a_thread(repo, run, lambda c: c["hash"][:12])
         drew = in_page(page, [thread])
-        if drew is None:
-            return
         eq(drew["orphans"], [], f"threads the page could not place ({drew})")
 
 
@@ -788,8 +787,6 @@ def a_thread_stays_on_its_line_when_the_sha_is_written_shorter():
         make_fixup(repo, run)
         page, thread = page_with_a_thread(repo, run, lambda c: c["short"][:5])
         drew = in_page(page, [thread])
-        if drew is None:
-            return
         eq(drew["orphans"], [], f"threads the page could not place ({drew})")
 
 
@@ -800,19 +797,74 @@ def a_thread_on_the_sha_the_page_was_built_with_still_works():
         make_fixup(repo, run)
         page, thread = page_with_a_thread(repo, run, lambda c: c["short"])
         drew = in_page(page, [thread])
-        if drew is None:
-            return
         eq(drew["orphans"], [], f"threads the page could not place ({drew})")
 
 
 @case
 def a_thread_on_a_commit_that_is_gone_is_still_orphaned():
     """The orphan list is for threads whose commit really was rewritten away. Matching by
-    prefix must not quietly adopt one of those onto the nearest commit."""
+    prefix must not quietly adopt one of those onto the nearest commit.
+
+    The sha shares its first characters with a real one and diverges after, because
+    "deadbeef" passes against a matcher that only compares a fixed number of leading
+    characters, and a rewritten commit usually is a near miss."""
     with sandbox() as (repo, run):
         make_fixup(repo, run)
-        page, thread = page_with_a_thread(repo, run, lambda c: "deadbeef")
+        page, thread = page_with_a_thread(
+            repo, run, lambda c: c["short"][:4] + ("0000" if c["short"][4] != "0" else "1111")
+        )
         drew = in_page(page, [thread])
-        if drew is None:
-            return
         eq(drew["orphans"], ["thread000001"], f"a thread whose commit is gone ({drew})")
+
+
+@case
+def an_ambiguous_sha_is_orphaned_rather_than_guessed():
+    """Matching by prefix without checking the match is unique is worse than the bug it
+    fixes. A sha recorded narrower than the repo now needs can prefix two commits, and
+    taking the first silently files the question under a different commit's code, at the
+    same file and line, with nothing on screen saying so. A false orphan is loud and
+    recoverable; this is neither."""
+    with sandbox() as (repo, run):
+        make_fixup(repo, run)
+        page, thread = page_with_a_thread(repo, run, lambda c: c["short"])
+        data = json.loads(
+            re.search(r"const DATA = (\{.*?\});\n", page.read_text(), re.S).group(1)
+        )
+        shorts = [c["short"] for c in data["commits"]] + [
+            f["short"] for c in data["commits"] for f in c.get("followups", [])
+        ]
+        collided = page_with_shorts(page, {shorts[0]: "b1cbc47", shorts[1]: "b1cb4d6"})
+        thread["commit"] = "b1cb"
+        drew = in_page(collided, [thread])
+        eq(drew["orphans"], ["thread000001"], f"an ambiguous sha ({drew})")
+
+
+@case
+def a_sha_too_short_to_mean_anything_is_orphaned():
+    """git will not abbreviate below four characters. A commit field shorter than that is
+    truncation or corruption, and resolving it lands on whichever commit happens to sort
+    first."""
+    with sandbox() as (repo, run):
+        make_fixup(repo, run)
+        page, thread = page_with_a_thread(repo, run, lambda c: c["short"][:2])
+        drew = in_page(page, [thread])
+        eq(drew["orphans"], ["thread000001"], f"a two character sha ({drew})")
+
+
+@case
+def reviewed_ticks_survive_a_wider_sha():
+    """The same bug in the same file, in the other thing keyed by an abbreviated sha. The
+    ticks are stored as short shas and read back with an exact match, so the width change
+    that used to orphan every thread also un-ticks every commit, resets the progress bar,
+    and hides the squash bar, which only appears once every commit is ticked."""
+    with sandbox() as (repo, run):
+        make_fixup(repo, run)
+        page, thread = page_with_a_thread(repo, run, lambda c: c["short"])
+        data = json.loads(
+            re.search(r"const DATA = (\{.*?\});\n", page.read_text(), re.S).group(1)
+        )
+        # The same commits at a wider abbreviation, which is what a repo that has grown
+        # hands back. Not a mutated sha: that is a different commit, and should not tick.
+        ticked = [c["hash"][:12] for c in data["commits"]]
+        drew = in_page(page, [thread], reviewed=ticked)
+        eq(drew["reviewed"], len(ticked), f"commits still ticked ({drew})")
