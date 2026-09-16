@@ -42,28 +42,46 @@ def check_range(repo, rng):
 
 
 def parse_patch(patch):
+    """A unified diff as rows, each carrying the line number it really has.
+
+    Everything between "diff --git" and the first "@@" is header, and everything after it
+    is content, so the two are told apart by position rather than by what a line starts
+    with. Matching on the prefix read a deleted line as a header: content beginning "-- "
+    reaches git as "--- ", which is also how git introduces the old side of a file. That
+    line was dropped and not counted, so a SQL comment vanished from the page and every
+    old-side number below it was short by one, which is enough to anchor a question to a
+    line the reviewer never clicked.
+
+    Reading by position also covers the headers nobody listed. A mode change has no hunk
+    at all, and "old mode 100644" was falling through to the context branch and drawing
+    two rows of diff with their first character eaten.
+    """
     files, current = [], None
     old_no = new_no = 0
+    in_hunk = False
     for line in patch.split("\n"):
         match = FILE_RE.match(line)
         if match:
             current = dict(path=match.group(2), status="modified", rows=[])
             files.append(current)
+            # Per file, or a file whose header carries no hunk leaves the next one
+            # numbered from wherever the last one stopped.
+            old_no = new_no = 0
+            in_hunk = False
             continue
         if current is None:
-            continue
-        if line.startswith("new file"):
-            current["status"] = "added"
-            continue
-        if line.startswith("deleted file"):
-            current["status"] = "deleted"
-            continue
-        if line.startswith(("index ", "--- ", "+++ ", "similarity ", "rename ", "Binary ")):
             continue
         hunk = HUNK_RE.match(line)
         if hunk:
             old_no, new_no = int(hunk.group(1)), int(hunk.group(3))
+            in_hunk = True
             current["rows"].append(dict(t="hunk", text=line.rstrip()))
+            continue
+        if not in_hunk:
+            if line.startswith("new file"):
+                current["status"] = "added"
+            elif line.startswith("deleted file"):
+                current["status"] = "deleted"
             continue
         if not line:
             continue

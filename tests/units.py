@@ -343,3 +343,98 @@ def is_placeholder_only_matches_an_untouched_scaffold():
         False,
         "half filled",
     )
+
+
+# ------------------------------------------------------------------- reading a patch
+#
+# parse_patch decides what the reviewer sees and which line a thread is anchored to, so a
+# row it drops is a line nobody reviews and a number it skips is a question filed against
+# the wrong line.
+
+
+def patch_for(repo, run, before, after, path="m.sql"):
+    """The real diff git produces for one edit, which is what parse_patch has to read."""
+    (repo / path).write_text(before)
+    run("add", "-A")
+    run("commit", "-qm", "before")
+    (repo / path).write_text(after)
+    run("add", "-A")
+    run("commit", "-qm", "after")
+    return run("diff", "HEAD~1", "HEAD").stdout
+
+
+@case
+def parse_patch_keeps_a_deleted_line_that_looks_like_a_header():
+    """A deleted line whose content starts with "-- " reaches git's output as "--- ...",
+    which is also how git introduces the old side of a file. Skipping it as a header drops
+    a real deletion: SQL and Lua comments, YAML front matter, an email signature."""
+    with sandbox() as (repo, run):
+        patch = patch_for(
+            repo,
+            run,
+            "-- add the index\nCREATE INDEX a;\nCREATE INDEX b;\n",
+            "CREATE INDEX b;\n",
+        )
+        rows = build_data.parse_patch(patch)[0]["rows"]
+        deleted = [r["text"] for r in rows if r["t"] == "del"]
+        eq(deleted, ["-- add the index", "CREATE INDEX a;"], "the deleted lines")
+
+
+@case
+def parse_patch_keeps_old_line_numbers_straight():
+    """Dropping a row without counting it shifts every old-side number after it, so a
+    thread anchored below that point records a line the reviewer never clicked."""
+    with sandbox() as (repo, run):
+        patch = patch_for(
+            repo,
+            run,
+            "-- add the index\nCREATE INDEX a;\nCREATE INDEX b;\nCREATE INDEX c;\n",
+            "CREATE INDEX b;\nCREATE INDEX c;\n",
+        )
+        rows = build_data.parse_patch(patch)[0]["rows"]
+        numbered = [(r["t"], r.get("o"), r["text"]) for r in rows if r["t"] != "hunk"]
+        eq(
+            numbered,
+            [
+                ("del", 1, "-- add the index"),
+                ("del", 2, "CREATE INDEX a;"),
+                ("ctx", 3, "CREATE INDEX b;"),
+                ("ctx", 4, "CREATE INDEX c;"),
+            ],
+            "every row with its real old-side line number",
+        )
+
+
+@case
+def parse_patch_ignores_a_mode_change():
+    """A chmod has no hunk, and its "old mode"/"new mode" lines are not content. They were
+    falling through to the context branch, which rendered them as two rows of diff with
+    their first character eaten."""
+    with sandbox() as (repo, run):
+        (repo / "keep.txt").write_text("one\n")
+        run("add", "-A")
+        run("commit", "-qm", "add")
+        run("update-index", "--chmod=+x", "keep.txt")
+        run("commit", "-qm", "chmod")
+        rows = build_data.parse_patch(run("diff", "HEAD~1", "HEAD").stdout)[0]["rows"]
+        eq(rows, [], "a mode change has nothing to show")
+
+
+@case
+def parse_patch_starts_each_file_from_one():
+    """The counters were initialised once for the whole patch, so a file whose header
+    carried no hunk left the next file numbered from wherever the last one stopped."""
+    with sandbox() as (repo, run):
+        (repo / "one.txt").write_text("a\nb\nc\n")
+        (repo / "two.txt").write_text("x\ny\nz\n")
+        run("add", "-A")
+        run("commit", "-qm", "two files")
+        (repo / "one.txt").write_text("a\nB\nc\n")
+        (repo / "two.txt").write_text("x\nY\nz\n")
+        run("add", "-A")
+        run("commit", "-qm", "edit both")
+        files = build_data.parse_patch(run("diff", "HEAD~1", "HEAD").stdout)
+        eq(len(files), 2, "two files in the patch")
+        for entry in files:
+            first = [r for r in entry["rows"] if r["t"] != "hunk"][0]
+            eq(first.get("o"), 1, f"{entry['path']} starts at old line 1")
