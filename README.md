@@ -102,8 +102,9 @@ it is needed to change the skill rather than to use it, and it does not have to 
 installed:
 
 ```bash
-uvx black .            # or: pipx run black .
-uvx black --check .    # what CI runs
+uvx black .               # or: pipx run black .
+uvx black --check .       # what CI runs
+uvx pyflakes tool tests   # names used before they exist, unused imports
 ```
 
 ## Install

@@ -30,10 +30,16 @@ jobs:
           git config --global user.email checks@example.invalid
           git config --global user.name checks
 
-      # black is the one thing here that is not in the standard library, and it is
-      # installed for this job only. Nobody installing the plugin needs it.
+      # black and pyflakes are the only things here outside the standard library, and
+      # both are installed for this job only. Nobody installing the plugin needs either.
       - name: formatting
         run: pipx run black --check .
+
+      # A name used before it exists is the shape of the bug that got furthest: a squash
+      # handler referred to a variable that had been refactored away, so the rebase ran
+      # and the handler then threw. pyflakes reports it without running anything.
+      - name: undefined names
+        run: pipx run pyflakes tool tests
 
       - name: unit checks
         run: python3 tests/run.py

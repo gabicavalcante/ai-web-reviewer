@@ -37,7 +37,7 @@ def check_range(repo, rng):
         return
     hint = "try an explicit range such as HEAD~3..HEAD"
     if "origin/" in rng:
-        hint = f"'git fetch origin' first, or pass an explicit range such as HEAD~3..HEAD"
+        hint = "'git fetch origin' first, or pass an explicit range such as HEAD~3..HEAD"
     raise SystemExit(f"cannot resolve the range {rng!r} in {repo.name}: {hint}")
 
 
@@ -461,11 +461,11 @@ def final_diff(repo, rng, commits, narrative):
         if entry.get("read") == "start":
             owner = (entry["stages"] or [None])[0]
             starts.setdefault(owner, []).append(entry["path"])
-    for owner, paths in starts.items():
-        if len(paths) > 1:
+    for owner, marked in starts.items():
+        if len(marked) > 1:
             problems.append(
-                f"files: {len(paths)} files marked 'start' under "
-                f"{owner or 'no stage'}: " + ", ".join(paths)
+                f"files: {len(marked)} files marked 'start' under "
+                f"{owner or 'no stage'}: " + ", ".join(marked)
             )
     for warning in warnings:
         print(f"narrative: {warning}", file=sys.stderr)

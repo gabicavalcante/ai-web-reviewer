@@ -45,7 +45,6 @@ SKELETON = """<!doctype html>
 
 def build(rng, narrative):
     repo = paths.repo_root()
-    state = paths.state_dir(repo)
     # A narrative written for this review lives beside its page, so it is picked up on
     # every rebuild without repeating the flag. One place, because a fallback at the top
     # of the store put one review's title on another's page.
