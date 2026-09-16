@@ -12,6 +12,7 @@ import socket
 import subprocess
 import sys
 import tempfile
+import threading
 import time
 import urllib.error
 import urllib.request
@@ -144,6 +145,53 @@ def post(base, path, body=None, headers=None):
             return refused.code, json.loads(raw or b"{}")
         except json.JSONDecodeError:
             return refused.code, {"raw": raw.decode("utf-8", "replace")}
+
+
+@contextlib.contextmanager
+def watching(repo, rng):
+    """A real watcher over a review, with everything it has printed so far.
+
+    Yields a function returning the lines it has written. The watcher polls once a
+    second, so a case that appends a row has to give it a moment; `until` does the
+    waiting so a slow machine does not turn into a flaky check.
+    """
+    proc = subprocess.Popen(
+        [sys.executable, str(TOOL / "watch.py"), "--range", rng],
+        cwd=str(repo),
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+        bufsize=1,
+    )
+    lines = []
+    reader = threading.Thread(
+        target=lambda: [lines.append(line.rstrip("\n")) for line in proc.stdout],
+        daemon=True,
+    )
+    reader.start()
+    try:
+        yield lambda: list(lines)
+    finally:
+        proc.terminate()
+        try:
+            proc.wait(timeout=5)
+        except subprocess.TimeoutExpired:
+            proc.kill()
+
+
+def until(predicate, seconds=8):
+    """Wait for something to become true, and say what was seen if it does not.
+
+    The watcher's loop is a second long, so every case here would otherwise carry a sleep
+    chosen by guesswork: too short is flaky, too long is a suite nobody runs.
+    """
+    deadline = time.time() + seconds
+    while time.time() < deadline:
+        found = predicate()
+        if found:
+            return found
+        time.sleep(0.1)
+    return None
 
 
 def get(base, path):

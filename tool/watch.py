@@ -76,19 +76,45 @@ HEARTBEAT = WHERE / "watcher.alive"
 LEGACY_SKIP = "No, skip the investigation."
 
 
+# Lines already reported as unreadable, so the same one is not complained about every
+# second for the life of the watcher.
+_UNREADABLE = set()
+
+
 def complete_rows(path):
-    """Parsed rows, stopping at the first line that is not yet whole."""
+    """Parsed rows: waiting for a line still being written, stepping over a broken one.
+
+    These two look alike and are not. Every row is written with a trailing newline, so a
+    final line without one is an append in progress and will parse on the next pass. A
+    line anywhere above that will never parse: the process writing it died, or the disk
+    filled.
+
+    Stopping at either hid every row below it for as long as the watcher ran, and the
+    server reads the same file separately, so the page went on drawing those questions as
+    waiting for an answer with nothing listening. Silence is the one failure this must not
+    have, so an unreadable row is stepped over and said out loud once.
+    """
     rows = []
-    if not path.exists():
+    try:
+        text = path.read_text()
+    except FileNotFoundError:
         return rows
-    for line in path.read_text().splitlines():
+    lines = text.split("\n")
+    # Whatever follows the last newline is unfinished, and "" when the file ends cleanly.
+    lines.pop()
+    for number, line in enumerate(lines, 1):
         stripped = line.strip()
         if not stripped:
             continue
         try:
             rows.append(json.loads(stripped))
         except json.JSONDecodeError:
-            break  # a partial append; pick it up on the next pass
+            if (path, number) not in _UNREADABLE:
+                _UNREADABLE.add((path, number))
+                print(
+                    f"WATCHER-ERROR {path.name} line {number} cannot be read, skipping it",
+                    flush=True,
+                )
     return rows
 
 
@@ -207,7 +233,10 @@ def main():
                         if path is MESSAGES and row.get("role") != "you":
                             continue
                         print(describe(row), flush=True)
-                    seen[path] = max(seen[path], len(rows))
+                    # Not max(). Holding the high-water mark meant a log that got
+                    # shorter was never read again, and a watcher that has gone quiet
+                    # looks exactly like one with nothing to say.
+                    seen[path] = len(rows)
             except OSError as error:
                 print(f"WATCHER-ERROR {error}", flush=True)
             time.sleep(1)

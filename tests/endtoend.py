@@ -10,8 +10,10 @@ socket, and then asks git what actually happened. Slower than the pure checks by
 of seconds, and the only place a guard on a destructive endpoint can be proven.
 """
 
+import json
 import subprocess
 import sys
+import time
 
 import paths
 
@@ -26,6 +28,8 @@ from harness import (
     sandbox,
     serving,
     TOOL,
+    until,
+    watching,
 )
 
 EVIL = "https://evil.example"
@@ -335,3 +339,124 @@ def a_folder_the_tool_did_not_write_is_not_a_review():
         (state / "notes").mkdir(parents=True, exist_ok=True)
         real = paths.review_dir("origin/main...HEAD", repo, create=True)
         eq([p.name for p in paths.reviews(repo)], [real.name], "what counts as a review")
+
+
+# ------------------------------------------------------------- reading an append-only log
+#
+# The watcher is the only thing that turns a question on the page into a question a Claude
+# session sees. It tails the logs, and stopping early is the one failure it must not have:
+# the server reads the same files independently, so the page goes on showing those
+# questions as waiting for an answer while nothing is listening.
+
+
+def question_row(text, line="1"):
+    return {
+        "id": text.replace(" ", "")[:12],
+        "asked_at": "2026-01-01 00:00:00",
+        "question": text,
+        "commit": "0000000",
+        "file": "a.txt",
+        "side": "add",
+        "line": line,
+        "code": "x",
+    }
+
+
+def append_row(log, row):
+    with log.open("a") as handle:
+        handle.write(json.dumps(row) + "\n")
+
+
+@case
+def watcher_reads_past_a_row_it_cannot_parse():
+    """An append that died mid-write leaves a line that will never parse. Stopping at it
+    hides every question after it, for as long as that watcher runs, and the page keeps
+    drawing them as waiting for an answer."""
+    with sandbox() as (repo, run):
+        make_fixup(repo, run)
+        rng = paths.resolve_range("origin/main...HEAD", repo)
+        log = paths.logs(rng, repo, create=True)["questions"]
+        append_row(log, question_row("asked first"))
+        with log.open("a") as handle:
+            handle.write('{"id": "broken", "question": "half writ\n')
+        append_row(log, question_row("asked after the bad row"))
+        with watching(repo, "origin/main...HEAD") as output:
+            found = until(lambda: [ln for ln in output() if "asked after the bad row" in ln])
+            if not found:
+                raise Failed(
+                    f"the question after the unreadable row never arrived:\n{output()}"
+                )
+
+
+@case
+def watcher_says_once_that_a_row_is_unreadable():
+    """Skipping quietly is its own way of losing a question. Saying so every second is
+    noise in the session's window."""
+    with sandbox() as (repo, run):
+        make_fixup(repo, run)
+        rng = paths.resolve_range("origin/main...HEAD", repo)
+        log = paths.logs(rng, repo, create=True)["questions"]
+        with log.open("a") as handle:
+            handle.write('{"id": "broken", "question": "half writ\n')
+        append_row(log, question_row("asked after"))
+        with watching(repo, "origin/main...HEAD") as output:
+            until(lambda: [ln for ln in output() if "asked after" in ln])
+            time.sleep(2.5)
+            complaints = [ln for ln in output() if "questions.jsonl" in ln and "line" in ln]
+            eq(len(complaints), 1, f"one complaint, not one a second ({complaints})")
+
+
+@case
+def watcher_waits_for_a_line_still_being_written():
+    """The last line of an append-only log is sometimes half there. That one is not
+    broken, it is early, and announcing it as unreadable would cry wolf on every write."""
+    with sandbox() as (repo, run):
+        make_fixup(repo, run)
+        rng = paths.resolve_range("origin/main...HEAD", repo)
+        log = paths.logs(rng, repo, create=True)["questions"]
+        with log.open("a") as handle:
+            handle.write('{"id": "partial", "question": "still being')
+        with watching(repo, "origin/main...HEAD") as output:
+            time.sleep(2.5)
+            eq(
+                [ln for ln in output() if "line" in ln and "questions" in ln],
+                [],
+                "a line mid-write is not an error",
+            )
+            with log.open("a") as handle:
+                handle.write(
+                    ' written", "commit": "0000000", "file": "a.txt", '
+                    '"side": "add", "line": "1", "code": "x"}\n'
+                )
+            found = until(lambda: [ln for ln in output() if "still being written" in ln])
+            if not found:
+                raise Failed(f"the finished line never arrived:\n{output()}")
+
+
+@case
+def watcher_keeps_up_when_the_log_starts_over():
+    """A count of rows already seen is only safe while the file only grows.
+
+    Moving a review's folder away is how a reviewer puts its questions aside now, and a
+    watcher still running over it would hold the old count: the file comes back with one
+    row, the count says thirteen, and the next twelve questions go nowhere while the page
+    draws every one of them as waiting for an answer.
+    """
+    with sandbox() as (repo, run):
+        make_fixup(repo, run)
+        rng = paths.resolve_range("origin/main...HEAD", repo)
+        log = paths.logs(rng, repo, create=True)["questions"]
+        for n in range(3):
+            append_row(log, question_row(f"asked before {n}"))
+        with watching(repo, "origin/main...HEAD") as output:
+            seen = until(lambda: [ln for ln in output() if "asked before 2" in ln])
+            if not seen:
+                raise Failed(f"the first questions never arrived:\n{output()}")
+            log.unlink()
+            time.sleep(1.5)
+            append_row(log, question_row("asked after the log started over"))
+            found = until(
+                lambda: [ln for ln in output() if "asked after the log started over" in ln]
+            )
+            if not found:
+                raise Failed(f"the watcher went deaf when the log shrank:\n{output()}")
