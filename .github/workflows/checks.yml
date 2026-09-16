@@ -1,0 +1,50 @@
+name: checks
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # The build reads real history, and smoke.js runs the page it produces. A
+          # shallow clone has no HEAD~3 to build.
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      # node is optional for the tool and required here: without it the build skips the
+      # smoke check with a message, and a check that can skip itself is not a check.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: git identity for the scratch repos the tests build
+        run: |
+          git config --global user.email checks@example.invalid
+          git config --global user.name checks
+
+      - name: unit checks
+        run: python3 tool/selftest.py
+
+      - name: build a page and run its script
+        run: python3 tool/review.py build HEAD~3..HEAD
+
+      - name: manifests
+        run: |
+          python3 -c "import json,sys; json.load(open('.claude-plugin/plugin.json'))"
+          python3 -c "import json,sys; json.load(open('.claude-plugin/marketplace.json'))"
+          python3 - <<'PY'
+          import json
+          plugin = json.load(open(".claude-plugin/plugin.json"))
+          market = json.load(open(".claude-plugin/marketplace.json"))
+          entry = market["plugins"][0]
+          assert entry["name"] == plugin["name"], (entry["name"], plugin["name"])
+          print("manifests agree on", plugin["name"], plugin["version"])
+          PY

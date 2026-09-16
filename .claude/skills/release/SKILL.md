@@ -50,12 +50,18 @@ claude plugin tag -m "ai-web-reviewer %s" --push
 ## Before tagging, once
 
 ```bash
+python3 tool/selftest.py
 claude plugin validate .
 python3 tool/review.py build HEAD~3..HEAD
 ```
 
-The first checks both manifests. The second builds a page and runs `smoke.js` over it, so
-a page that throws is caught before it is tagged rather than after.
+The first runs the tool's own checks, each one holding down a bug that shipped. The second
+checks both manifests. The third builds a page and runs `smoke.js` over it, so a page that
+throws is caught before it is tagged rather than after. That third check is how the crash
+on a branch containing a PNG was found, one commit before it would have been tagged.
+
+GitHub Actions runs the same three on every push and pull request, so a red tag is the
+second place you hear about it rather than the first.
 
 ## What a release does not include
 

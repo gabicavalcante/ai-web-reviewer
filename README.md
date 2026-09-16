@@ -84,6 +84,16 @@ Python 3 and git. `node` is optional: the build runs the page's script against a
 DOM and refuses to serve a page that throws, and without node that check is skipped with
 a message.
 
+## Checks
+
+```bash
+python3 tool/selftest.py           # everything
+python3 tool/selftest.py paths     # only cases whose name contains "paths"
+```
+
+No dependencies, and every case names the failure it holds down. GitHub Actions runs them
+with the page build on every push and pull request.
+
 ## Install
 
 As a plugin:
@@ -415,6 +425,7 @@ worse.
 | `tool/answer.py` | Write a turn into a thread |
 | `tool/watch.py` | Emit new questions and replies as events |
 | `tool/smoke.js` | Run the built page's script, so a page that throws is not served |
+| `tool/selftest.py` | The tool's own checks. `python3 tool/selftest.py` |
 | `tool/narrative.example.json` | A narrative to copy from |
 
 ## What a version promises
