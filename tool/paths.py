@@ -135,6 +135,23 @@ def review_dir(rng, repo=None, create=False):
     return target
 
 
+# What review_dir builds: a slug and eight hex characters of digest.
+REVIEW_DIR = re.compile(r"-[0-9a-f]{8}$")
+
+
+def reviews(repo=None):
+    """Every review in this checkout, by directory.
+
+    The state directory is a directory, so anything can be in it, and a store written by
+    an older layout holds folders the tool no longer makes. Recognising the name a review
+    has is steadier than listing the names it does not: a folder nobody expected is not a
+    review either, and the watcher that has to ask "which review?" should not count it.
+    """
+    return sorted(
+        p for p in state_dir(repo).iterdir() if p.is_dir() and REVIEW_DIR.search(p.name)
+    )
+
+
 def page(rng, repo=None, create=False):
     """The built page for one range."""
     return review_dir(rng, repo, create) / "index.html"

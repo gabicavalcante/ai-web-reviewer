@@ -27,13 +27,7 @@ def review_range(argv):
     """
     if "--range" in argv:
         return argv[argv.index("--range") + 1]
-    folders = [
-        p
-        for p in paths.state_dir().iterdir()
-        # archived-* folders were written by a command that no longer exists. They are
-        # still on disk in older stores, and they are not reviews.
-        if p.is_dir() and not p.name.startswith("archived-")
-    ]
+    folders = paths.reviews()
     if len(folders) == 1:
         return None, folders[0]
     sys.exit(
@@ -58,11 +52,7 @@ def review_of(rng):
     """
     where = paths.review_dir(paths.resolve_range(rng), create=False)
     if not where.is_dir():
-        folders = sorted(
-            p.name
-            for p in paths.state_dir().iterdir()
-            if p.is_dir() and not p.name.startswith("archived-")
-        )
+        folders = [p.name for p in paths.reviews()]
         sys.exit(
             f"no review here for {rng!r}. Start the server for it first.\n"
             + (

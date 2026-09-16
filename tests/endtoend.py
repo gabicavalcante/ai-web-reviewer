@@ -292,33 +292,20 @@ def a_two_dot_range_is_left_alone():
         eq([c["subject"] for c in data["commits"]], ["Mine"], "a two dot range")
 
 
-# ------------------------------------------------------------------- what was dropped
-#
-# archive moved a review's four logs into a timestamped folder. It renamed
-# questions.jsonl out from under a running watcher, whose high-water mark survived the
-# file going back to zero rows, so the next questions were swallowed while the page drew
-# the confident "waiting for an answer". Replying to a thread the page still showed
-# answered "unknown thread".
-#
-# It was never used. The one archived folder on the author's disk predates threads moving
-# into review folders, and the largest store anywhere was fifteen threads. Threads have
-# been per review since, which is the isolation archive was written to provide, and `mv`
-# does the rest with the reviewer knowing they are doing it.
+# ---------------------------------------------------------------- what counts as a review
 
 
 @case
-def archive_is_gone_from_the_command_line():
-    """Asserted on argparse's own words, because `archive` already exited non-zero on a
-    review with no threads: a check for "did it fail" passed before the removal."""
+def review_py_offers_only_the_actions_it_has():
     with sandbox() as (repo, run):
         make_fixup(repo, run)
         done = subprocess.run(
-            [sys.executable, str(TOOL / "review.py"), "archive", "origin/main...HEAD"],
+            [sys.executable, str(TOOL / "review.py"), "tidy", "origin/main...HEAD"],
             cwd=str(repo),
             capture_output=True,
             text=True,
         )
-        eq(done.returncode, 2, f"argparse should reject it ({done.stderr[:160]!r})")
+        eq(done.returncode, 2, f"an action that is not offered ({done.stderr[:160]!r})")
         eq("invalid choice" in done.stderr, True, f"named as such ({done.stderr[:160]!r})")
 
 
@@ -338,17 +325,13 @@ def the_actions_that_remain_still_work():
 
 
 @case
-def a_folder_left_by_the_old_archive_is_not_a_review():
-    """Dropping the command does not drop the folders it already wrote. One is on the
-    author's disk, beside two real reviews, and without the filter the watcher counts it
-    as a third and asks which review you meant."""
+def a_folder_the_tool_did_not_write_is_not_a_review():
+    """The state directory is a directory. Anything can be in it, and older stores hold
+    folders from layouts the tool has moved on from. Counting one as a review makes the
+    watcher ask which of three reviews you meant when there are two."""
     with sandbox() as (repo, _):
         state = paths.state_dir(repo)
         (state / "archived-20260911-140948").mkdir(parents=True, exist_ok=True)
-        paths.review_dir("origin/main...HEAD", repo, create=True)
-        seen = sorted(
-            p.name
-            for p in state.iterdir()
-            if p.is_dir() and not p.name.startswith("archived-")
-        )
-        eq(len(seen), 1, f"reviews in this checkout ({seen})")
+        (state / "notes").mkdir(parents=True, exist_ok=True)
+        real = paths.review_dir("origin/main...HEAD", repo, create=True)
+        eq([p.name for p in paths.reviews(repo)], [real.name], "what counts as a review")

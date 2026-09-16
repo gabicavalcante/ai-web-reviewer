@@ -283,7 +283,6 @@ while reading it.
 | `narrative.json` | The narrative for this review, if it has one |
 | `index.html` | The rendered page, rewritten by every build |
 | `watcher.alive` | A heartbeat, rewritten every second while a watcher runs, and removed when it stops. The page reads it to know whether anyone is listening |
-| `archived-<stamp>/` | Left by a command that no longer exists. Yours to delete |
 
 ```
 api-bbfa229b/                                          the checkout
@@ -360,12 +359,8 @@ makes it again from git and the narrative. Everything else was written by a pers
 threads, and the narrative, which is prose somebody wrote about a branch and which no
 command produces again.
 
-A review keeps its own threads, so finishing one branch already leaves the review of
-another you are still reading alone. That is what the `archive` command was for, and why
-it is gone: it renamed `questions.jsonl` out from under a running watcher, which then
-swallowed every question asked afterwards while the page drew a confident "waiting for an
-answer". An `archived-<stamp>/` folder in an older store was written by it. Nothing reads
-those folders, and they are yours to move or delete.
+A review keeps its own threads, so finishing one branch leaves the review of another you
+are still reading alone. To put a review's questions away, move its folder.
 
 The `pre-squash/<stamp>` branches a squash leaves behind are the same kind of leftover.
 Nothing removes them either, and they are yours to delete once you trust the result.

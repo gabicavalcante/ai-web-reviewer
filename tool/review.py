@@ -122,11 +122,8 @@ def announce_siblings(rng):
         return
     others = [
         (folder.name, thread_count(folder))
-        for folder in sorted(paths.state_dir().iterdir())
-        if folder.is_dir() and folder != here
-        # A folder the archive command used to write, before it was dropped. They are
-        # still on disk and are not reviews.
-        and not folder.name.startswith("archived-") and thread_count(folder)
+        for folder in paths.reviews()
+        if folder != here and thread_count(folder)
     ]
     if not others:
         return

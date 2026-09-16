@@ -59,9 +59,7 @@ def review_of(thread_id, rng=None):
         if where.is_dir():
             return where
         print(f"no review here for {rng!r}, looking for the thread instead", file=sys.stderr)
-    folders = sorted(
-        p for p in STATE.iterdir() if p.is_dir() and not p.name.startswith("archived-")
-    )
+    folders = paths.reviews(REPO)
     for folder in folders:
         questions = folder / "questions.jsonl"
         if questions.exists() and f'"{thread_id}"' in questions.read_text():
