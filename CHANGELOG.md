@@ -2,6 +2,41 @@
 
 Dates are the day the change landed. Versions follow [semver](https://semver.org).
 
+## 1.2.0
+
+Both changes are about the squash bar telling you what it knows. Nothing to do on upgrade.
+
+### The squash bar says why it cannot run
+
+It used to offer a squash the server would refuse. Pressing it wrote the reason into the
+same green bar the offer was in and changed nothing else on the page, which read as a
+button that does nothing.
+
+The guards now run when the page polls, not only when the press arrives. A bar that
+cannot squash turns red, states the reason, and disables the button:
+
+```
+Cannot squash yet: 4 tracked file(s) have uncommitted changes. Commit or stash them first.
+```
+
+The dirty-tree message counts the files, since the old wording left you to go and find
+out which. The check costs a `git status`, so the page asks for it only while the bar is
+on screen, which is after every commit is ticked.
+
+### The rail says which commits have fixups folded into them
+
+Folding a fixup into the commit it amends is what keeps the rail as long as the change
+rather than as long as the review. It also hid the only reason the squash bar appears:
+the rail showed two ordinary commits, the bar offered to squash two fixups, and nothing
+on screen connected them.
+
+```
+1  Draft a post on Supabase authorization  +289 -0  2 fixups inside  reviewed
+```
+
+The fixups were always drawn inside that commit's own diff, which is no help to someone
+reading the rail and wondering what there is to squash.
+
 ## 1.1.0
 
 Upgrade if you are on 1.0.0. Questions asked on the page never reached Claude in that

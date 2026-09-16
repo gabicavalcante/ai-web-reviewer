@@ -1,7 +1,7 @@
 {
   "name": "ai-web-reviewer",
   "description": "Read a branch's diff in a browser and ask questions about individual lines, with the answers arriving beside the code they are about.",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "author": { "name": "Gabriela Cavalcante" },
   "homepage": "https://github.com/gabicavalcante/ai-web-reviewer",
   "license": "MIT",
