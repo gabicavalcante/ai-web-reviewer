@@ -9,6 +9,7 @@ import hashlib
 import json
 import os
 import pathlib
+import shutil
 import socket
 import subprocess
 import sys
@@ -18,7 +19,8 @@ import time
 import urllib.error
 import urllib.request
 
-TOOL = pathlib.Path(__file__).resolve().parent.parent / "tool"
+HERE = pathlib.Path(__file__).resolve().parent
+TOOL = HERE.parent / "tool"
 sys.path.insert(0, str(TOOL))
 
 CASES = []
@@ -220,6 +222,30 @@ def build(repo, rng):
     )
     if done.returncode != 0:
         raise Failed(f"build_data failed for {rng!r}:\n{done.stderr.strip()}")
+    return json.loads(done.stdout)
+
+
+def in_page(page, threads):
+    """Hand a built page a set of threads and report which ones it could not place.
+
+    Needs node, like the build's own smoke check. Returns None when node is absent so a
+    case can skip rather than fail for the wrong reason.
+    """
+    if not shutil.which("node"):
+        return None
+    with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False) as handle:
+        json.dump(threads, handle)
+        where = handle.name
+    try:
+        done = subprocess.run(
+            ["node", str(HERE / "inpage.js"), str(page), where],
+            capture_output=True,
+            text=True,
+        )
+    finally:
+        os.unlink(where)
+    if done.returncode != 0:
+        raise Failed(f"the page script failed:\n{done.stdout}{done.stderr}")
     return json.loads(done.stdout)
 
 

@@ -956,7 +956,27 @@
     VALID_ANCHORS.add([src.short, f.path, r.t, String(r.t === "del" ? r.o : r.n)].join("\u0000"));
   }))));
   let composerOpen = false;
-  const anchorKey = d => [d.commit, d.file, d.side, d.line].join("\u0000");
+    /* A thread records the commit it was asked on as git's abbreviated sha, and git picks
+       that width from how many objects the repo holds. A repo that grows, or a colleague
+       with core.abbrev set, changes it. Comparing the recorded string to the built one
+       exactly meant a change in width moved every thread in the review into the orphan
+       list, saying the commit is not part of this diff when it is, and there is no way
+       back: the short string is frozen in questions.jsonl.
+
+       So a sha is resolved to the one this page was built with before anything is
+       compared, the way foldedInto already does for the shas --did writes. Both the short
+       and the full hash are held, so a thread written at any width finds its line, and one
+       whose commit really was rewritten away finds nothing and stays an orphan. */
+    const BUILT_SHAS = new Set();
+    DATA.commits.forEach(c => withFollowups(c).forEach(src => BUILT_SHAS.add(src.short)));
+    const canonicalSha = sha => {
+      if (!sha || BUILT_SHAS.has(sha)) return sha;
+      for (const known of BUILT_SHAS) {
+        if (known.startsWith(sha) || sha.startsWith(known)) return known;
+      }
+      return sha;
+    };
+  const anchorKey = d => [canonicalSha(d.commit), d.file, d.side, d.line].join("\u0000");
 
   /* Threads live in the commits view only, so every scan for a row runs over that
      subtree rather than the document. The files view holds a second copy of the branch

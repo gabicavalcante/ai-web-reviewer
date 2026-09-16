@@ -11,6 +11,7 @@ of seconds, and the only place a guard on a destructive endpoint can be proven.
 """
 
 import json
+import re
 import subprocess
 import sys
 import time
@@ -24,6 +25,7 @@ from harness import (
     eq,
     Failed,
     get,
+    in_page,
     log,
     post,
     sandbox,
@@ -724,3 +726,93 @@ def a_narrative_survives_a_scaffold_that_cannot_be_written():
             f"the scaffold should not have been written ({done.stdout[:120]})",
         )
         eq(digest(written), kept, "the narrative that was already there")
+
+
+# ------------------------------------------------------------- what pins a thread to a line
+#
+# A thread records the commit it was asked on as git's abbreviated sha, and git chooses
+# that width from how many objects the repo holds. A repo that grows, or a colleague with
+# core.abbrev in their global config, changes it. The page compares the recorded string
+# against the one it was built with, exactly, so a change in width moves every thread in
+# the review into the orphan list under "this commit is not part of the diff shown here",
+# which is false, and there is no way back: the short string is frozen in questions.jsonl.
+
+
+def page_with_a_thread(repo, run, commit_field):
+    """A built page, and one thread anchored to its first commit by `commit_field`."""
+    rng = paths.resolve_range("origin/main...HEAD", repo)
+    subprocess.run(
+        [sys.executable, str(TOOL / "review.py"), "build", "origin/main...HEAD"],
+        cwd=str(repo),
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    page = paths.page(rng, repo)
+    data = json.loads(re.search(r"const DATA = (\{.*?\});\n", page.read_text(), re.S).group(1))
+    first = data["commits"][0]
+    row = next(r for f in first["files"] for r in f["rows"] if r["t"] in ("add", "ctx", "del"))
+    path = next(f["path"] for f in first["files"] for r in f["rows"] if r is row)
+    thread = {
+        "id": "thread000001",
+        "asked_at": "2026-01-01 00:00:00",
+        "question": "does this still belong to a line?",
+        "commit": commit_field(first),
+        "file": path,
+        "side": row["t"],
+        "line": str(row["o"] if row["t"] == "del" else row["n"]),
+        "code": row.get("text", ""),
+        "turns": [],
+        "resolved": False,
+    }
+    return page, thread
+
+
+@case
+def a_thread_stays_on_its_line_when_the_sha_is_written_longer():
+    """The failure this is about: same commit, wider abbreviation, every thread orphaned."""
+    with sandbox() as (repo, run):
+        make_fixup(repo, run)
+        page, thread = page_with_a_thread(repo, run, lambda c: c["hash"][:12])
+        drew = in_page(page, [thread])
+        if drew is None:
+            return
+        eq(drew["orphans"], [], f"threads the page could not place ({drew})")
+
+
+@case
+def a_thread_stays_on_its_line_when_the_sha_is_written_shorter():
+    """And the other direction, for a repo that was large and is now small, or a narrative
+    written by hand."""
+    with sandbox() as (repo, run):
+        make_fixup(repo, run)
+        page, thread = page_with_a_thread(repo, run, lambda c: c["short"][:5])
+        drew = in_page(page, [thread])
+        if drew is None:
+            return
+        eq(drew["orphans"], [], f"threads the page could not place ({drew})")
+
+
+@case
+def a_thread_on_the_sha_the_page_was_built_with_still_works():
+    """The ordinary case, which every existing thread on disk is."""
+    with sandbox() as (repo, run):
+        make_fixup(repo, run)
+        page, thread = page_with_a_thread(repo, run, lambda c: c["short"])
+        drew = in_page(page, [thread])
+        if drew is None:
+            return
+        eq(drew["orphans"], [], f"threads the page could not place ({drew})")
+
+
+@case
+def a_thread_on_a_commit_that_is_gone_is_still_orphaned():
+    """The orphan list is for threads whose commit really was rewritten away. Matching by
+    prefix must not quietly adopt one of those onto the nearest commit."""
+    with sandbox() as (repo, run):
+        make_fixup(repo, run)
+        page, thread = page_with_a_thread(repo, run, lambda c: "deadbeef")
+        drew = in_page(page, [thread])
+        if drew is None:
+            return
+        eq(drew["orphans"], ["thread000001"], f"a thread whose commit is gone ({drew})")
