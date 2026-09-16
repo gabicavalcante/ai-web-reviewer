@@ -350,10 +350,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
             "line": str(payload.get("line", ""))[:12],
             "code": str(payload.get("code", ""))[:400],
         }
-        with QUESTIONS.open("a") as handle:
-            handle.write(json.dumps(row) + "\n")
-            handle.flush()
-            os.fsync(handle.fileno())
+        paths.append_row(QUESTIONS, row)
         return self._json({"ok": True, "id": row["id"]})
 
     def _squash_block(self, force=False):
@@ -543,10 +540,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
             "text": text[:4000],
             "at": time.strftime("%Y-%m-%d %H:%M:%S"),
         }
-        with MESSAGES.open("a") as handle:
-            handle.write(json.dumps(row) + "\n")
-            handle.flush()
-            os.fsync(handle.fileno())
+        paths.append_row(MESSAGES, row)
         return self._json({"ok": True, "thread_id": thread_id})
 
     def _resolve(self):
@@ -562,10 +556,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
             "resolved": bool(payload.get("resolved", True)),
             "at": time.strftime("%Y-%m-%d %H:%M:%S"),
         }
-        with RESOLVED.open("a") as handle:
-            handle.write(json.dumps(row) + "\n")
-            handle.flush()
-            os.fsync(handle.fileno())
+        paths.append_row(RESOLVED, row)
         return self._json({"ok": True, **row})
 
 

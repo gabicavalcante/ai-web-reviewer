@@ -5,6 +5,7 @@ hardcoding a path.
 """
 
 import hashlib
+import json
 import os
 import re
 import pathlib
@@ -29,7 +30,9 @@ def state_dir(repo=None):
     The directory name carries the repo's basename for a human reading `ls`, plus a
     hash of its absolute path so two checkouts of the same project do not collide.
     """
-    repo = pathlib.Path(repo) if repo else repo_root()
+    # Resolved before the name is taken, or a relative path gives a directory with no
+    # name at all: Path(".").name is "".
+    repo = pathlib.Path(repo).resolve() if repo else repo_root()
     base = (
         pathlib.Path(os.environ.get("XDG_STATE_HOME", pathlib.Path.home() / ".local/state"))
         / "web-reviewer"
@@ -72,6 +75,26 @@ def resolve_range(rng, repo=None):
         )
         here = sha.stdout.strip() or "HEAD"
     return sep.join(here if part.strip() == "HEAD" else part for part in rng.split(sep))
+
+
+def append_row(path, row):
+    """Add one row to an append-only log, on a line of its own, and get it to the disk.
+
+    A write that died leaves a line with no newline on the end. Without the check the next
+    append lands on that same line and the two parse as nothing, so a write that damaged
+    one row takes the next one with it. The byte costs nothing and keeps the damage to the
+    row that was damaged.
+
+    Flushed and fsynced because the browser is told the question was accepted as soon as
+    this returns, and a question the reviewer has been thanked for has to survive the
+    machine going down.
+    """
+    with path.open("a") as handle:
+        if path.stat().st_size and not path.read_bytes().endswith(b"\n"):
+            handle.write("\n")
+        handle.write(json.dumps(row) + "\n")
+        handle.flush()
+        os.fsync(handle.fileno())
 
 
 def commit_range(rng, repo=None):

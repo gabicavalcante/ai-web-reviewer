@@ -166,8 +166,7 @@ def main():
         "at": time.strftime("%Y-%m-%d %H:%M:%S"),
         **extra,
     }
-    with messages.open("a") as handle:
-        handle.write(json.dumps(row) + "\n")
+    paths.append_row(messages, row)
     print(f"{kind} in thread {question_id} ({len(text)} chars)")
 
 

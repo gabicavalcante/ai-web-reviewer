@@ -400,7 +400,8 @@ def watcher_says_once_that_a_row_is_unreadable():
             handle.write('{"id": "broken", "question": "half writ\n')
         append_row(log, question_row("asked after"))
         with watching(repo, "origin/main...HEAD") as output:
-            until(lambda: [ln for ln in output() if "asked after" in ln])
+            if not until(lambda: [ln for ln in output() if "asked after" in ln]):
+                raise Failed(f"the row after the bad one never arrived:\n{output()}")
             time.sleep(2.5)
             complaints = [ln for ln in output() if "questions.jsonl" in ln and "line" in ln]
             eq(len(complaints), 1, f"one complaint, not one a second ({complaints})")
@@ -453,10 +454,113 @@ def watcher_keeps_up_when_the_log_starts_over():
             if not seen:
                 raise Failed(f"the first questions never arrived:\n{output()}")
             log.unlink()
-            time.sleep(1.5)
+            time.sleep(2.5)
             append_row(log, question_row("asked after the log started over"))
             found = until(
                 lambda: [ln for ln in output() if "asked after the log started over" in ln]
             )
             if not found:
                 raise Failed(f"the watcher went deaf when the log shrank:\n{output()}")
+
+
+@case
+def watcher_does_not_say_the_same_thing_twice():
+    """Counting rows already read only works while the file only grows. If it shrinks and
+    comes back, a count that follows it replays everything, and the session answers threads
+    it has already answered: the reviewer gets the same reply posted twice."""
+    with sandbox() as (repo, run):
+        make_fixup(repo, run)
+        rng = paths.resolve_range("origin/main...HEAD", repo)
+        log = paths.logs(rng, repo, create=True)["questions"]
+        for n in range(3):
+            append_row(log, question_row(f"asked number {n}"))
+        with watching(repo, "origin/main...HEAD") as output:
+            if not until(lambda: [ln for ln in output() if "asked number 2" in ln]):
+                raise Failed(f"the questions never arrived:\n{output()}")
+            kept = log.read_text()
+            log.unlink()
+            time.sleep(1.5)
+            log.write_text(kept)
+            time.sleep(2.5)
+            for n in range(3):
+                said = [ln for ln in output() if f"asked number {n}" in ln]
+                eq(len(said), 1, f"times question {n} was announced ({said})")
+
+
+@case
+def watcher_names_the_line_it_could_not_read():
+    """A complaint that does not say which line is a complaint nobody can act on."""
+    with sandbox() as (repo, run):
+        make_fixup(repo, run)
+        rng = paths.resolve_range("origin/main...HEAD", repo)
+        log = paths.logs(rng, repo, create=True)["questions"]
+        append_row(log, question_row("first"))
+        append_row(log, question_row("second"))
+        with log.open("a") as handle:
+            handle.write('{"id": "broken", "question": "half writ\n')
+        append_row(log, question_row("fourth"))
+        with watching(repo, "origin/main...HEAD") as output:
+            if not until(lambda: [ln for ln in output() if "fourth" in ln]):
+                raise Failed(f"the row after the bad one never arrived:\n{output()}")
+            complaints = [ln for ln in output() if "cannot be read" in ln]
+            eq(len(complaints), 1, f"one complaint ({complaints})")
+            eq("line 3" in complaints[0], True, f"naming the right line ({complaints[0]!r})")
+
+
+@case
+def a_row_after_a_torn_one_is_still_readable():
+    """A write that died leaves a line with no newline on the end. The next append lands
+    on that same line, and the two together parse as nothing: the earlier row was already
+    lost, and the new one joins it. Starting a line of its own costs a byte and keeps the
+    damage to the row that was actually damaged."""
+    with sandbox() as (repo, run):
+        make_fixup(repo, run)
+        with serving(repo, "origin/main...HEAD") as base:
+            rng = paths.resolve_range("origin/main...HEAD", repo)
+            log = paths.logs(rng, repo)["questions"]
+            with log.open("a") as handle:
+                handle.write('{"id": "torn", "question": "the write that di')
+            status, body = post(
+                base,
+                "/ask",
+                {
+                    "question": "the question after the damage",
+                    "commit": "0000000",
+                    "file": "a.txt",
+                    "side": "add",
+                    "line": "1",
+                    "code": "x",
+                },
+                {"Content-Type": "application/json", "Origin": base},
+            )
+            eq(status, 200, f"the question was accepted ({body})")
+            kept = [t["question"] for t in get(base, "/thread")["threads"]]
+            eq(kept, ["the question after the damage"], "what survived the torn row")
+
+
+@case
+def watcher_complains_again_about_a_different_broken_row():
+    """Remembering a complaint by line number means a second, unrelated broken row landing
+    at the same number after a log starts over is stepped over without a word. Nothing is
+    lost, but nobody is told the store has been damaged twice."""
+    with sandbox() as (repo, run):
+        make_fixup(repo, run)
+        rng = paths.resolve_range("origin/main...HEAD", repo)
+        log = paths.logs(rng, repo, create=True)["questions"]
+        append_row(log, question_row("first"))
+        with log.open("a") as handle:
+            handle.write('{"id": "broken one", "question": "half wr\n')
+        append_row(log, question_row("after the first break"))
+        with watching(repo, "origin/main...HEAD") as output:
+            if not until(lambda: [ln for ln in output() if "after the first break" in ln]):
+                raise Failed(f"nothing arrived:\n{output()}")
+            log.unlink()
+            time.sleep(1.5)
+            append_row(log, question_row("second life"))
+            with log.open("a") as handle:
+                handle.write('{"id": "broken two", "question": "a different half\n')
+            append_row(log, question_row("after the second break"))
+            if not until(lambda: [ln for ln in output() if "after the second break" in ln]):
+                raise Failed(f"the row after the second break never arrived:\n{output()}")
+            complaints = [ln for ln in output() if "cannot be read" in ln]
+            eq(len(complaints), 2, f"a complaint for each damaged row ({complaints})")

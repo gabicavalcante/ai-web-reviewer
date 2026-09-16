@@ -76,8 +76,9 @@ HEARTBEAT = WHERE / "watcher.alive"
 LEGACY_SKIP = "No, skip the investigation."
 
 
-# Lines already reported as unreadable, so the same one is not complained about every
-# second for the life of the watcher.
+# Rows already reported as unreadable, so the same one is not complained about every
+# second. Keyed on the text rather than the line number, or a different broken row landing
+# at the same number after a log starts over is skipped without a word.
 _UNREADABLE = set()
 
 
@@ -107,10 +108,10 @@ def complete_rows(path):
         if not stripped:
             continue
         try:
-            rows.append(json.loads(stripped))
+            rows.append((stripped, json.loads(stripped)))
         except json.JSONDecodeError:
-            if (path, number) not in _UNREADABLE:
-                _UNREADABLE.add((path, number))
+            if (path, stripped) not in _UNREADABLE:
+                _UNREADABLE.add((path, stripped))
                 print(
                     f"WATCHER-ERROR {path.name} line {number} cannot be read, skipping it",
                     flush=True,
@@ -121,7 +122,7 @@ def complete_rows(path):
 def turns_by_thread():
     """Every turn on every thread, oldest first, the way the server assembles them."""
     turns = {}
-    for answer in complete_rows(ANSWERS):
+    for _, answer in complete_rows(ANSWERS):
         turns.setdefault(answer.get("question_id"), []).append(
             {
                 "role": "claude",
@@ -129,7 +130,7 @@ def turns_by_thread():
                 "at": answer.get("answered_at", ""),
             }
         )
-    for message in complete_rows(MESSAGES):
+    for _, message in complete_rows(MESSAGES):
         turns.setdefault(message.get("thread_id"), []).append(
             {
                 "role": message.get("role", "you"),
@@ -146,7 +147,7 @@ def turns_by_thread():
 def resolved_ids():
     # Append-only, so the last row for an id is the current state.
     state = {}
-    for row in complete_rows(RESOLVED):
+    for _, row in complete_rows(RESOLVED):
         state[row.get("question_id")] = bool(row.get("resolved"))
     return {question_id for question_id, is_resolved in state.items() if is_resolved}
 
@@ -168,7 +169,7 @@ def backlog():
     turns = turns_by_thread()
     resolved = resolved_ids()
     waiting = []
-    for question in complete_rows(QUESTIONS):
+    for _, question in complete_rows(QUESTIONS):
         question_id = question.get("id")
         if question_id in resolved:
             continue
@@ -215,9 +216,14 @@ def main():
     for question, last in backlog():
         print(describe_backlog(question, last), flush=True)
 
+    # What has already been said, not how much. A count only holds while the file only
+    # grows: the high-water mark it started as went deaf when a log got shorter, and
+    # following the length instead replayed every row when one came back, so the session
+    # answered threads it had already answered. Rows are unique text in an append-only
+    # log, so the text is the identity.
     seen = {
-        QUESTIONS: len(complete_rows(QUESTIONS)),
-        MESSAGES: len(complete_rows(MESSAGES)),
+        QUESTIONS: {line for line, _ in complete_rows(QUESTIONS)},
+        MESSAGES: {line for line, _ in complete_rows(MESSAGES)},
     }
     try:
         while True:
@@ -227,16 +233,14 @@ def main():
                     (QUESTIONS, describe_question),
                     (MESSAGES, describe_reply),
                 ):
-                    rows = complete_rows(path)
-                    for row in rows[seen[path] :]:
+                    for line, row in complete_rows(path):
+                        if line in seen[path]:
+                            continue
+                        seen[path].add(line)
                         # Claude's own turns are written by answer.py; do not echo them back.
                         if path is MESSAGES and row.get("role") != "you":
                             continue
                         print(describe(row), flush=True)
-                    # Not max(). Holding the high-water mark meant a log that got
-                    # shorter was never read again, and a watcher that has gone quiet
-                    # looks exactly like one with nothing to say.
-                    seen[path] = len(rows)
             except OSError as error:
                 print(f"WATCHER-ERROR {error}", flush=True)
             time.sleep(1)
