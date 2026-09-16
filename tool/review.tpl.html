@@ -495,17 +495,13 @@
 
   const withFollowups = c => [c, ...(c.followups || [])];
 
-  /* A thread records the commit it was asked on as git's abbreviated sha, and git picks
-     that width from how many objects the repo holds. A repo that grows, or a colleague
-     with core.abbrev set, changes it. Comparing the recorded string to the built one
-     exactly meant a change in width moved every thread in the review into the orphan
-     list, saying the commit is not part of this diff when it is, and there is no way
-     back: the short string is frozen in questions.jsonl.
+  /* A sha is resolved to the one this page was built with before anything compares it.
 
-     So a sha is resolved to the one this page was built with before anything is
-     compared, the way foldedInto already does for the shas --did writes. Both the short
-     and the full hash are held, so a thread written at any width finds its line, and one
-     whose commit really was rewritten away finds nothing and stays an orphan. */
+     Threads and ticks record git's abbreviated sha, and git picks that width from how
+     many objects the repo holds, so a repo that grows or a colleague with core.abbrev set
+     writes the same commit differently. Compared exactly, everything anchored to the
+     review stops matching at once, and the recorded string is frozen on disk with no way
+     back. */
   const BUILT_SHAS = new Set();
   DATA.commits.forEach(c => withFollowups(c).forEach(src => BUILT_SHAS.add(src.short)));
   const canonicalSha = sha => {
@@ -516,10 +512,9 @@
     let found = null;
     for (const known of BUILT_SHAS) {
       if (!known.startsWith(sha) && !sha.startsWith(known)) continue;
-      // Two commits share a prefix once a sha is recorded narrower than the repo now
-      // needs, which is the case this exists for. Guessing files the question under
-      // another commit's code at the same line with nothing on screen saying so. Left an
-      // orphan it is visible, and it can be read.
+      // A sha recorded narrower than the repo now needs can prefix two commits. Guessing
+      // files the question under another commit's code at the same line, silently; left
+      // an orphan it is visible, and can be read.
       if (found) return sha;
       found = known;
     }
@@ -530,10 +525,8 @@
   const reviewed = new Set();
   try {
     const saved = JSON.parse(localStorage.getItem(STORE) || "[]");
-      // Through the same resolver the anchors use. A tick is stored as the abbreviated
-      // sha it was ticked at, and git widens that as a repo grows, so an exact lookup
-      // un-ticked every commit, reset the progress bar, and hid the squash bar, which
-      // only appears once every commit is ticked.
+      // Through the same resolver the anchors use, so a tick survives the width it was
+      // written at. The squash bar depends on every commit being ticked.
       if (Array.isArray(saved)) saved.forEach(s => reviewed.add(canonicalSha(s)));
   } catch (e) { /* private window or blocked storage: start empty */ }
 
@@ -1057,9 +1050,8 @@
     const thread = el("div", "thread" + (allResolved ? " done" : ""));
     list.forEach(t => {
       if (t.resolved) {
-        // Reading a resolved thread used to mean reopening it, which changed its state
-        // just to look. It opens in place now, and Reopen sits inside, where it is a
-        // decision rather than the only way in.
+        // A resolved thread opens in place, so reading one does not change its state.
+        // Reopen sits inside, where it is a decision rather than the only way in.
         const box = el("details", "resolved-thread");
         const line = el("summary", "resolved-line");
         line.appendChild(el("span", "tick", "resolved"));

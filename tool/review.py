@@ -76,18 +76,16 @@ def build(rng, narrative):
     split = page.index('<div class="shell">')
     out = SKELETON + page[:split] + "</head>\n<body>\n" + page[split:] + "\n</body>\n</html>\n"
     target = paths.page(rng, repo, create=True)
-    # Written beside the page and moved over it only once its script has run. The check
-    # used to happen after the write, so the page it refused was already the one on disk
-    # and the last good one was gone: a typo in a hand-edited narrative was enough to
-    # leave the reviewer reloading onto a masthead and nothing else. A squash makes it
-    # worse, because history is rewritten before the rebuild that fails.
+    # Built beside the page and moved over it only once its script has run, so a build
+    # that fails leaves the reviewer reading what they were reading. The narrative is
+    # hand-edited and picked up by every rebuild, so a typo in it fails the check, and a
+    # squash rebuilds after the rebase.
     draft = target.with_name(target.name + f".building-{os.getpid()}")
     try:
         draft.write_text(out)
         smoke(draft)
-        # A replace installs a fresh file with default permissions, so a page somebody
-        # tightened on a shared machine reopened on every rebuild. It holds the whole diff
-        # of the branch, so it keeps whatever it was given.
+        # The page holds the whole diff of the branch, so it keeps the permissions it was
+        # given. A replace would otherwise install a fresh file at the default.
         if target.exists():
             os.chmod(draft, target.stat().st_mode & 0o7777)
         try:
@@ -210,8 +208,8 @@ def narrate(rng, force):
             for commit in commits
         },
     }
-    # Written beside it and moved over, like the page. Unlike the page this one cannot be
-    # produced again, so a Ctrl-C or a full disk halfway through must not be what is left.
+    # Written beside it and moved over, like the page. Unlike the page nothing can produce
+    # this one again, so a Ctrl-C or a full disk must not be what is left of it.
     draft = target.with_name(target.name + ".writing")
     try:
         draft.write_text(json.dumps(scaffold, indent=2, ensure_ascii=False) + "\n")

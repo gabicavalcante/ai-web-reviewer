@@ -16,17 +16,16 @@ import sys
 
 import paths
 
-# The quotes are optional because git wraps a path in them when it holds anything it
-# would rather escape. An unmatched header is worse than a wrong name: the file gets no
-# entry at all and its header lines are read as content belonging to whichever file came
-# before it, numbered as if they were its lines.
+# The quotes are optional because git wraps a path in them when it holds anything git
+# would rather escape. A header that does not match costs more than a wrong name: the file
+# gets no entry, and its own header lines are read as content of the file before it.
 FILE_RE = re.compile(r'^diff --git "?a/(.+?)"? "?b/(.+?)"?$')
 HUNK_RE = re.compile(r"^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@(.*)$")
 COLLAPSE_DELETIONS_OVER = 40
 
 
 # quotepath=false so a path with an accent in it arrives as itself rather than as octal
-# escapes. It does not cover every path git quotes, which is why FILE_RE allows the quotes.
+# escapes. It covers only non-ASCII, which is why FILE_RE allows the quotes as well.
 GIT = ("git", "-c", "core.quotepath=false")
 
 
@@ -53,17 +52,16 @@ def check_range(repo, rng):
 def parse_patch(patch):
     """A unified diff as rows, each carrying the line number it really has.
 
-    Everything between "diff --git" and the first "@@" is header, and everything after it
+    Everything between "diff --git" and the first "@@" is header and everything after it
     is content, so the two are told apart by position rather than by what a line starts
-    with. Matching on the prefix read a deleted line as a header: content beginning "-- "
-    reaches git as "--- ", which is also how git introduces the old side of a file. That
-    line was dropped and not counted, so a SQL comment vanished from the page and every
-    old-side number below it was short by one, which is enough to anchor a question to a
-    line the reviewer never clicked.
+    with. A prefix cannot tell them apart: deleted content beginning "-- " reaches git as
+    "--- ", which is also how git introduces the old side of a file, and added content
+    beginning "++ " reaches it as "+++ ". Reading such a line as a header drops it from
+    the page and leaves every line number below it short by one, which is enough to anchor
+    a question to a line the reviewer never clicked.
 
-    Reading by position also covers the headers nobody listed. A mode change has no hunk
-    at all, and "old mode 100644" was falling through to the context branch and drawing
-    two rows of diff with their first character eaten.
+    Position also covers the headers no list would have: a mode change carries no hunk at
+    all, so "old mode 100644" is header wherever it appears.
     """
     files, current = [], None
     old_no = new_no = 0
@@ -73,8 +71,8 @@ def parse_patch(patch):
         if match:
             current = dict(path=match.group(2), status="modified", rows=[])
             files.append(current)
-            # Back to reading headers. Without this a file whose header carries no hunk,
-            # a mode change, leaves the next file's headers being read as its content.
+            # Back to reading headers, which a file carrying no hunk at all would
+            # otherwise leave unset for the next one.
             in_hunk = False
             continue
         if current is None:

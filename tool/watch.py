@@ -77,8 +77,8 @@ LEGACY_SKIP = "No, skip the investigation."
 
 
 # Rows already reported as unreadable, so the same one is not complained about every
-# second. Keyed on the text rather than the line number, or a different broken row landing
-# at the same number after a log starts over is skipped without a word.
+# second. Keyed on the text: a log that starts over puts a different broken row at the
+# same line number, and that one is worth hearing about.
 _UNREADABLE = set()
 
 
@@ -87,13 +87,13 @@ def complete_rows(path):
 
     These two look alike and are not. Every row is written with a trailing newline, so a
     final line without one is an append in progress and will parse on the next pass. A
-    line anywhere above that will never parse: the process writing it died, or the disk
-    filled.
+    line anywhere above that will never parse, because the process writing it died or the
+    disk filled, and stopping there would hide every row below it for as long as the
+    watcher runs.
 
-    Stopping at either hid every row below it for as long as the watcher ran, and the
-    server reads the same file separately, so the page went on drawing those questions as
-    waiting for an answer with nothing listening. Silence is the one failure this must not
-    have, so an unreadable row is stepped over and said out loud once.
+    That silence is the failure this must not have: the server reads the same file, so the
+    page would go on drawing those questions as waiting for an answer with nothing
+    listening. An unreadable row is stepped over, and said out loud once.
     """
     rows = []
     try:
@@ -217,10 +217,9 @@ def main():
         print(describe_backlog(question, last), flush=True)
 
     # What has already been said, not how much. A count only holds while the file only
-    # grows: the high-water mark it started as went deaf when a log got shorter, and
-    # following the length instead replayed every row when one came back, so the session
-    # answered threads it had already answered. Rows are unique text in an append-only
-    # log, so the text is the identity.
+    # grows: the highest count goes deaf when a log gets shorter, and the current one
+    # replays every row when it comes back, which has the session answering threads twice.
+    # Rows are unique text in an append-only log, so the text is the identity.
     seen = {
         QUESTIONS: {line for line, _ in complete_rows(QUESTIONS)},
         MESSAGES: {line for line, _ in complete_rows(MESSAGES)},

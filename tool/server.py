@@ -72,8 +72,8 @@ def review_tip():
 
     RANGE is decided once, when the review starts. HEAD is whatever the reviewer has
     checked out since, and every part of the squash reads HEAD: the merge base, the fixup
-    count, the rebase itself. So the button rewrote the branch that happened to be
-    checked out and answered as though it had rewritten the one on the page.
+    count, the rebase itself. Comparing the two is what keeps the button on the branch the
+    page is showing.
     """
     tip = RANGE.split("...")[-1] if "..." in RANGE else RANGE.split("..")[-1]
     return tip.strip()
@@ -277,13 +277,13 @@ class Handler(http.server.BaseHTTPRequestHandler):
     def _cross_site(self):
         """Why this write should be refused, or None.
 
-        Binding 127.0.0.1 with no authentication accepts one threat: other processes on
-        this machine. It does not cover the one that matters. A browser will send a POST
-        to localhost on behalf of whatever page the reviewer has open, and a POST with a
-        simple content type needs no preflight to ask permission first. So every website
-        open while a review is running could reach these endpoints, and two of them write:
-        /ask puts words into the log a Claude session reads and acts on, and /squash runs
-        git rebase on the reviewer's repo.
+        Binding 127.0.0.1 with no authentication accepts one threat, other processes on
+        this machine, and not the one that matters. A browser sends a POST to localhost on
+        behalf of whatever page the reviewer has open, and a POST with a simple content
+        type needs no preflight to ask permission first. So any website open while a review
+        is running can reach these endpoints, and two of them write: /ask puts words into
+        the log a Claude session reads and acts on, and /squash runs git rebase on the
+        reviewer's repo.
 
         Two checks, because each covers what the other cannot. Origin and Sec-Fetch-Site
         are set by the browser and cannot be forged by a page, but a non-browser client

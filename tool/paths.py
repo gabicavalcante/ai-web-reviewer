@@ -80,10 +80,9 @@ def resolve_range(rng, repo=None):
 def append_row(path, row):
     """Add one row to an append-only log, on a line of its own, and get it to the disk.
 
-    A write that died leaves a line with no newline on the end. Without the check the next
-    append lands on that same line and the two parse as nothing, so a write that damaged
-    one row takes the next one with it. The byte costs nothing and keeps the damage to the
-    row that was damaged.
+    A write that died leaves a line with no newline on the end. An append landing on that
+    same line makes the two parse as nothing, so one damaged row would take the next one
+    with it; the byte costs nothing and keeps the damage where it happened.
 
     Flushed and fsynced because the browser is told the question was accepted as soon as
     this returns, and a question the reviewer has been thanked for has to survive the
@@ -101,17 +100,14 @@ def commit_range(rng, repo=None):
     """The range as one set of commits, for anything that has to count them.
 
     `git log a...b` is the symmetric difference, commits on either side. `git diff a...b`
-    is merge-base..b, one side. The same string meant two different sets, and
-    "origin/main...HEAD" is the default, so every commit origin/main gained since the
-    branch started was listed on the rail and absent from the diff it was measured
-    against. One real review showed 97 commits for a branch holding 23.
-
-    Worse than untidy: the survival mark measures a commit against the diff, so all of
-    those scored zero and the page printed "nothing it added is still in the branch" over
-    work that was very much still in the branch.
+    is merge-base..b, one side. So the three dot form names two different sets depending on
+    who reads it, and "origin/main...HEAD" is the default: without this, the rail lists
+    every commit origin/main has gained since the branch started, and the diff those
+    commits are measured against does not contain them. They then score nothing, and the
+    page says so in a sentence about work that is still very much in the branch.
 
     Separate from resolve_range on purpose. That one decides a review's identity, and
-    rewriting it here would rename every folder on disk and orphan the threads inside.
+    normalising there would rename every folder on disk and orphan the threads inside.
     This is only for asking git which commits a range holds.
     """
     if "..." not in rng:

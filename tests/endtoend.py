@@ -1,13 +1,9 @@
 """Checks that drive a real server over a real repo.
 
-These exist because the suite that did not have them held down one of the three bugs it
-claimed to. Deleting the range resolution from watch.py left all 29 pure checks green,
-and that was the exact edit behind the bug it was written for: server.py, watch.py and
-answer.py had no coverage at all.
-
-Every case here starts a server the way a reviewer starts one, talks to it over the
-socket, and then asks git what actually happened. Slower than the pure checks by a couple
-of seconds, and the only place a guard on a destructive endpoint can be proven.
+Every case starts a server the way a reviewer starts one, talks to it over the socket, and
+then asks git what actually happened. Slower than the pure checks by a couple of seconds,
+and the only place a guard on a destructive endpoint can be proven: server.py, watch.py and
+answer.py do most of what can go wrong here and none of it is reachable from a pure check.
 """
 
 import json
@@ -301,6 +297,9 @@ def a_two_dot_range_is_left_alone():
 
 
 # ---------------------------------------------------------------- what counts as a review
+#
+# The state directory is a directory: anything can be in it, and only the folders review_dir
+# named are reviews.
 
 
 @case
@@ -572,10 +571,9 @@ def watcher_complains_again_about_a_different_broken_row():
 
 # ------------------------------------------------------- a build that fails is not a build
 #
-# smoke.js runs the built page's script and refuses a page that throws. It only refuses
-# after the page has been written, so the page it rejected is already the one on disk and
-# the last good one is gone. A narrative is hand-edited and picked up by every rebuild, so
-# a typo in it is enough, and the reviewer reloads onto a masthead and nothing else.
+# smoke.js runs the built page's script and refuses a page that throws. What matters is
+# which page is on disk when it does: the narrative is hand-edited and picked up by every
+# rebuild, so a typo in it fails the build, and a squash rebuilds after the rebase.
 
 
 def break_the_narrative(repo, rng):
@@ -600,8 +598,8 @@ def a_failed_build_leaves_the_last_good_page():
         eq(good.returncode, 0, f"the first build ({good.stderr[:200]})")
         page = paths.page(rng, repo)
         # A digest, because a failure that prints two whole pages is unreadable. Checked
-        # for None first: a missing file digests to None, so comparing before and after
-        # passed against a build that produced no page at all.
+        # for None first, since a missing file digests to None and would compare equal to
+        # another missing file.
         kept = digest(page)
         eq(kept is not None, True, "the first build wrote a page")
         break_the_narrative(repo, rng)
@@ -732,11 +730,10 @@ def a_narrative_survives_a_scaffold_that_cannot_be_written():
 # ------------------------------------------------------------- what pins a thread to a line
 #
 # A thread records the commit it was asked on as git's abbreviated sha, and git chooses
-# that width from how many objects the repo holds. A repo that grows, or a colleague with
-# core.abbrev in their global config, changes it. The page compares the recorded string
-# against the one it was built with, exactly, so a change in width moves every thread in
-# the review into the orphan list under "this commit is not part of the diff shown here",
-# which is false, and there is no way back: the short string is frozen in questions.jsonl.
+# that width from how many objects the repo holds, so a repo that grows or a colleague with
+# core.abbrev set writes the same commit differently. What the page does with a sha it was
+# not built with decides whether every thread in the review stays on its line, moves to the
+# orphan list, or lands on the wrong commit.
 
 
 def page_with_a_thread(repo, run, commit_field):

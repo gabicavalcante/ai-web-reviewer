@@ -19,10 +19,10 @@ Importing a case file is what registers its cases, so a new one goes in the list
 import pathlib
 import sys
 
-# Python validates a .pyc against the source's (mtime, size) in whole seconds. Reverting
-# an edit that happens to be the same length, within the same second, leaves a cache that
-# looks current and is not: a mutation test reported the tool still broken after the file
-# had been put back. Nothing here is imported often enough for the cache to be worth that.
+# Python validates a .pyc against the source's mtime and size in whole seconds, so an edit
+# of the same length within the same second leaves a cache that looks current and is not.
+# Mutation testing does exactly that. Nothing here is imported often enough for the cache
+# to be worth the risk.
 sys.dont_write_bytecode = True
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
