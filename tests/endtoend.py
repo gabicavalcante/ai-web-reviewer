@@ -20,6 +20,7 @@ import paths
 from harness import (
     build,
     case,
+    digest,
     eq,
     Failed,
     get,
@@ -564,3 +565,63 @@ def watcher_complains_again_about_a_different_broken_row():
                 raise Failed(f"the row after the second break never arrived:\n{output()}")
             complaints = [ln for ln in output() if "cannot be read" in ln]
             eq(len(complaints), 2, f"a complaint for each damaged row ({complaints})")
+
+
+# ------------------------------------------------------- a build that fails is not a build
+#
+# smoke.js runs the built page's script and refuses a page that throws. It only refuses
+# after the page has been written, so the page it rejected is already the one on disk and
+# the last good one is gone. A narrative is hand-edited and picked up by every rebuild, so
+# a typo in it is enough, and the reviewer reloads onto a masthead and nothing else.
+
+
+def break_the_narrative(repo, rng):
+    """A narrative the build accepts and the page cannot draw. A stage needs only `where`
+    and `what` to validate, and the page walks its `marks`."""
+    paths.narrative(rng, repo, create=True).write_text(
+        json.dumps({"stages": [{"where": "parsing", "what": "reads the input"}]})
+    )
+
+
+@case
+def a_failed_build_leaves_the_last_good_page():
+    with sandbox() as (repo, run):
+        make_fixup(repo, run)
+        rng = paths.resolve_range("origin/main...HEAD", repo)
+        good = subprocess.run(
+            [sys.executable, str(TOOL / "review.py"), "build", "origin/main...HEAD"],
+            cwd=str(repo),
+            capture_output=True,
+            text=True,
+        )
+        eq(good.returncode, 0, f"the first build ({good.stderr[:200]})")
+        page = paths.page(rng, repo)
+        # A digest, because a failure that prints two whole pages is unreadable.
+        kept = digest(page)
+        break_the_narrative(repo, rng)
+        bad = subprocess.run(
+            [sys.executable, str(TOOL / "review.py"), "build", "origin/main...HEAD"],
+            cwd=str(repo),
+            capture_output=True,
+            text=True,
+        )
+        eq(bad.returncode != 0, True, "a page whose script throws should not build")
+        eq(digest(page), kept, "the page on disk after a build that failed")
+
+
+@case
+def a_squash_whose_rebuild_fails_still_leaves_a_page():
+    """The worst order: history is rewritten first, so a rebuild that fails afterwards
+    leaves the reviewer with new commits and no page to read them on."""
+    with sandbox() as (repo, run):
+        make_fixup(repo, run)
+        with serving(repo, "origin/main...HEAD") as base:
+            rng = paths.resolve_range("origin/main...HEAD", repo)
+            page = paths.page(rng, repo)
+            kept = digest(page)
+            break_the_narrative(repo, rng)
+            status, body = post(
+                base, "/squash", {}, {"Content-Type": "application/json", "Origin": base}
+            )
+            eq(status, 500, f"the squash should report the build failure ({body})")
+            eq(digest(page), kept, "the page on disk is still readable")

@@ -5,6 +5,7 @@ sandbox without one importing the other.
 """
 
 import contextlib
+import hashlib
 import json
 import os
 import pathlib
@@ -192,6 +193,11 @@ def until(predicate, seconds=8):
             return found
         time.sleep(0.1)
     return None
+
+
+def digest(path):
+    """A file as a short hash, so a failed comparison prints a line and not a page."""
+    return hashlib.sha256(path.read_bytes()).hexdigest()[:12] if path.exists() else None
 
 
 def get(base, path):

@@ -505,7 +505,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
         """Rebuild index.html for the same range, so a reload shows the new commits.
 
         "--" so a range like --root..HEAD is not read as an option. The build runs its own
-        smoke check and fails loudly, so a page that would throw is never written.
+        smoke check against a draft and only moves it over the page once it passes, so a
+        build that fails leaves the page the reviewer is reading where it was.
         """
         result = subprocess.run(
             [sys.executable, str(HERE / "review.py"), "build", "--", RANGE],

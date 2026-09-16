@@ -76,9 +76,19 @@ def build(rng, narrative):
     split = page.index('<div class="shell">')
     out = SKELETON + page[:split] + "</head>\n<body>\n" + page[split:] + "\n</body>\n</html>\n"
     target = paths.page(rng, repo, create=True)
-    target.write_text(out)
+    # Written beside the page and moved over it only once its script has run. The check
+    # used to happen after the write, so the page it refused was already the one on disk
+    # and the last good one was gone: a typo in a hand-edited narrative was enough to
+    # leave the reviewer reloading onto a masthead and nothing else. A squash makes it
+    # worse, because history is rewritten before the rebuild that fails.
+    draft = target.with_name(target.name + f".building-{os.getpid()}")
+    try:
+        draft.write_text(out)
+        smoke(draft)
+        os.replace(draft, target)
+    finally:
+        draft.unlink(missing_ok=True)
     print(f"built {target} ({len(out):,} bytes)")
-    smoke(target)
     return target
 
 
