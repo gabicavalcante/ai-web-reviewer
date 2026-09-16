@@ -16,13 +16,22 @@ import sys
 
 import paths
 
-FILE_RE = re.compile(r"^diff --git a/(.+?) b/(.+)$")
+# The quotes are optional because git wraps a path in them when it holds anything it
+# would rather escape. An unmatched header is worse than a wrong name: the file gets no
+# entry at all and its header lines are read as content belonging to whichever file came
+# before it, numbered as if they were its lines.
+FILE_RE = re.compile(r'^diff --git "?a/(.+?)"? "?b/(.+?)"?$')
 HUNK_RE = re.compile(r"^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@(.*)$")
 COLLAPSE_DELETIONS_OVER = 40
 
 
+# quotepath=false so a path with an accent in it arrives as itself rather than as octal
+# escapes. It does not cover every path git quotes, which is why FILE_RE allows the quotes.
+GIT = ("git", "-c", "core.quotepath=false")
+
+
 def git(repo, *args):
-    result = subprocess.run(["git", "-C", str(repo), *args], capture_output=True, text=True)
+    result = subprocess.run([*GIT, "-C", str(repo), *args], capture_output=True, text=True)
     if result.returncode != 0:
         raise SystemExit(f"git {' '.join(args)} failed: {result.stderr.strip()}")
     return result.stdout
@@ -64,9 +73,8 @@ def parse_patch(patch):
         if match:
             current = dict(path=match.group(2), status="modified", rows=[])
             files.append(current)
-            # Per file, or a file whose header carries no hunk leaves the next one
-            # numbered from wherever the last one stopped.
-            old_no = new_no = 0
+            # Back to reading headers. Without this a file whose header carries no hunk,
+            # a mode change, leaves the next file's headers being read as its content.
             in_hunk = False
             continue
         if current is None:
@@ -209,7 +217,7 @@ def git_maybe(repo, *args):
     line: no git output should be able to stop a build by not being text.
     """
     result = subprocess.run(
-        ["git", "-C", str(repo), *args], capture_output=True, text=True, errors="replace"
+        [*GIT, "-C", str(repo), *args], capture_output=True, text=True, errors="replace"
     )
     return result.stdout if result.returncode == 0 else None
 

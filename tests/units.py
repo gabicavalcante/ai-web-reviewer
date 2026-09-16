@@ -421,9 +421,10 @@ def parse_patch_ignores_a_mode_change():
 
 
 @case
-def parse_patch_starts_each_file_from_one():
-    """The counters were initialised once for the whole patch, so a file whose header
-    carried no hunk left the next file numbered from wherever the last one stopped."""
+def parse_patch_does_not_let_one_file_bleed_into_the_next():
+    """Named for what it actually holds down. It was written for a counter reset that
+    turned out to be dead code, and it caught the in_hunk reset instead: without that,
+    the second file's own headers are read as its content and it starts at line 0."""
     with sandbox() as (repo, run):
         (repo / "one.txt").write_text("a\nb\nc\n")
         (repo / "two.txt").write_text("x\ny\nz\n")
@@ -438,3 +439,60 @@ def parse_patch_starts_each_file_from_one():
         for entry in files:
             first = [r for r in entry["rows"] if r["t"] != "hunk"][0]
             eq(first.get("o"), 1, f"{entry['path']} starts at old line 1")
+
+
+@case
+def parse_patch_keeps_an_added_line_that_looks_like_a_header():
+    """The mirror of the deleted case: content beginning "++ " reaches git as "+++ ",
+    which is how git introduces the new side. Markdown showing a diff, or C++ where a
+    line starts with ++."""
+    with sandbox() as (repo, run):
+        patch = patch_for(
+            repo, run, "one\ntwo\n", "++ plus comment\none\ntwo\n", path="notes.md"
+        )
+        rows = build_data.parse_patch(patch)[0]["rows"]
+        added = [(r.get("n"), r["text"]) for r in rows if r["t"] == "add"]
+        eq(added, [(1, "++ plus comment")], "the added line, with its new-side number")
+
+
+@case
+def parse_patch_reads_a_path_git_had_to_quote():
+    """git quotes a path with non-ASCII in it unless told otherwise, and the quoted form
+    never matched, so the file vanished from the review and its header lines were parsed
+    as content rows belonging to whichever file came before it."""
+    with sandbox() as (repo, run):
+        (repo / "aaa.txt").write_text("one\ntwo\n")
+        (repo / "café.txt").write_text("x\n")
+        run("add", "-A")
+        run("commit", "-qm", "base")
+        (repo / "aaa.txt").write_text("one\ntwo\nthree\n")
+        (repo / "café.txt").write_text("y\n")
+        run("add", "-A")
+        run("commit", "-qm", "edit")
+        files = build_data.parse_patch(build_data.git(repo, "diff", "HEAD~1", "HEAD"))
+        eq(sorted(f["path"] for f in files), ["aaa.txt", "café.txt"], "both files")
+        first = [f for f in files if f["path"] == "aaa.txt"][0]
+        eq(
+            [r["text"] for r in first["rows"] if r["t"] != "hunk"],
+            ["one", "two", "three"],
+            "and nothing from the next file leaked into this one",
+        )
+
+
+@case
+def parse_patch_marks_a_file_added_or_deleted():
+    """status drives the badge and the collapse rule, and the refactor moved the block
+    that sets it without anything watching."""
+    with sandbox() as (repo, run):
+        (repo / "gone.txt").write_text("bye\n")
+        run("add", "-A")
+        run("commit", "-qm", "base")
+        (repo / "gone.txt").unlink()
+        (repo / "fresh.txt").write_text("hello\n")
+        run("add", "-A")
+        run("commit", "-qm", "edit")
+        got = {
+            f["path"]: f["status"]
+            for f in build_data.parse_patch(build_data.git(repo, "diff", "HEAD~1", "HEAD"))
+        }
+        eq(got, {"fresh.txt": "added", "gone.txt": "deleted"}, "the statuses")
