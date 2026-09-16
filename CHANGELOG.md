@@ -2,6 +2,95 @@
 
 Dates are the day the change landed. Versions follow [semver](https://semver.org).
 
+## 2.0.0
+
+Upgrade. A published 1.x is reachable from any website the reviewer has open.
+
+### Any website you visited could rewrite your git history
+
+The server binds `127.0.0.1` with no authentication, which accepts one threat, other
+processes on your machine, and not the one that mattered. A browser sends a POST to
+localhost on behalf of whatever page you have open, and a POST with a simple content type
+needs no preflight to ask permission first. So any site open while a review was running
+could reach the endpoints, and two of them write:
+
+```
+POST /squash  Origin: https://evil.example  ->  {"ok": true, "before": 2, "after": 1}
+POST /ask     Origin: https://evil.example  ->  text of its choosing into the log your
+                                                Claude session reads and acts on
+```
+
+Both are refused now. Nothing to do but upgrade.
+
+### The squash button rewrote whatever branch was checked out
+
+The range is fixed when the server starts; `HEAD` is wherever you are now. Serving a review
+of `feature-a`, checking out `feature-b` and pressing Squash rewrote **`feature-b`** and
+reported success for `feature-a`. The backup branch was filed under the wrong branch too.
+It now refuses and names the branch to check out.
+
+### The rail listed commits that were not yours, and called them dead work
+
+`git log a...b` is the symmetric difference; `git diff a...b` is `merge-base..b`. The tool
+used the three dot form for both, and `origin/main...HEAD` is the default, so every commit
+`origin/main` gained since your branch started appeared on the rail. One real review showed
+97 commits for a branch holding 23.
+
+Those commits were then measured against a diff that never contained them, scored nothing,
+and the page printed `nothing it added is still in the branch` over a colleague's merged
+work. Both gone.
+
+### A deleted line could disappear, taking the line numbers with it
+
+A deleted line whose content begins `-- ` reaches git as `--- `, which is also how git
+introduces the old side of a file. It was read as a header: dropped from the page, and
+every old-side line number below it short by one. A question asked below that point was
+recorded against a line you never clicked. SQL and Lua comments, YAML front matter and
+email signatures all hit it. The same for an added line beginning `++ `.
+
+### The watcher could stop reading, silently
+
+One unreadable row, from a write that died or a full disk, hid every row after it for as
+long as that watcher ran. The server reads the same file separately, so the page went on
+showing those questions as waiting for an answer with nothing listening. A row that cannot
+be read is now stepped over, and said once.
+
+### A failed build destroyed the page you were reading
+
+`smoke.js` refuses a page whose script throws, and it ran after the page had been written.
+A typo in a hand-edited narrative was enough to leave you reloading onto a masthead and
+nothing else, and a squash rebuilds after the rebase, so history was rewritten with no page
+to read it on. The page is built beside the old one and moved over only once its script has
+run.
+
+### Every thread in a review could be orphaned at once
+
+Threads are pinned to git's abbreviated sha, and git picks that width from how many objects
+a repo holds. A repo that grew, or a colleague with `core.abbrev` set, moved every thread in
+the review into the orphan list under `this commit is not part of the diff shown here`,
+which was false, with no way back. A sha is now resolved before it is compared, and an
+ambiguous one is left an orphan rather than guessed onto the wrong commit. The reviewed
+ticks were keyed the same way and are fixed with it.
+
+### Breaking: `review.py archive` is gone
+
+This is the major bump. The command moved a review's four logs into a timestamped folder,
+and it renamed `questions.jsonl` out from under a running watcher, which then swallowed
+every question asked afterwards while the page drew a confident "waiting for an answer".
+
+It was never used, and the isolation it offered arrived by another route: threads have been
+per review since 1.0.0, so finishing one branch already leaves another alone. To put a
+review's questions away, move its folder. An `archived-<stamp>/` folder in an older store is
+yours to keep or delete; nothing reads it.
+
+The prompt `archive the threads for this review` no longer does anything.
+
+### The tool has checks now
+
+69 of them, in `tests/`, in plain `python3` with no dependencies. `python3 tests/run.py`.
+They run in CI on every push alongside `black` and `pyflakes`, and each one is there because
+something shipped without it.
+
 ## 1.2.0
 
 Both changes are about the squash bar telling you what it knows. Nothing to do on upgrade.
