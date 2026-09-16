@@ -87,8 +87,8 @@ a message.
 ## Checks
 
 ```bash
-python3 tool/selftest.py           # everything
-python3 tool/selftest.py paths     # only cases whose name contains "paths"
+python3 tests/run.py           # everything
+python3 tests/run.py paths     # only cases whose name contains "paths"
 ```
 
 No dependencies, and every case names the failure it holds down. GitHub Actions runs them
@@ -425,8 +425,10 @@ worse.
 | `tool/answer.py` | Write a turn into a thread |
 | `tool/watch.py` | Emit new questions and replies as events |
 | `tool/smoke.js` | Run the built page's script, so a page that throws is not served |
-| `tool/selftest.py` | The tool's own checks. `python3 tool/selftest.py` |
 | `tool/narrative.example.json` | A narrative to copy from |
+| `tests/run.py` | Run the checks. `python3 tests/run.py` |
+| `tests/harness.py` | What a case file needs: the sandbox, the comparison, the loop |
+| `tests/units.py` | Checks over the pure parts, no server and no page |
 
 ## What a version promises
 

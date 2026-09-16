@@ -1,92 +1,12 @@
-#!/usr/bin/env python3
-"""Run the tool's own checks.
+"""Checks over the pure parts: paths, folding, survival, marks, ordering.
 
-    python3 tool/selftest.py            # everything
-    python3 tool/selftest.py paths      # only cases whose name contains "paths"
-
-Exits non-zero on the first failing case's suite, printing what was expected and what
-came back. No dependencies: the README promises the tool needs nothing outside the
-standard library, and a test suite that breaks that promise is a test suite people skip.
-
-Most of what is here is a bug that shipped. `smoke.js` runs the built page's script and
-catches a page that throws, which is a real class of failure and not this one: the range
-the watcher resolved, the blame that met a PNG, and the name a squash handler used after
-rewriting history were all outside any page. Each case below names the failure it is
-holding down, so a case that starts failing says what is about to go wrong rather than
-only that something did.
+No server and no page. Every case names the failure it holds down, so a case that starts
+failing says what is about to go wrong rather than only that something did.
 """
-import contextlib
-import os
-import pathlib
-import subprocess
-import sys
-import tempfile
+import build_data
+import paths
 
-HERE = pathlib.Path(__file__).resolve().parent
-sys.path.insert(0, str(HERE))
-
-import build_data  # noqa: E402
-import paths  # noqa: E402
-
-CASES = []
-
-
-def case(fn):
-    CASES.append(fn)
-    return fn
-
-
-class Failed(AssertionError):
-    pass
-
-
-def eq(got, want, what):
-    if got != want:
-        raise Failed(f"{what}\n    want: {want!r}\n    got:  {got!r}")
-
-
-@contextlib.contextmanager
-def sandbox():
-    """A temporary repo, with the state directory pointed somewhere temporary too.
-
-    state_dir() makes its folder as soon as it is asked for a path, so a case that only
-    computed a path still wrote into the reviewer's real ~/.local/state. Eleven junk
-    folders appeared there before this existed. XDG_STATE_HOME is the seam, so the tests
-    use it rather than reaching inside paths.py.
-    """
-    with tempfile.TemporaryDirectory() as tmp:
-        root = pathlib.Path(tmp)
-        was = os.environ.get("XDG_STATE_HOME")
-        os.environ["XDG_STATE_HOME"] = str(root / "state")
-        try:
-            repo = root / "repo"
-            repo.mkdir()
-            yield repo, scratch_repo(repo)
-        finally:
-            if was is None:
-                os.environ.pop("XDG_STATE_HOME", None)
-            else:
-                os.environ["XDG_STATE_HOME"] = was
-
-
-def scratch_repo(where):
-    """A repo with one commit on `main`, an origin/main ref, and a branch off it.
-
-    Cheap enough to make per case that needs one, which keeps cases independent: a test
-    that leaves state behind turns the next failure into a puzzle.
-    """
-    def run(*args):
-        return subprocess.run(["git", "-C", str(where), *args],
-                              capture_output=True, text=True, check=True)
-    run("init", "-q", "-b", "main")
-    run("config", "user.email", "t@t")
-    run("config", "user.name", "T")
-    (where / "a.txt").write_text("base\n")
-    run("add", "-A")
-    run("commit", "-qm", "base")
-    run("update-ref", "refs/remotes/origin/main", "HEAD")
-    return run
-
+from harness import case, commit, eq, Failed, sandbox
 
 # --------------------------------------------------------------------------- paths
 
@@ -179,16 +99,6 @@ def paths_logs_live_in_the_review():
 
 
 # ----------------------------------------------------------------------- fold_fixups
-
-def commit(short, subject, additions=0):
-    """A rail entry shaped the way build_data builds one, empty marks included.
-
-    The empty strings matter: a helper that left them out made mark_survival look wrong
-    when it was the fake commit that was unfaithful.
-    """
-    return dict(short=short, hash=short * 8, subject=subject, headline=subject,
-                read="", readWhy="", additions=additions, deletions=0, files=[])
-
 
 @case
 def fold_fixups_folds_onto_its_target():
@@ -407,28 +317,3 @@ def mark_number_reads_both_forms():
 def is_placeholder_only_matches_an_untouched_scaffold():
     eq(build_data.is_placeholder({"where": "", "what": "", "marks": []}), True, "untouched")
     eq(build_data.is_placeholder({"where": "CI", "what": "", "marks": []}), False, "half filled")
-
-
-# ------------------------------------------------------------------------ the runner
-
-def main():
-    only = sys.argv[1] if len(sys.argv) > 1 else ""
-    chosen = [c for c in CASES if only in c.__name__]
-    if not chosen:
-        raise SystemExit(f"no case matches {only!r}")
-    failed = []
-    for fn in chosen:
-        try:
-            fn()
-        except Failed as problem:
-            failed.append((fn.__name__, str(problem)))
-        except Exception as problem:  # noqa: BLE001
-            failed.append((fn.__name__, f"{type(problem).__name__}: {problem}"))
-    for name, problem in failed:
-        print(f"FAIL {name}\n  {problem}\n", file=sys.stderr)
-    print(f"{len(chosen) - len(failed)} of {len(chosen)} passed")
-    return 1 if failed else 0
-
-
-if __name__ == "__main__":
-    sys.exit(main())

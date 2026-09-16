@@ -50,7 +50,7 @@ claude plugin tag -m "ai-web-reviewer %s" --push
 ## Before tagging, once
 
 ```bash
-python3 tool/selftest.py
+python3 tests/run.py
 claude plugin validate .
 python3 tool/review.py build HEAD~3..HEAD
 ```

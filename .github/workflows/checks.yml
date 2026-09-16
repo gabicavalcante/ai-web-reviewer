@@ -31,7 +31,7 @@ jobs:
           git config --global user.name checks
 
       - name: unit checks
-        run: python3 tool/selftest.py
+        run: python3 tests/run.py
 
       - name: build a page and run its script
         run: python3 tool/review.py build HEAD~3..HEAD
