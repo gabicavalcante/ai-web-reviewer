@@ -1,0 +1,9 @@
+# Revisions that only moved text around. Skip them when reading blame:
+#
+#   git config blame.ignoreRevsFile .git-blame-ignore-revs
+#
+# GitHub reads this file on its own. Add a revision here only when it changed no
+# behaviour at all.
+
+# Format the python with black
+384d21646e237bab15b8deb48aca93505bf91273
