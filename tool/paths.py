@@ -74,6 +74,36 @@ def resolve_range(rng, repo=None):
     return sep.join(here if part.strip() == "HEAD" else part for part in rng.split(sep))
 
 
+def commit_range(rng, repo=None):
+    """The range as one set of commits, for anything that has to count them.
+
+    `git log a...b` is the symmetric difference, commits on either side. `git diff a...b`
+    is merge-base..b, one side. The same string meant two different sets, and
+    "origin/main...HEAD" is the default, so every commit origin/main gained since the
+    branch started was listed on the rail and absent from the diff it was measured
+    against. One real review showed 97 commits for a branch holding 23.
+
+    Worse than untidy: the survival mark measures a commit against the diff, so all of
+    those scored zero and the page printed "nothing it added is still in the branch" over
+    work that was very much still in the branch.
+
+    Separate from resolve_range on purpose. That one decides a review's identity, and
+    rewriting it here would rename every folder on disk and orphan the threads inside.
+    This is only for asking git which commits a range holds.
+    """
+    if "..." not in rng:
+        return rng
+    left, _, right = rng.partition("...")
+    left, right = left.strip() or "origin/main", right.strip()
+    found = subprocess.run(
+        ["git", "-C", str(repo or repo_root()), "merge-base", left, right],
+        capture_output=True,
+        text=True,
+    )
+    base = found.stdout.strip()
+    return f"{base}..{right}" if found.returncode == 0 and base else rng
+
+
 def review_dir(rng, repo=None, create=False):
     """One directory per review, inside the repo's state directory.
 

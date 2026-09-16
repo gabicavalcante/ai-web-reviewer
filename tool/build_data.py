@@ -684,6 +684,9 @@ def main():
     per_commit = narrative.get("commits", {})
 
     check_range(repo, rng)
+    # From here on the range is the one-sided form, so the rail and the diff agree about
+    # which commits this review is of.
+    rng = paths.commit_range(rng, repo)
     shas = [
         s for s in git(repo, "log", "--format=%h", "--reverse", rng).strip().split("\n") if s
     ]
