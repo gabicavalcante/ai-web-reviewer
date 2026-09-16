@@ -28,11 +28,12 @@ sys.dont_write_bytecode = True
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 
 import harness  # noqa: E402
+import endtoend  # noqa: E402
 import units  # noqa: E402
 
 # Importing a file is what registers its cases. Naming them here as well keeps the list
 # in the docstring honest and stops a linter reading the import as dead.
-CASE_FILES = [units]
+CASE_FILES = [units, endtoend]
 
 if __name__ == "__main__":
     sys.exit(harness.run(sys.argv[1] if len(sys.argv) > 1 else ""))

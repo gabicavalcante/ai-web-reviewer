@@ -33,6 +33,18 @@ STATE = paths.state_dir()
 REPO = paths.repo_root()
 # review.py passes the range it served, already resolved. The default matches its own.
 RANGE = os.environ.get("REVIEW_RANGE") or "origin/main...HEAD"
+# One side, the same set build_data puts on the rail. With the two-sided form a plain
+# `git fetch` moved origin/main and the page announced new commits on your branch.
+COMMITS = paths.commit_range(RANGE, REPO)
+PORT = int(os.environ.get("PORT", "8777"))
+
+# What the page's own origin looks like. A browser sends Origin on same-origin POSTs too,
+# so the rule cannot be "refuse anything carrying Origin" without refusing the page.
+OWN_ORIGINS = {
+    f"http://localhost:{PORT}",
+    f"http://127.0.0.1:{PORT}",
+    f"http://[::1]:{PORT}",
+}
 
 LOGS = paths.logs(RANGE, REPO, create=True)
 QUESTIONS = LOGS["questions"]
@@ -53,6 +65,18 @@ def git(*args, **kwargs):
     return subprocess.run(
         ["git", "-C", str(REPO), *args], capture_output=True, text=True, **kwargs
     )
+
+
+def review_tip():
+    """The branch this review is of, from the range the server was started with.
+
+    RANGE is decided once, when the review starts. HEAD is whatever the reviewer has
+    checked out since, and every part of the squash reads HEAD: the merge base, the fixup
+    count, the rebase itself. So the button rewrote the branch that happened to be
+    checked out and answered as though it had rewritten the one on the page.
+    """
+    tip = RANGE.split("...")[-1] if "..." in RANGE else RANGE.split("..")[-1]
+    return tip.strip()
 
 
 def review_base():
@@ -122,7 +146,7 @@ def revision(fresh=False):
     if not fresh and now - _revision["at"] < 3:
         return _revision["value"]
     result = subprocess.run(
-        ["git", "-C", str(REPO), "rev-list", "--max-count=500", RANGE],
+        ["git", "-C", str(REPO), "rev-list", "--max-count=500", COMMITS],
         capture_output=True,
         text=True,
     )
@@ -250,7 +274,41 @@ class Handler(http.server.BaseHTTPRequestHandler):
         except json.JSONDecodeError:
             return None
 
+    def _cross_site(self):
+        """Why this write should be refused, or None.
+
+        Binding 127.0.0.1 with no authentication accepts one threat: other processes on
+        this machine. It does not cover the one that matters. A browser will send a POST
+        to localhost on behalf of whatever page the reviewer has open, and a POST with a
+        simple content type needs no preflight to ask permission first. So every website
+        open while a review is running could reach these endpoints, and two of them write:
+        /ask puts words into the log a Claude session reads and acts on, and /squash runs
+        git rebase on the reviewer's repo.
+
+        Two checks, because each covers what the other cannot. Origin and Sec-Fetch-Site
+        are set by the browser and cannot be forged by a page, but a non-browser client
+        sends neither, so a missing header cannot be treated as hostile. Requiring JSON
+        closes that gap from the other side: a cross-site POST can only carry a simple
+        content type without a preflight, and the preflight is one this server fails.
+        """
+        origin = self.headers.get("Origin")
+        if origin is not None and origin not in OWN_ORIGINS:
+            return f"refused a request from {origin}"
+        site = self.headers.get("Sec-Fetch-Site")
+        if site is not None and site not in ("same-origin", "none"):
+            return f"refused a {site} request"
+        if int(self.headers.get("Content-Length") or 0):
+            kind = (self.headers.get("Content-Type") or "").split(";")[0].strip().lower()
+            if kind != "application/json":
+                return "a body has to be sent as Content-Type: application/json"
+        return None
+
     def do_POST(self):
+        # Before the dispatch, so an endpoint added later is covered without remembering.
+        refusal = self._cross_site()
+        if refusal:
+            return self._json({"error": refusal}, 403)
+
         if self.path == "/squash":
             return self._squash()
         if self.path == "/rebuild":
@@ -311,6 +369,17 @@ class Handler(http.server.BaseHTTPRequestHandler):
         base = review_base()
         if not base:
             return (f"no base commit in the range {RANGE}", 400, False)
+
+        # Before anything reads HEAD, because everything below does.
+        tip = review_tip()
+        here = git("rev-parse", "--abbrev-ref", "HEAD").stdout.strip()
+        if tip and here != tip:
+            return (
+                f"this review is of {tip}, and {here} is checked out. Squashing would "
+                f"rewrite {here}. Check out {tip} first.",
+                409,
+                False,
+            )
 
         # --untracked-files=no because a rebase only refuses over tracked changes. Counting
         # untracked files here blocked the button on a scratch directory beside the post
@@ -506,7 +575,8 @@ class Server(socketserver.ThreadingTCPServer):
 
 
 if __name__ == "__main__":
-    port = int(os.environ.get("PORT", "8777"))
+    # PORT is read once at the top, because the cross-site guard needs it too.
+    port = PORT
     QUESTIONS.touch(exist_ok=True)
     ANSWERS.touch(exist_ok=True)
     RESOLVED.touch(exist_ok=True)

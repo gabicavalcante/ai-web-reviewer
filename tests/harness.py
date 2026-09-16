@@ -5,11 +5,16 @@ sandbox without one importing the other.
 """
 
 import contextlib
+import json
 import os
 import pathlib
+import socket
 import subprocess
 import sys
 import tempfile
+import time
+import urllib.error
+import urllib.request
 
 TOOL = pathlib.Path(__file__).resolve().parent.parent / "tool"
 sys.path.insert(0, str(TOOL))
@@ -75,6 +80,98 @@ def scratch_repo(where):
     run("commit", "-qm", "base")
     run("update-ref", "refs/remotes/origin/main", "HEAD")
     return run
+
+
+@contextlib.contextmanager
+def serving(repo, rng):
+    """A real review server over a real repo, on a port nobody else holds.
+
+    The three scripts that touch git, the filesystem and the network resolve their paths
+    at import time, and watch.py calls sys.exit while importing, so none of them can be
+    driven in process. They are run the way a reviewer runs them, and the cases assert on
+    what comes back over the socket and on what git says afterwards.
+    """
+    with socket.socket() as probe:
+        probe.bind(("127.0.0.1", 0))
+        port = probe.getsockname()[1]
+    proc = subprocess.Popen(
+        [sys.executable, str(TOOL / "review.py"), "serve", rng, "--port", str(port)],
+        cwd=str(repo),
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+    )
+    base = f"http://127.0.0.1:{port}"
+    try:
+        for _ in range(100):
+            if proc.poll() is not None:
+                raise Failed(f"the server exited before it listened:\n{proc.stdout.read()}")
+            try:
+                urllib.request.urlopen(base + "/thread", timeout=1).read()
+                break
+            except (urllib.error.URLError, ConnectionError):
+                time.sleep(0.1)
+        else:
+            raise Failed("the server never answered")
+        yield base
+    finally:
+        proc.terminate()
+        try:
+            proc.wait(timeout=5)
+        except subprocess.TimeoutExpired:
+            proc.kill()
+
+
+def post(base, path, body=None, headers=None):
+    """POST to the server, returning (status, parsed body).
+
+    A refusal is an answer, not an exception, so the 4xx a guard produces is returned the
+    same way a 200 is. urllib raises on both, which would make every case that checks a
+    rejection read as an error.
+    """
+    # None means no body at all, which is what the page sends to /rebuild. Sending "{}"
+    # instead made a guard on the content type look like a broken guard.
+    data = None if body is None else json.dumps(body).encode()
+    request = urllib.request.Request(base + path, data=data, method="POST")
+    for key, value in (headers or {"Content-Type": "application/json"}).items():
+        request.add_header(key, value)
+    try:
+        with urllib.request.urlopen(request, timeout=10) as answer:
+            return answer.status, json.loads(answer.read() or b"{}")
+    except urllib.error.HTTPError as refused:
+        raw = refused.read()
+        try:
+            return refused.code, json.loads(raw or b"{}")
+        except json.JSONDecodeError:
+            return refused.code, {"raw": raw.decode("utf-8", "replace")}
+
+
+def get(base, path):
+    """GET a JSON endpoint."""
+    with urllib.request.urlopen(base + path, timeout=10) as answer:
+        return json.loads(answer.read() or b"{}")
+
+
+def build(repo, rng):
+    """The page data for a range, as review.py gets it.
+
+    Run as a subprocess rather than imported, because build_data resolves nothing at
+    import and this is the interface review.py actually uses.
+    """
+    done = subprocess.run(
+        [sys.executable, str(TOOL / "build_data.py"), "--", rng],
+        cwd=str(repo),
+        capture_output=True,
+        text=True,
+    )
+    if done.returncode != 0:
+        raise Failed(f"build_data failed for {rng!r}:\n{done.stderr.strip()}")
+    return json.loads(done.stdout)
+
+
+def log(run, rng):
+    """The subjects in a range, newest first."""
+    return [s for s in run("log", "--format=%s", rng).stdout.split("\n") if s]
 
 
 def commit(short, subject, additions=0):
