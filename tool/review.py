@@ -85,7 +85,15 @@ def build(rng, narrative):
     try:
         draft.write_text(out)
         smoke(draft)
-        os.replace(draft, target)
+        # A replace installs a fresh file with default permissions, so a page somebody
+        # tightened on a shared machine reopened on every rebuild. It holds the whole diff
+        # of the branch, so it keeps whatever it was given.
+        if target.exists():
+            os.chmod(draft, target.stat().st_mode & 0o7777)
+        try:
+            os.replace(draft, target)
+        except OSError as problem:
+            raise SystemExit(f"built the page but could not put it in place: {problem}")
     finally:
         draft.unlink(missing_ok=True)
     print(f"built {target} ({len(out):,} bytes)")
@@ -202,7 +210,17 @@ def narrate(rng, force):
             for commit in commits
         },
     }
-    target.write_text(json.dumps(scaffold, indent=2, ensure_ascii=False) + "\n")
+    # Written beside it and moved over, like the page. Unlike the page this one cannot be
+    # produced again, so a Ctrl-C or a full disk halfway through must not be what is left.
+    draft = target.with_name(target.name + ".writing")
+    try:
+        draft.write_text(json.dumps(scaffold, indent=2, ensure_ascii=False) + "\n")
+        os.replace(draft, target)
+    except OSError as problem:
+        raise SystemExit(f"could not write the scaffold: {problem}")
+    finally:
+        if draft.is_file():
+            draft.unlink()
     print(f"scaffold written to {target}")
     print(
         f"{len(commits)} commit(s) on the rail, numbered 1 to {len(commits)} for stage marks."

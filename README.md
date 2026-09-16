@@ -281,7 +281,7 @@ while reading it.
 | `resolved.jsonl` | One row each time a thread is resolved or reopened |
 | `answers.jsonl` | An older reply format. Nothing writes it now, and it is still read, so old reviews still render |
 | `narrative.json` | The narrative for this review, if it has one |
-| `index.html` | The rendered page, rewritten by every build |
+| `index.html` | The rendered page, replaced by every build that passes its check |
 | `watcher.alive` | A heartbeat, rewritten every second while a watcher runs, and removed when it stops. The page reads it to know whether anyone is listening |
 
 ```
@@ -329,7 +329,9 @@ The server reads those logs and never serves them. It answers six endpoints and 
 review folder can be fetched over the port.
 
 Anything else in the store was put there by whoever started the server, not by the tool.
-It writes nothing outside this list.
+It writes nothing outside this list, other than a `.building-` or `.writing` draft
+while a build is running. One left behind is from a build that was killed, and is
+yours to delete.
 
 ### What is never removed
 
@@ -340,7 +342,8 @@ so rather than removing anything, which is what makes it reversible, and `Hide r
 filters data that is all still on disk.
 
 **Nothing ever cleans these files.** There is no retention rule, no pruning, and no
-command to forget a review. The only file the tool deletes is the watcher's heartbeat.
+command to forget a review. The only files the tool deletes are the watcher's
+heartbeat and its own drafts.
 
 To be rid of a review's questions, or of a checkout's state entirely, say so and Claude
 Code will show you the directory before removing it, or do it yourself:

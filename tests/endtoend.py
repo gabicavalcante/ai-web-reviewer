@@ -596,8 +596,11 @@ def a_failed_build_leaves_the_last_good_page():
         )
         eq(good.returncode, 0, f"the first build ({good.stderr[:200]})")
         page = paths.page(rng, repo)
-        # A digest, because a failure that prints two whole pages is unreadable.
+        # A digest, because a failure that prints two whole pages is unreadable. Checked
+        # for None first: a missing file digests to None, so comparing before and after
+        # passed against a build that produced no page at all.
         kept = digest(page)
+        eq(kept is not None, True, "the first build wrote a page")
         break_the_narrative(repo, rng)
         bad = subprocess.run(
             [sys.executable, str(TOOL / "review.py"), "build", "origin/main...HEAD"],
@@ -625,3 +628,99 @@ def a_squash_whose_rebuild_fails_still_leaves_a_page():
             )
             eq(status, 500, f"the squash should report the build failure ({body})")
             eq(digest(page), kept, "the page on disk is still readable")
+
+
+@case
+def a_good_build_replaces_the_page():
+    """The other half of the one above. Together they say the page survives a failure and
+    changes on a success; on its own, either passes against a build that writes nothing."""
+    with sandbox() as (repo, run):
+        make_fixup(repo, run)
+        rng = paths.resolve_range("origin/main...HEAD", repo)
+        page = paths.page(rng, repo)
+        first = subprocess.run(
+            [sys.executable, str(TOOL / "review.py"), "build", "origin/main...HEAD"],
+            cwd=str(repo),
+            capture_output=True,
+            text=True,
+        )
+        eq(first.returncode, 0, f"the first build ({first.stderr[:200]})")
+        was = digest(page)
+        eq(was is not None, True, "a page was written")
+        (repo / "a.txt").write_text("changed on purpose\n")
+        run("add", "-A")
+        run("commit", "-qm", "One more commit")
+        again = subprocess.run(
+            [sys.executable, str(TOOL / "review.py"), "build", "origin/main...HEAD"],
+            cwd=str(repo),
+            capture_output=True,
+            text=True,
+        )
+        eq(again.returncode, 0, f"the second build ({again.stderr[:200]})")
+        now = digest(page)
+        eq(now is not None, True, "the page is still there")
+        eq(now != was, True, "and it is the new one")
+        drafts = [p.name for p in page.parent.glob("*.building-*")]
+        eq(drafts, [], "no draft left behind")
+
+
+@case
+def a_rebuild_keeps_the_page_as_private_as_it_was():
+    """Replacing a file installs a fresh one with default permissions. The page holds the
+    whole diff of the branch, so anyone who tightened it on a shared machine had that
+    undone on every rebuild, quietly."""
+    with sandbox() as (repo, run):
+        make_fixup(repo, run)
+        rng = paths.resolve_range("origin/main...HEAD", repo)
+        for _ in range(1):
+            subprocess.run(
+                [sys.executable, str(TOOL / "review.py"), "build", "origin/main...HEAD"],
+                cwd=str(repo),
+                capture_output=True,
+                text=True,
+                check=True,
+            )
+        page = paths.page(rng, repo)
+        page.chmod(0o600)
+        subprocess.run(
+            [sys.executable, str(TOOL / "review.py"), "build", "origin/main...HEAD"],
+            cwd=str(repo),
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        eq(oct(page.stat().st_mode & 0o777), "0o600", "the mode after a rebuild")
+
+
+@case
+def a_narrative_survives_a_scaffold_that_cannot_be_written():
+    """The page can be rebuilt from git. The narrative is prose somebody wrote and no
+    command produces it again, and `narrate --force` truncated it in place: a Ctrl-C or a
+    full disk halfway through left nothing to go back to."""
+    with sandbox() as (repo, run):
+        make_fixup(repo, run)
+        rng = paths.resolve_range("origin/main...HEAD", repo)
+        written = paths.narrative(rng, repo, create=True)
+        written.write_text('{"title": "hours of work"}\n')
+        kept = digest(written)
+        # A directory where the draft wants to go, so the write cannot finish.
+        blocker = written.with_name(written.name + ".writing")
+        blocker.mkdir()
+        done = subprocess.run(
+            [
+                sys.executable,
+                str(TOOL / "review.py"),
+                "narrate",
+                "origin/main...HEAD",
+                "--force",
+            ],
+            cwd=str(repo),
+            capture_output=True,
+            text=True,
+        )
+        eq(
+            done.returncode != 0,
+            True,
+            f"the scaffold should not have been written ({done.stdout[:120]})",
+        )
+        eq(digest(written), kept, "the narrative that was already there")
