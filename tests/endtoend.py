@@ -10,7 +10,23 @@ socket, and then asks git what actually happened. Slower than the pure checks by
 of seconds, and the only place a guard on a destructive endpoint can be proven.
 """
 
-from harness import build, case, eq, Failed, get, log, post, sandbox, serving
+import subprocess
+import sys
+
+import paths
+
+from harness import (
+    build,
+    case,
+    eq,
+    Failed,
+    get,
+    log,
+    post,
+    sandbox,
+    serving,
+    TOOL,
+)
 
 EVIL = "https://evil.example"
 
@@ -274,3 +290,65 @@ def a_two_dot_range_is_left_alone():
         branch_behind_upstream(repo, run)
         data = build(repo, "origin/main..feature")
         eq([c["subject"] for c in data["commits"]], ["Mine"], "a two dot range")
+
+
+# ------------------------------------------------------------------- what was dropped
+#
+# archive moved a review's four logs into a timestamped folder. It renamed
+# questions.jsonl out from under a running watcher, whose high-water mark survived the
+# file going back to zero rows, so the next questions were swallowed while the page drew
+# the confident "waiting for an answer". Replying to a thread the page still showed
+# answered "unknown thread".
+#
+# It was never used. The one archived folder on the author's disk predates threads moving
+# into review folders, and the largest store anywhere was fifteen threads. Threads have
+# been per review since, which is the isolation archive was written to provide, and `mv`
+# does the rest with the reviewer knowing they are doing it.
+
+
+@case
+def archive_is_gone_from_the_command_line():
+    """Asserted on argparse's own words, because `archive` already exited non-zero on a
+    review with no threads: a check for "did it fail" passed before the removal."""
+    with sandbox() as (repo, run):
+        make_fixup(repo, run)
+        done = subprocess.run(
+            [sys.executable, str(TOOL / "review.py"), "archive", "origin/main...HEAD"],
+            cwd=str(repo),
+            capture_output=True,
+            text=True,
+        )
+        eq(done.returncode, 2, f"argparse should reject it ({done.stderr[:160]!r})")
+        eq("invalid choice" in done.stderr, True, f"named as such ({done.stderr[:160]!r})")
+
+
+@case
+def the_actions_that_remain_still_work():
+    """Removing one choice from an argument parser is an easy way to break the others."""
+    with sandbox() as (repo, run):
+        make_fixup(repo, run)
+        for action in ("where", "build", "narrate"):
+            done = subprocess.run(
+                [sys.executable, str(TOOL / "review.py"), action, "origin/main...HEAD"],
+                cwd=str(repo),
+                capture_output=True,
+                text=True,
+            )
+            eq(done.returncode, 0, f"review.py {action} ({done.stderr[:160]})")
+
+
+@case
+def a_folder_left_by_the_old_archive_is_not_a_review():
+    """Dropping the command does not drop the folders it already wrote. One is on the
+    author's disk, beside two real reviews, and without the filter the watcher counts it
+    as a third and asks which review you meant."""
+    with sandbox() as (repo, _):
+        state = paths.state_dir(repo)
+        (state / "archived-20260911-140948").mkdir(parents=True, exist_ok=True)
+        paths.review_dir("origin/main...HEAD", repo, create=True)
+        seen = sorted(
+            p.name
+            for p in state.iterdir()
+            if p.is_dir() and not p.name.startswith("archived-")
+        )
+        eq(len(seen), 1, f"reviews in this checkout ({seen})")

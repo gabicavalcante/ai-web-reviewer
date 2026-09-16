@@ -141,7 +141,6 @@ it.
 | A narrative, after it has read the branch | `now write the narrative and rebuild the page` |
 | A change you asked for in a thread | `do it` in the thread, or `yes, apply that` |
 | Rebuild after new commits | `rebuild the review page` |
-| Put this review's threads aside | `archive the threads for this review` |
 | Threads from an older layout | `move my old threads into the right review` |
 | Where the files are | `where does this review keep its files?` |
 | Finish | `squash the fixups and stop the review server` |
@@ -284,7 +283,7 @@ while reading it.
 | `narrative.json` | The narrative for this review, if it has one |
 | `index.html` | The rendered page, rewritten by every build |
 | `watcher.alive` | A heartbeat, rewritten every second while a watcher runs, and removed when it stops. The page reads it to know whether anyone is listening |
-| `archived-<stamp>/` | Logs put aside by `review.py archive` |
+| `archived-<stamp>/` | Left by a command that no longer exists. Yours to delete |
 
 ```
 api-bbfa229b/                                          the checkout
@@ -344,9 +343,8 @@ filters data that is all still on disk.
 **Nothing ever cleans these files.** There is no retention rule, no pruning, and no
 command to forget a review. The only file the tool deletes is the watcher's heartbeat.
 
-To put a review's questions aside, ask for `archive the threads for this review`. To be
-rid of a checkout's state entirely, say so and Claude Code will show you the directory
-before removing it, or do it yourself:
+To be rid of a review's questions, or of a checkout's state entirely, say so and Claude
+Code will show you the directory before removing it, or do it yourself:
 
 ```bash
 rm -rf ~/.local/state/web-reviewer/<repo-name>-<hash>
@@ -362,10 +360,12 @@ makes it again from git and the narrative. Everything else was written by a pers
 threads, and the narrative, which is prose somebody wrote about a branch and which no
 command produces again.
 
-Ask Claude Code to `archive the threads for this review`, or run `review.py archive
-<range>`. It moves that review's logs into a timestamped subfolder, so finishing one
-branch does not touch the review of another you are still reading. Nothing is deleted,
-and moving them back is one `mv`.
+A review keeps its own threads, so finishing one branch already leaves the review of
+another you are still reading alone. That is what the `archive` command was for, and why
+it is gone: it renamed `questions.jsonl` out from under a running watcher, which then
+swallowed every question asked afterwards while the page drew a confident "waiting for an
+answer". An `archived-<stamp>/` folder in an older store was written by it. Nothing reads
+those folders, and they are yours to move or delete.
 
 The `pre-squash/<stamp>` branches a squash leaves behind are the same kind of leftover.
 Nothing removes them either, and they are yours to delete once you trust the result.

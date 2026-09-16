@@ -19,7 +19,6 @@ TOOL="$HOME/.claude/skills/web-reviewer/tool"
 python3 $TOOL/review.py serve                      # origin/main...HEAD
 python3 $TOOL/review.py serve <base>..HEAD          # any range
 python3 $TOOL/review.py where                       # print the state directory
-python3 $TOOL/review.py archive <range>             # put that review's threads aside
 ```
 
 It prints the URL, picking the next free port when 8777 is taken. Run it with

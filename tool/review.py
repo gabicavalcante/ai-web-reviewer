@@ -4,7 +4,6 @@
     python3 review.py serve  [<range>] [--port N] [--narrative FILE]
     python3 review.py build  [<range>] [--narrative FILE]
     python3 review.py narrate [<range>] [--force]
-    python3 review.py archive [<range>]
     python3 review.py where
 
 Range defaults to origin/main...HEAD. `serve` picks a free port when the one
@@ -19,7 +18,6 @@ import shutil
 import socket
 import subprocess
 import sys
-import time
 
 HERE = pathlib.Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
@@ -101,9 +99,6 @@ def smoke(page):
     print(result.stdout.strip())
 
 
-LOGS = ("questions.jsonl", "messages.jsonl", "answers.jsonl", "resolved.jsonl")
-
-
 def thread_count(folder):
     log = folder / "questions.jsonl"
     return len(log.read_text().splitlines()) if log.exists() else 0
@@ -128,10 +123,10 @@ def announce_siblings(rng):
     others = [
         (folder.name, thread_count(folder))
         for folder in sorted(paths.state_dir().iterdir())
-        if folder.is_dir()
-        and folder != here
-        and not folder.name.startswith("archived-")
-        and thread_count(folder)
+        if folder.is_dir() and folder != here
+        # A folder the archive command used to write, before it was dropped. They are
+        # still on disk and are not reviews.
+        and not folder.name.startswith("archived-") and thread_count(folder)
     ]
     if not others:
         return
@@ -139,32 +134,6 @@ def announce_siblings(rng):
     for name, threads in others:
         print(f"  {name}  ({threads} thread(s))")
     print("Ask to move them here if this is the same review under another range.")
-
-
-def archive(rng):
-    """Move one review's threads into a timestamped folder, leaving that review empty.
-
-    One review, not the checkout. Finishing a branch and putting its questions aside has
-    no business touching the review of another branch you are still reading.
-
-    Nothing is deleted: the rows stay readable where they are put, and moving them back
-    is one `mv`.
-    """
-    state = paths.review_dir(rng, create=True)
-    present = [
-        name for name in LOGS if (state / name).exists() and (state / name).stat().st_size
-    ]
-    if not present:
-        raise SystemExit(f"no threads to archive in {state}")
-
-    target = state / ("archived-" + time.strftime("%Y%m%d-%H%M%S"))
-    # Two runs inside the same second share a folder rather than failing on the second.
-    target.mkdir(exist_ok=True)
-    for name in present:
-        (state / name).rename(target / name)
-    print(f"moved {len(present)} file(s) to {target}")
-    print("Rebuild to see the page without them. Move them back with:")
-    print(f"  mv {target}/*.jsonl {state}/")
 
 
 def narrate(rng, force):
@@ -259,7 +228,7 @@ def free_port(preferred):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("action", choices=["serve", "build", "narrate", "archive", "where"])
+    parser.add_argument("action", choices=["serve", "build", "narrate", "where"])
     parser.add_argument("range", nargs="?", default="origin/main...HEAD")
     parser.add_argument("--port", type=int, default=8777)
     parser.add_argument("--narrative", default=None)
@@ -279,10 +248,6 @@ def main():
 
     if args.action == "narrate":
         narrate(args.range, args.force)
-        return
-
-    if args.action == "archive":
-        archive(args.range)
         return
 
     announce_siblings(args.range)

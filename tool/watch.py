@@ -30,6 +30,8 @@ def review_range(argv):
     folders = [
         p
         for p in paths.state_dir().iterdir()
+        # archived-* folders were written by a command that no longer exists. They are
+        # still on disk in older stores, and they are not reviews.
         if p.is_dir() and not p.name.startswith("archived-")
     ]
     if len(folders) == 1:
