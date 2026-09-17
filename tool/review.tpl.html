@@ -1241,6 +1241,12 @@
     return box;
   }
 
+  /* The file to begin with goes first wherever it is drawn. A file can appear under
+     several stages and is ordered by the one that owns it, so "start here" could sit below
+     two others: an instruction the reader reaches after they have stopped needing it. */
+  const startFirst = files =>
+    [...files].sort((a, b) => (a.read === "start" ? 0 : 1) - (b.read === "start" ? 0 : 1));
+
   function paintStage(where) {
     const final = DATA.final;
     const groups = document.getElementById("fileGroups");
@@ -1253,8 +1259,8 @@
 
     let drawn = 0;
     const silent = [];
-    final.files.forEach(f => {
-      if (!(f.stages || []).includes(where)) return;
+    const here = startFirst(final.files.filter(f => (f.stages || []).includes(where)));
+    here.forEach(f => {
       const runs = (f.runs || {})[where];
       const box = runs && runs.length ? renderFileLines(f, runs) : null;
       if (box) { pane.appendChild(box); drawn += 1; } else { silent.push(f); }
@@ -1305,7 +1311,8 @@
 
     let current = null;
     let box = null;
-    final.files.forEach(f => {
+    // Grouped, the order is the group's; ungrouped, there is one list and start leads it.
+    (grouped ? final.files : startFirst(final.files)).forEach(f => {
       const owner = (f.stages && f.stages[0]) || null;
       if (!grouped) {
         if (!box) { box = el("div", "stagegroup"); groups.appendChild(box); }
