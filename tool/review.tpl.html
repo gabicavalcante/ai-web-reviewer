@@ -254,7 +254,11 @@
   .files { display: flex; flex-direction: column; }
   .file { border-bottom: 1px solid var(--line); }
   .file:last-child { border-bottom: 0; }
-  .file-head { width: 100%; display: flex; align-items: center; gap: 12px; padding: 14px 26px; background: var(--surface-2); border: 0; border-bottom: 1px solid var(--line); font: inherit; color: inherit; cursor: pointer; text-align: left; }
+  /* A column, because the header carries two lines now: what the file is, and the
+     sentence saying whether to open it. */
+  .file-head { width: 100%; display: flex; flex-direction: column; align-items: stretch; gap: 7px; padding: 14px 26px; background: var(--surface-2); border: 0; border-bottom: 1px solid var(--line); font: inherit; color: inherit; cursor: pointer; text-align: left; }
+  .file-head:hover { background: var(--accent-soft); }
+  .file-top { display: flex; align-items: center; gap: 12px; min-width: 0; }
   .file-head:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
   .chev { font-family: var(--mono); font-size: 10px; color: var(--ink-faint); width: 10px; flex: none; transition: transform .14s; }
   .file[data-open="false"] .chev { transform: rotate(-90deg); }
@@ -387,7 +391,9 @@
   /* Each file is its own thing to read, so they are not stacked flush against each other. */
   .stagepane .file, .stagegroup .file { margin-bottom: 22px; }
   .stagepane .file:last-child, .stagegroup .file:last-child { margin-bottom: 0; }
-  .wholefile { margin: 10px 0 2px 26px; }
+  .wholefile { margin: 14px 0 4px 26px; }
+  /* Nothing to show until the file is opened, so the button that opens it whole waits too. */
+  .file[data-open="false"] .wholefile { display: none; }
   .stagepane > h3 { font-family: var(--serif); font-size: 21px; font-weight: 600; margin: 0 0 4px; }
   .stagepane > .what { font-family: var(--sans); font-size: 14px; color: var(--ink-soft); margin: 0 0 18px; max-width: 76ch; }
   .snip { font-family: var(--mono); font-size: 11px; color: var(--ink-faint); padding: 4px 0 4px 24px; }
@@ -398,9 +404,10 @@
   .stagepane table.diff tr:not(.own):not(.hunk) td.code { opacity: .58; }
   .stagegroup > h3 { font-family: var(--mono); font-size: 12.5px; font-weight: 500; color: var(--ink-faint); margin: 0 0 6px; word-break: break-word; }
   .stagegroup > .what { font-family: var(--sans); font-size: 14px; color: var(--ink); margin: 0 0 12px; max-width: 76ch; }
-  /* The one thing on this row a person wrote, and what the list is read by, so it is set
-     at reading size and in the body colour rather than as a caption. */
-  .fnote { font-family: var(--sans); font-size: 14.5px; line-height: 1.45; color: var(--ink); padding: 12px 20px 2px 26px; max-width: 74ch; }
+  /* The sentence a person wrote about the file, and the one a reviewer skips a whole file
+     on. It sits in the header, indented under the path it belongs to, and set in the body
+     colour: as a caption under the row it read as something that happened to be there. */
+  .fnote { font-family: var(--sans); font-size: 14.5px; line-height: 1.45; color: var(--ink); max-width: 74ch; padding-left: 26px; border-left: 2px solid var(--accent); margin-left: 4px; }
   .file-head .cb-tag { margin-right: 2px; }
   .alsoin { font-family: var(--mono); font-size: 11px; color: var(--ink-faint); margin: 4px 0 0 24px; display: flex; align-items: baseline; gap: 6px; flex-wrap: wrap; }
   .alsoin .chip { border: 1px solid var(--line); border-radius: 2px; padding: 1px 6px; color: var(--ink-soft); }
@@ -1156,24 +1163,30 @@
     });
     if (!keep.size) return null;
 
+    /* Closed. A stage can reach a dozen files, and all of them open at once is a wall to
+       scroll rather than a list to choose from. What it takes to choose is on the outside:
+       the path, the mark, and the sentence a person wrote about the file. */
     const box = el("section", "file");
-    box.dataset.open = "true";
+    box.dataset.open = "false";
     const head = el("button", "file-head");
     head.type = "button";
-    head.appendChild(el("span", "chev", "▾"));
+    const top = el("span", "file-top");
+    top.appendChild(el("span", "chev", "\u25be"));
     if (f.read) {
-      head.appendChild(el("span", "cb-tag " + f.read,
+      top.appendChild(el("span", "cb-tag " + f.read,
         f.read === "start" ? "start here" : f.read));
     }
-    head.appendChild(el("span", "fpath", f.path));
-    head.appendChild(el("span", "status " + f.status, f.status));
+    top.appendChild(el("span", "fpath", f.path));
+    top.appendChild(el("span", "status " + f.status, f.status));
+    head.appendChild(top);
+    /* Inside the header, because it answers the question the header asks. Below it, the
+       same sentence is a paragraph that happens to be there, and a reader deciding whether
+       to open a file is not reading paragraphs. */
+    if (f.note) head.appendChild(el("span", "fnote", f.note));
     head.addEventListener("click", () => {
       box.dataset.open = box.dataset.open === "true" ? "false" : "true";
     });
     box.appendChild(head);
-    /* What the file is for in this change. The tool can order a file and weigh it; this
-       is the part only a person can write, and it is what the list is read by. */
-    if (f.note) box.appendChild(el("div", "fnote", f.note));
 
     /* The windows are what this stage wrote. Reading the file whole is the other thing a
        reviewer wants, and it used to be a second copy of the branch in its own tab. It is
