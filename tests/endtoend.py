@@ -947,3 +947,30 @@ def the_rail_says_what_a_deleting_stage_did():
         rail = " ".join(drew["rail"])
         eq("nothing of it survives" in rail, False, f"the rail ({drew['rail']})")
         eq("1 file(s) removed" in rail, True, f"what it says instead ({drew['rail']})")
+
+
+@case
+def a_sibling_review_with_a_narrative_is_named_too():
+    """The guard exists so a review that comes up empty does not leave the reviewer
+    wondering where the work went. It counted threads only, and a narrative is the other
+    thing here that nothing can produce again: two forms of the same range are two reviews,
+    and the two dot one holding the narrative went unmentioned."""
+    with sandbox() as (repo, run):
+        make_fixup(repo, run)
+        two_dot = paths.resolve_range("origin/main..feature-a", repo)
+        paths.narrative(two_dot, repo, create=True).write_text(
+            json.dumps({"title": "hours of work"})
+        )
+        done = subprocess.run(
+            [sys.executable, str(TOOL / "review.py"), "build", "origin/main...feature-a"],
+            cwd=str(repo),
+            capture_output=True,
+            text=True,
+        )
+        said = done.stdout + done.stderr
+        eq(done.returncode, 0, f"the build ({said[-200:]})")
+        eq(
+            paths.review_dir(two_dot, repo).name in said,
+            True,
+            f"the review holding the narrative is named ({said[:400]!r})",
+        )

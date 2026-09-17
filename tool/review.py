@@ -115,38 +115,48 @@ def smoke(page):
     print(result.stdout.strip())
 
 
-def thread_count(folder):
+def written_by_hand(folder):
+    """What a review holds that nothing can produce again, as something to say out loud.
+
+    Both halves matter. A range is a review, so reading the same branch against a
+    different base starts an empty one, and the two forms of a range, two dots and three,
+    are two reviews of the same commits. Counting only the questions missed the narrative,
+    which is the other thing here no command writes twice.
+    """
     log = folder / "questions.jsonl"
-    return len(log.read_text().splitlines()) if log.exists() else 0
+    threads = len(log.read_text().splitlines()) if log.exists() else 0
+    has_narrative = (folder / "narrative.json").exists() and (
+        folder / "narrative.json"
+    ).stat().st_size > 2
+    said = []
+    if threads:
+        said.append(f"{threads} thread(s)")
+    if has_narrative:
+        said.append("a narrative")
+    return ", ".join(said)
 
 
 def announce_siblings(rng):
-    """Name the other reviews in this checkout when this one has no threads.
+    """Name the other reviews in this checkout when this one holds nothing written.
 
-    A range is a review, so reading the same branch against a different base starts a
-    review with none of the earlier questions in it. That is right, and it was invisible:
-    a session that reopened a branch as "origin/main...main" instead of "e8e4bb6..main"
-    got a page with no threads on it, and nothing said the thirteen threads were one
-    folder over. The two ranges held the same two commits.
-
-    Keyed on having no threads rather than on being new. The first version only spoke up
-    for a folder that did not exist yet, and the empty review was already on disk from the
-    session before, so it said nothing in the one case that had already gone wrong.
+    Keyed on holding nothing rather than on being new: the empty review is often already
+    on disk from the session before, so a check for a missing folder says nothing in the
+    case that has already gone wrong.
     """
     here = paths.review_dir(rng, create=False)
-    if here.is_dir() and thread_count(here):
+    if here.is_dir() and written_by_hand(here):
         return
     others = [
-        (folder.name, thread_count(folder))
+        (folder.name, written_by_hand(folder))
         for folder in paths.reviews()
-        if folder != here and thread_count(folder)
+        if folder != here and written_by_hand(folder)
     ]
     if not others:
         return
-    print(f"{rng} has no threads. This checkout also has:")
-    for name, threads in others:
-        print(f"  {name}  ({threads} thread(s))")
-    print("Ask to move them here if this is the same review under another range.")
+    print(f"{rng} is empty. This checkout also has:")
+    for name, holds in others:
+        print(f"  {name}  ({holds})")
+    print("Ask to move it here if this is the same review under another range.")
 
 
 def narrate(rng, force):
