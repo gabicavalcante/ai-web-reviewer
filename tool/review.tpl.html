@@ -453,8 +453,8 @@
   </section>
 
   <div class="tabs" id="tabs" role="tablist" hidden>
-    <button class="tab" id="tabCommits" type="button" role="tab" aria-selected="true"></button>
-    <button class="tab" id="tabFiles" type="button" role="tab" aria-selected="false"></button>
+    <button class="tab" id="tabFiles" type="button" role="tab" aria-selected="true"></button>
+    <button class="tab" id="tabCommits" type="button" role="tab" aria-selected="false"></button>
   </div>
 
   <section class="filesview" id="filesView" hidden>
@@ -1474,6 +1474,13 @@
       if (!filesPainted) { paintFiles(); filesPainted = true; }
       showTab("files");
     });
+    /* The branch as it stands is what a reviewer came to read, so it is what opens. The
+       commits are how it got there, which is the second question and sometimes not one at
+       all. Questions are still asked on the commits tab, where a line has a commit behind
+       it to anchor to. */
+    paintFiles();
+    filesPainted = true;
+    showTab("files");
   }
 
   /* ---------- the docked panel ---------- */
