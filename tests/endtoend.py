@@ -908,3 +908,42 @@ def a_stage_with_no_marks_cannot_break_the_page():
             text=True,
         )
         eq(done.returncode, 0, f"the build ({(done.stdout + done.stderr)[-200:]})")
+
+
+@case
+def the_rail_says_what_a_deleting_stage_did():
+    """A stage whose work is a removal has no surviving lines, and the removal is in the
+    final diff. Reporting it as nothing of it survives says the opposite of why it is
+    drawn at all."""
+    with sandbox() as (repo, run):
+        (repo / "legacy.py").write_text("old\ncode\n")
+        run("add", "-A")
+        run("commit", "-qm", "base")
+        run("update-ref", "refs/remotes/origin/main", "HEAD")
+        (repo / "a.txt").write_text("base\nkept\n")
+        run("add", "-A")
+        run("commit", "-qm", "The new path")
+        run("rm", "-q", "legacy.py")
+        run("commit", "-qm", "Drop the legacy module")
+        rng = paths.resolve_range("origin/main...HEAD", repo)
+        paths.narrative(rng, repo, create=True).write_text(
+            json.dumps(
+                {
+                    "stages": [
+                        {"where": "the new path", "what": "adds", "marks": ["1"]},
+                        {"where": "the legacy module", "what": "goes", "marks": ["2"]},
+                    ]
+                }
+            )
+        )
+        subprocess.run(
+            [sys.executable, str(TOOL / "review.py"), "build", "origin/main...HEAD"],
+            cwd=str(repo),
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        drew = in_page(paths.page(rng, repo), [])
+        rail = " ".join(drew["rail"])
+        eq("nothing of it survives" in rail, False, f"the rail ({drew['rail']})")
+        eq("1 file(s) removed" in rail, True, f"what it says instead ({drew['rail']})")

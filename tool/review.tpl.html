@@ -1308,11 +1308,12 @@
     if (!drawn) {
       const marks = ((DATA.stages || []).find(s => s.where === where) || {}).marks || [];
       pane.appendChild(el("p", "filesnote",
-        "Nothing this stage wrote is in the branch as it stands. Later commits rewrote "
-        + "all of it."
-        + (marks.length
-            ? " Its work is commit " + marks.join(", ") + " on the Commits tab."
-            : "")));
+        silent.every(f => f.status === "deleted")
+          ? "What this stage did here was remove these files."
+          : "Nothing this stage wrote has lines left to show. Its files are listed above."
+            + (marks.length
+                ? " Its work is commit " + marks.join(", ") + " on the Commits tab."
+                : "")));
     }
     groups.appendChild(pane);
   }
@@ -1424,11 +1425,18 @@
          rewrote all of it. That is worth knowing before opening it, and it is a fact
          about the branch rather than an empty section. */
       const marks = marksOf.get(where) || [];
+      /* A stage is only drawn when it accounts for something the final diff shows, so no
+         line count does not mean no work: a stage whose work is a removal has none, and
+         the removal is right there in the diff. What it says is counted rather than
+         guessed at. */
+      const removed = files.filter(f => f.status === "deleted").length;
       entries.push({
-        where, label: where, spent: lines === 0,
-        meta: lines === 0
-          ? "nothing of it survives" + (marks.length ? " · commit " + marks.join(", ") : "")
-          : files.length + " file(s) · " + lines + " line(s)",
+        where, label: where, spent: false,
+        meta: lines
+          ? files.length + " file(s) · " + lines + " line(s)"
+          : removed
+            ? removed + " file(s) removed"
+            : files.length + " file(s)",
       });
     });
     /* Only when there is something in it. A file no stage claims is a gap in the

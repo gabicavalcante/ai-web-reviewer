@@ -665,3 +665,42 @@ def a_stage_whose_only_file_was_renamed_is_still_drawn():
         _, data = staged(repo, run, ["the work"], [["1"]])
         eq([s["where"] for s in data["stages"]], ["the work"], "the strip")
         eq(data["final"]["spent"], [], "nothing should have been called spent")
+
+
+@case
+def a_stage_whose_addition_was_deleted_does_not_keep_the_file():
+    """Every surviving line predates the branch, so blame weighs nothing and the fallback
+    decides. A stage that only added to the file, and whose addition is gone, accounts for
+    nothing in it; the one that did the removing accounts for the removal."""
+    with sandbox() as (repo, run):
+        (repo / "a.py").write_text("older one\nolder two\n")
+        run("add", "-A")
+        run("commit", "-qm", "base")
+        run("update-ref", "refs/remotes/origin/main", "HEAD")
+        (repo / "a.py").write_text("older one\nolder two\nadded by A\n")
+        run("add", "-A")
+        run("commit", "-qm", "A adds a line")
+        (repo / "a.py").write_text("older one\n")
+        run("add", "-A")
+        run("commit", "-qm", "B removes both")
+        listed, data = staged(repo, run, ["A", "B"], [["1"], ["2"]])
+        eq(listed.get("B"), ["a.py"], "the stage that did the removing")
+        eq("A" in listed, False, f"the stage whose line went ({listed})")
+
+
+@case
+def a_stage_that_only_deletes_still_wins_the_fallback():
+    """The same path, guarding the case it exists for: nothing to weigh, and the stage
+    that removed the file keeps it."""
+    with sandbox() as (repo, run):
+        (repo / "legacy.py").write_text("old\n")
+        run("add", "-A")
+        run("commit", "-qm", "base")
+        run("update-ref", "refs/remotes/origin/main", "HEAD")
+        (repo / "keep.py").write_text("new\n")
+        run("add", "-A")
+        run("commit", "-qm", "A adds")
+        run("rm", "-q", "legacy.py")
+        run("commit", "-qm", "B removes")
+        listed, _ = staged(repo, run, ["A", "B"], [["1"], ["2"]])
+        eq(listed.get("B"), ["legacy.py"], "the removing stage keeps the file")

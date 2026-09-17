@@ -108,6 +108,7 @@ setTimeout(() => {
     orphans,
     anchored: threads.map((t) => t.id).filter((id) => !orphans.includes(id)),
     status: registry.qnaStatus ? registry.qnaStatus.textContent : "",
+    rail: (registry.stageRail ? registry.stageRail.children : []).map(text),
     reviewed: (registry.progressText ? registry.progressText.textContent : "").split(" ")[0],
   }));
 }, 50);

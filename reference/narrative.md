@@ -148,6 +148,10 @@ disappears, and the commits it claimed are named in the same line. The page says
 about them on its own: a commit with nothing left is marked `skim`, and one with less than
 half left carries its surviving count.
 
+A removal is the one contribution blame cannot weigh, because it only sees what is still
+there. So when a file has no surviving lines for any stage, the stages that took something
+out of it keep it, and a stage that only added there, whose addition is gone, does not.
+
 Which stages list a file is read off `git blame` on the tip, not off the commits' own
 diffs. Blame follows a rename and a commit's diff does not, so a stage that wrote lines
 into a file a later commit renamed still lists it under the name the branch ends with.

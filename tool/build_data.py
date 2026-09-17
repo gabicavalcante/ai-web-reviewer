@@ -394,7 +394,7 @@ def final_diff(repo, rng, commits, narrative):
     # Which stages reach a file, and which commit belongs to which stage. A mark is a rail
     # position, and a commit's followups are part of it, so a fixup belongs to its
     # target's stage.
-    order, touched, stage_of = [], {}, {}
+    order, touched, stage_of, removed = [], {}, {}, {}
     for stage in narrative.get("stages") or []:
         if is_placeholder(stage) or not stage.get("where"):
             continue
@@ -410,6 +410,12 @@ def final_diff(repo, rng, commits, narrative):
                     touched.setdefault(entry["path"], [])
                     if stage["where"] not in touched[entry["path"]]:
                         touched[entry["path"]].append(stage["where"])
+                    # Which stages took something out of it. Blame only sees what is
+                    # still there, so this is the one contribution it cannot weigh.
+                    if entry["status"] == "deleted" or any(
+                        row["t"] == "del" for row in entry["rows"]
+                    ):
+                        removed.setdefault(entry["path"], set()).add(stage["where"])
 
     # Blame is already being run over every file below. Totalling it per commit as well
     # costs nothing and answers the question the rail cannot: how much of what a commit
@@ -477,10 +483,15 @@ def final_diff(repo, rng, commits, narrative):
             # the stage whose work was sitting in the file.
             ranked = sorted(weight, key=lambda w: (-weight[w], order.index(w)))
         else:
-            # Nothing to weigh: the branch deletes this file, or it is binary, or its
-            # surviving lines predate the branch. The removal is in the final diff all the
-            # same, so the stages that reached it keep it, in the strip's own order.
-            ranked = sorted(reaching, key=order.index)
+            # Nothing to weigh: the branch deletes this file, or it is binary, or every
+            # surviving line predates the branch. A removal is in the final diff all the
+            # same, so the stages that did the removing keep it. A stage that only added
+            # here, and whose addition is gone, accounts for nothing and does not.
+            #
+            # When none of them removed anything, which is a binary file, whose diff has
+            # no rows to read, the stages that reached it keep it.
+            takers = [w for w in reaching if w in removed.get(entry["path"], ())]
+            ranked = sorted(takers or reaching, key=order.index)
         entry["stages"] = ranked
         entry["lines"] = {where: weight.get(where, 0) for where in ranked}
         # Where each stage's surviving lines are, so the page can show a stage's own work
