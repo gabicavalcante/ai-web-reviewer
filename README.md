@@ -437,6 +437,7 @@ worse.
 | `reference/narrative.md` | The optional editorial layer |
 | `reference/voice.md` | How the page's own copy is written |
 | `reference/gotchas.md` | Operational traps worth not rediscovering |
+| `reference/plan-threads-on-files.md` | Asking a question on the Files changed tab. Not built |
 | `tool/review.py` | Build and serve |
 | `tool/build_data.py` | Git range to page data |
 | `tool/paths.py` | Where the repo is and where state lives |
