@@ -294,12 +294,27 @@
 
   /* ---------- open questions ---------- */
   .openq { margin-top: 40px; padding-top: 26px; border-top: 1px solid var(--line); }
-  .qgrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(258px, 1fr)); gap: 1px; background: var(--line); border: 1px solid var(--line); border-radius: 3px; overflow: hidden; }
-  .q { background: var(--surface); padding: 17px 19px; display: flex; flex-direction: column; gap: 7px; }
-  .q .qk { font-family: var(--mono); font-size: 10.5px; letter-spacing: .06em; text-transform: uppercase; color: var(--del); }
+  /* A line each, closed. Side by side, the longest body set the height of all of them, so
+     one note decided how much of the section a reader saw at once. And three columns say
+     these are parallel when they are a checklist: things to do, and things already
+     checked. The titles are what says whether any of it needs doing. */
+  .qgrid { display: flex; flex-direction: column; background: var(--surface); border: 1px solid var(--line); border-radius: 3px; overflow: hidden; }
+  .q { border-top: 1px solid var(--line-soft); }
+  .q:first-child { border-top: 0; }
+  /* The kind above the title, the way a rail card stacks its label over its text. Beside
+     it in a column the kind read as a key to look up; above it, it reads as what the
+     sentence under it is. The caret keeps to the right of both. */
+  .q > summary { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 3px 14px; padding: 13px 16px; cursor: pointer; list-style: none; }
+  .q > summary::-webkit-details-marker { display: none; }
+  .q > summary:hover { background: var(--surface-2); }
+  .q > summary:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+  .q .qk { grid-column: 1; font-family: var(--mono); font-size: 10.5px; letter-spacing: .06em; text-transform: uppercase; color: var(--del); }
   .q.info .qk { color: var(--accent); }
-  .q .qt { font-size: 14.5px; font-weight: 500; line-height: 1.35; }
-  .q p { margin: 0; font-size: 13.5px; color: var(--ink-soft); }
+  .q .qt { grid-column: 1; font-size: 14.5px; font-weight: 500; line-height: 1.4; }
+  .q .caret { grid-column: 2; grid-row: 1 / span 2; align-self: center; font-family: var(--mono); font-size: 10.5px; letter-spacing: .05em; text-transform: uppercase; color: var(--accent); }
+  .q .caret::after { content: "read"; }
+  .q[open] .caret::after { content: "hide"; }
+  .q p { margin: 0; padding: 8px 16px 16px; font-size: 14px; line-height: 1.5; color: var(--ink-soft); max-width: 84ch; }
   footer { margin-top: 34px; font-family: var(--mono); font-size: 11px; color: var(--ink-faint); display: flex; flex-wrap: wrap; gap: 8px; }
   footer .sep { color: var(--line); }
 
@@ -690,10 +705,13 @@
   if (notes.length) {
     const list = document.getElementById("notesList");
     notes.forEach(n => {
-      const card = el("div", "q" + (n.tone === "info" ? " info" : ""));
-      card.appendChild(el("span", "qk", n.kind || "note"));
-      card.appendChild(el("span", "qt", n.title || ""));
-      card.appendChild(rich("p", null, md(escapeHtml(n.body || ""))));
+      const card = el("details", "q" + (n.tone === "info" ? " info" : ""));
+      const line = el("summary", null);
+      line.appendChild(el("span", "qk", n.kind || "note"));
+      line.appendChild(el("span", "qt", n.title || ""));
+      if (n.body) line.appendChild(el("span", "caret"));
+      card.appendChild(line);
+      if (n.body) card.appendChild(rich("p", null, md(escapeHtml(n.body))));
       list.appendChild(card);
     });
     document.getElementById("notesSection").hidden = false;
