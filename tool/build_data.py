@@ -752,9 +752,13 @@ def main():
     check_range(repo, rng)
     # From here on the range is the one-sided form, so the rail and the diff agree about
     # which commits this review is of.
-    rng = paths.commit_range(rng, repo)
+    commits_range = paths.commit_range(rng, repo)
     shas = [
-        s for s in git(repo, "log", "--format=%h", "--reverse", rng).strip().split("\n") if s
+        s
+        for s in git(repo, "log", "--format=%h", "--reverse", commits_range)
+        .strip()
+        .split("\n")
+        if s
     ]
     if not shas:
         raise SystemExit(f"no commits in range {rng}")
@@ -828,7 +832,7 @@ def main():
     if branch == "HEAD":
         branch = ""
     total_files, total_adds, total_dels = shortstat_numbers(
-        git(repo, "diff", "--shortstat", rng)
+        git(repo, "diff", "--shortstat", commits_range)
     )
     default_figures = [
         {"k": "commits", "v": str(len(commits))},
@@ -839,7 +843,7 @@ def main():
     if folded:
         default_figures.insert(1, {"k": "follow-ups", "v": str(folded)})
 
-    final = final_diff(repo, rng, commits, narrative)
+    final = final_diff(repo, commits_range, commits, narrative)
     # The strip and the rail are two views of one journey, so a stage the diff no longer
     # accounts for is in neither.
     spent = set((final or {}).get("spent") or [])
@@ -852,7 +856,7 @@ def main():
                 base=base,
                 range=rng,
                 repo=repo.name,
-                totals=git(repo, "diff", "--shortstat", rng).strip(),
+                totals=git(repo, "diff", "--shortstat", commits_range).strip(),
                 title=narrative.get("title") or title_from_branch(branch),
                 dek=narrative.get("dek")
                 or (

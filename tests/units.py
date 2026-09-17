@@ -704,3 +704,21 @@ def a_stage_that_only_deletes_still_wins_the_fallback():
         run("commit", "-qm", "B removes")
         listed, _ = staged(repo, run, ["A", "B"], [["1"], ["2"]])
         eq(listed.get("B"), ["legacy.py"], "the removing stage keeps the file")
+
+
+@case
+def the_page_carries_the_range_it_was_asked_for():
+    """The range is the review's name. It is what the footer shows and what keys the
+    reviewed ticks, so replacing it with the resolved commit set renames the review every
+    time the merge base moves, and the ticks start again."""
+    with sandbox() as (repo, run):
+        (repo / "a.py").write_text("one\ntwo\n")
+        run("add", "-A")
+        run("commit", "-qm", "base")
+        run("update-ref", "refs/remotes/origin/main", "HEAD")
+        run("checkout", "-qb", "feature")
+        (repo / "a.py").write_text("one\nthree\n")
+        run("add", "-A")
+        run("commit", "-qm", "The work")
+        data = build(repo, "origin/main...feature")
+        eq(data["range"], "origin/main...feature", "the range the page carries")
