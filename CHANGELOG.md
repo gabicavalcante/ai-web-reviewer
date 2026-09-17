@@ -2,6 +2,67 @@
 
 Dates are the day the change landed. Versions follow [semver](https://semver.org).
 
+## 2.1.0
+
+Nothing to do on upgrade. Files changed is the tab that opens now, and a stage only appears
+where the branch still passes through it.
+
+### Files changed opens first
+
+The branch as it stands is what a reviewer came to read. The commits are how it got there,
+which is the second question and on a long branch sometimes not one at all. The README has
+said that since the tab existed; the default disagreed with it. Commits is one click away,
+and questions are still asked there, where a line has a commit behind it to anchor to.
+
+### A stage is a step in a journey through the branch as it stands
+
+A stage's file list came from history: any file any of its commits ever touched. The line
+counts came from `git blame` on the tip. The two disagree whenever a later commit rewrote an
+earlier one, and the file list won, so a stage listed files it had contributed nothing to.
+
+A stage now lists a file when it accounts for something the final diff still shows: lines
+that survive to the tip, or a file the branch removes. A stage left accounting for nothing is
+not drawn, and the build says which one it dropped and why:
+
+```
+narrative: stage 'sqlmigrate' is not drawn: nothing it did is in the branch as it
+           stands, so commit(s) 8, 11 belong to no stage
+```
+
+On one real review that took six stages to two, which is the journey that branch actually
+takes. Marks are still commits: that is how a person reasons about a change, and every
+narrative on disk keeps working. Only what gets drawn is read off the final state.
+
+### The files view reads as a list to choose from
+
+- A file is closed until its header says it is worth opening. The sentence a person wrote
+  about it has moved into that header, where it is the reason to open the file or skip it,
+  rather than a caption below the row.
+- The file marked as the place to begin goes first in every pane it is drawn in.
+- A stage name is no longer set in capitals. A stage is often named after a function, and
+  `VALIDATE_PATENT_FILE_STRUCTURE_FOR_PARTIAL` is a wall where
+  `validate_patent_file_structure_for_partial` is a name.
+- The notes before you push are a queue of lines rather than three columns, each closed.
+  Side by side, the longest one set the height of all of them.
+
+### Writing a narrative
+
+Two rules the reference never stated, both learned from reading a real one:
+
+- A `where` is a place the work passes through, read in order as a journey, not the function
+  that handles it. `the file's shape · the offices it names · each row, checked` is a
+  journey; the four function names behind them are the file list again.
+- A `what` says what happens at that step, so it starts with a verb. The two fields read as
+  one line: *at the file's shape, check the header, the data rows and the dynamic fields.*
+
+### Also
+
+- A file header git had to quote, an accent in a path being the common case, no longer
+  loses the file and reads its own header lines as content of the file before it.
+- The range the page carries is the one you asked for. It keys the reviewed ticks in your
+  browser, and the resolved form starts with a merge base, so it changed whenever main moved.
+- The guard that names the other reviews in a checkout counts a narrative, not only threads.
+
 ## 2.0.0
 
 Upgrade. A published 1.x is reachable from any website the reviewer has open.
