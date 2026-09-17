@@ -882,3 +882,29 @@ def reviewed_ticks_survive_a_wider_sha():
         ticked = [c["hash"][:12] for c in data["commits"]]
         drew = in_page(page, [thread], reviewed=ticked)
         eq(drew["reviewed"], len(ticked), f"commits still ticked ({drew})")
+
+
+@case
+def a_stage_with_no_marks_cannot_break_the_page():
+    """A stage is dropped when it accounts for nothing, which needs a final diff to work
+    out. A range whose diff is empty has none, so nothing is dropped and the page draws a
+    stage whose marks were never written."""
+    with sandbox() as (repo, run):
+        # The sandbox already holds one commit on main with origin/main pointing at it.
+        (repo / "a.txt").write_text("changed\n")
+        run("add", "-A")
+        run("commit", "-qm", "A adds")
+        (repo / "a.txt").write_text("base\n")
+        run("add", "-A")
+        run("commit", "-qm", "B undoes it")
+        rng = paths.resolve_range("origin/main...HEAD", repo)
+        paths.narrative(rng, repo, create=True).write_text(
+            json.dumps({"stages": [{"where": "parsing", "what": "reads the input"}]})
+        )
+        done = subprocess.run(
+            [sys.executable, str(TOOL / "review.py"), "build", "origin/main...HEAD"],
+            cwd=str(repo),
+            capture_output=True,
+            text=True,
+        )
+        eq(done.returncode, 0, f"the build ({(done.stdout + done.stderr)[-200:]})")

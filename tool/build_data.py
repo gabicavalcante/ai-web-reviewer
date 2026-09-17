@@ -466,14 +466,16 @@ def final_diff(repo, rng, commits, narrative):
                     weight[where] = weight.get(where, 0) + len(numbers)
                     by_stage.setdefault(where, []).extend(numbers)
         if weight:
-            # Only the stages with lines still in the file. History says a stage touched a
-            # file at some point, which is the commits tab's question: a stage is a step in
-            # a journey through the branch as it stands, so it lists a file when it
-            # accounts for something the branch still shows.
-            ranked = sorted(
-                (w for w in reaching if weight.get(w, 0)),
-                key=lambda w: (-weight[w], order.index(w)),
-            )
+            # The stages blame found lines for, and only those. A stage is a step in a
+            # journey through the branch as it stands, so it lists a file when it accounts
+            # for something the branch still shows.
+            #
+            # Read off the blame rather than narrowed down from the stages that touched the
+            # file in history, because the two name different files: blame follows a rename
+            # and a commit's own diff does not, so the stage that wrote the lines names the
+            # old path while the final diff names the new one. Intersecting the two lost
+            # the stage whose work was sitting in the file.
+            ranked = sorted(weight, key=lambda w: (-weight[w], order.index(w)))
         else:
             # Nothing to weigh: the branch deletes this file, or it is binary, or its
             # surviving lines predate the branch. The removal is in the final diff all the
@@ -504,9 +506,19 @@ def final_diff(repo, rng, commits, narrative):
     # branch no longer goes. Someone wrote it, so it is named rather than dropped quietly.
     listing = {where for entry in files for where in entry["stages"]}
     spent = [where for where in order if where not in listing]
+    marked = {
+        stage["where"]: [str(m) for m in (stage.get("marks") or [])]
+        for stage in (narrative.get("stages") or [])
+        if stage.get("where")
+    }
     for where in spent:
+        # Naming its commits too, because they are the other half of the news: nothing
+        # accounts for them now, and they are where to look to find out why.
+        claimed = marked.get(where) or []
+        whose = f", so commit(s) {', '.join(claimed)} belong to no stage" if claimed else ""
         warnings.append(
-            f"stage {where!r} is not drawn: nothing it did is in the branch as it stands"
+            f"stage {where!r} is not drawn: nothing it did is in the branch as it "
+            f"stands{whose}"
         )
     order = [where for where in order if where in listing]
 

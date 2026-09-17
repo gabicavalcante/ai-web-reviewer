@@ -678,7 +678,10 @@
     box.appendChild(el("span", "where", s.where));
     box.appendChild(el("span", "what", s.what));
     const marks = el("div", "marks");
-    s.marks.forEach(m => marks.appendChild(el("span", "mark", m)));
+    // A stage is dropped when it accounts for nothing, which needs a final diff to work
+    // out, and a range whose diff is empty has none. Guarded here so the marks nobody
+    // wrote cannot take the page down with them.
+    (s.marks || []).forEach(m => marks.appendChild(el("span", "mark", m)));
     box.appendChild(marks);
     stageWrap.appendChild(box);
   });

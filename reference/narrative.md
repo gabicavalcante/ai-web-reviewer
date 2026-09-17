@@ -138,14 +138,19 @@ the branch as it stands, so one that accounts for nothing is not a step in it an
 drawn:
 
 ```
-narrative: stage 'sqlmigrate' is not drawn: nothing it did is in the branch as it stands
+narrative: stage 'sqlmigrate' is not drawn: nothing it did is in the branch as it
+           stands, so commit(s) 8, 11 belong to no stage
 ```
 
 Marks are commits, which is how a person reasons about a change, and what gets drawn is
 read off the final state. So a stage built on commits whose work a later commit rewrote
-disappears, and the commits it claimed become unclaimed, which the build also reports. The
-page already says which commits those are: one with nothing left is marked `skim`, and one
-with less than half left carries its surviving count.
+disappears, and the commits it claimed are named in the same line. The page says as much
+about them on its own: a commit with nothing left is marked `skim`, and one with less than
+half left carries its surviving count.
+
+Which stages list a file is read off `git blame` on the tip, not off the commits' own
+diffs. Blame follows a rename and a commit's diff does not, so a stage that wrote lines
+into a file a later commit renamed still lists it under the name the branch ends with.
 
 ## Naming a stage
 

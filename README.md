@@ -73,8 +73,13 @@ different lines each time. No stage has to own a file.
 
 A stage lists a file when it accounts for something the final diff still shows: lines that
 survive to the tip, or a file the branch removes. A stage that accounts for nothing is not
-part of that journey, so it is not drawn, and the build says which one it dropped and why.
-Its commits then belong to no stage, which the build also says.
+part of that journey, so it is not drawn, and the build says which one it dropped, why, and
+which commits are left belonging to no stage:
+
+```
+narrative: stage 'sqlmigrate' is not drawn: nothing it did is in the branch as it
+           stands, so commit(s) 8, 11 belong to no stage
+```
 
 Files are ordered within a stage: the code, then what documents it, then what tests it,
 with a test moved to sit under the file whose name it matches. Each file can be opened

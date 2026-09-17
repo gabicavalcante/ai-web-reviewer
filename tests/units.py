@@ -619,5 +619,49 @@ def dropping_a_stage_says_which_one_and_why():
                 }
             )
         )
-        said = build_stderr(repo, "origin/main..HEAD", narrative)
-        eq("first" in said, True, f"the dropped stage is named ({said!r})")
+        said = build_stderr(repo, "origin/main..HEAD", narrative).strip()
+        eq(
+            said,
+            "narrative: stage 'first' is not drawn: nothing it did is in the branch as it "
+            "stands, so commit(s) 1 belong to no stage",
+            "what the build said",
+        )
+
+
+@case
+def a_stage_keeps_a_file_a_later_commit_renamed():
+    """Blame follows a rename; a commit's own diff does not. So the stage that wrote the
+    lines names the old path and the final diff names the new one, and asking history
+    which stages reach a file loses the stage whose work is sitting in it."""
+    with sandbox() as (repo, run):
+        (repo / "mod.py").write_text("base\n")
+        run("add", "-A")
+        run("commit", "-qm", "base")
+        run("update-ref", "refs/remotes/origin/main", "HEAD")
+        (repo / "mod.py").write_text("base\none\ntwo\nthree\n")
+        run("add", "-A")
+        run("commit", "-qm", "The work")
+        run("mv", "mod.py", "pkg_mod.py")
+        run("commit", "-qm", "Rename it")
+        listed, data = staged(repo, run, ["the work"], [["1"]])
+        eq(listed.get("the work"), ["mod.py", "pkg_mod.py"], "the files the stage lists")
+        renamed = next(f for f in data["final"]["files"] if f["path"] == "pkg_mod.py")
+        eq(renamed["lines"], {"the work": 3}, "its lines under the new path")
+
+
+@case
+def a_stage_whose_only_file_was_renamed_is_still_drawn():
+    """The single-stage form of the same thing, where losing it empties the strip."""
+    with sandbox() as (repo, run):
+        (repo / "mod.py").write_text("base\n")
+        run("add", "-A")
+        run("commit", "-qm", "base")
+        run("update-ref", "refs/remotes/origin/main", "HEAD")
+        (repo / "mod.py").write_text("base\none\ntwo\nthree\n")
+        run("add", "-A")
+        run("commit", "-qm", "The work")
+        run("mv", "mod.py", "pkg_mod.py")
+        run("commit", "-qm", "Rename it")
+        _, data = staged(repo, run, ["the work"], [["1"]])
+        eq([s["where"] for s in data["stages"]], ["the work"], "the strip")
+        eq(data["final"]["spent"], [], "nothing should have been called spent")
