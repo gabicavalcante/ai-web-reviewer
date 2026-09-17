@@ -108,7 +108,14 @@ without a flag, so `--narrative FILE` is only for keeping one somewhere else.
 Fill in nothing you have not worked out. Every field falls back to git when left empty, so
 a scaffold you only half understand renders as the plain page, which is the honest one. A
 data flow you inferred from the folder layout is decoration, and it will be read as though
-someone had checked it. Annotate the commits that need it and leave the rest. See
+someone had checked it. Annotate the commits that need it and leave the rest.
+
+Name a stage after the place the work passes through, not the function that handles it.
+`the file's shape · the offices it names · each row, checked · each row, imported` is a
+journey a reader can follow; `validate_patent_file_structure_for_partial ·
+get_existing_ip_office_pairs · validate_patent_file_data_for_partial · import_patent_row`
+is the file list again, in a strip. Where the data flow and the user flow are the same
+journey, use the name a person would recognise. See
 [reference/narrative.md](reference/narrative.md) and
 [tool/narrative.example.json](tool/narrative.example.json).
 

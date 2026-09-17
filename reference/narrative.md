@@ -130,6 +130,34 @@ order to follow the change. A five-commit refactor that moves data through CI, t
 Django, then a report earns one. Five unrelated fixes do not, and numbering them implies a
 sequence that does not exist.
 
+## Naming a stage
+
+A `where` is a place the work passes through, read in order as a journey. The reader should
+be able to follow the strip left to right and say what happens to the thing being changed,
+without opening a single file.
+
+```
+circleci config · git, in the CI container · docker-compose run ·
+django, in the api container · sqlmigrate · the developer's terminal
+```
+
+The failure is naming a stage after the function that handles it:
+
+```
+validate_patent_file_structure_for_partial · get_existing_ip_office_pairs ·
+validate_patent_file_data_for_partial · import_patent_row
+```
+
+That is accurate, and it is the file list again. It says which functions the branch
+touches, which the reader can already see, and not where the work goes. A name from the
+code also carries the code's shape: four functions read as four things done, where
+`the file's shape · the offices it names · each row, checked · each row, imported` reads as
+one thing happening.
+
+Where a data flow and a user flow are the same journey, name the one a person would
+recognise. `the login wizard` and `every admin request` are both places in a request, and
+both are places a reviewer has been.
+
 ## Backticks
 
 `why`, `points` and note `body` render backticked spans as inline code. Everything is
