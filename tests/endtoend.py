@@ -577,10 +577,27 @@ def watcher_complains_again_about_a_different_broken_row():
 
 
 def break_the_narrative(repo, rng):
-    """A narrative the build accepts and the page cannot draw. A stage needs only `where`
-    and `what` to validate, and the page walks its `marks`."""
+    """A narrative the build accepts and the page cannot draw.
+
+    `points` is merged into the commit verbatim and never type-checked, and the page walks
+    it, so a string there passes validation and throws in select(0). That is the failure
+    the draft has to survive: the page is written, and only then does its script run.
+    """
+    data = build(repo, "origin/main...HEAD")
     paths.narrative(rng, repo, create=True).write_text(
-        json.dumps({"stages": [{"where": "parsing", "what": "reads the input"}]})
+        json.dumps({"commits": {data["commits"][0]["short"]: {"points": "not a list"}}})
+    )
+
+
+def break_the_narrative_past_a_rebase(repo, rng):
+    """A narrative the build refuses, keyed by rail position rather than by sha.
+
+    A squash rewrites every sha in the range, so a narrative keyed by one stops matching
+    any commit and the build succeeds. Stages are marked by position, which a rebase does
+    not move.
+    """
+    paths.narrative(rng, repo, create=True).write_text(
+        json.dumps({"stages": [{"where": "parsing", "what": "reads it", "marks": "1"}]})
     )
 
 
@@ -623,7 +640,7 @@ def a_squash_whose_rebuild_fails_still_leaves_a_page():
             rng = paths.resolve_range("origin/main...HEAD", repo)
             page = paths.page(rng, repo)
             kept = digest(page)
-            break_the_narrative(repo, rng)
+            break_the_narrative_past_a_rebase(repo, rng)
             status, body = post(
                 base, "/squash", {}, {"Content-Type": "application/json", "Origin": base}
             )

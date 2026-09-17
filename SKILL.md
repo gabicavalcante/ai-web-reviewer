@@ -110,6 +110,11 @@ a scaffold you only half understand renders as the plain page, which is the hone
 data flow you inferred from the folder layout is decoration, and it will be read as though
 someone had checked it. Annotate the commits that need it and leave the rest.
 
+Mark a stage from commits whose work is still in the branch. A stage that accounts for
+nothing the final diff shows is not drawn, and the build says so. The page tells you which
+commits those are before you narrate: one with nothing left is marked `skim`, and one with
+less than half left carries its surviving count.
+
 Name a stage after the place the work passes through, not the function that handles it.
 `the file's shape · the offices it names · each row, checked · each row, imported` is a
 journey a reader can follow; `validate_patent_file_structure_for_partial ·

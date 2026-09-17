@@ -466,10 +466,18 @@ def final_diff(repo, rng, commits, narrative):
                     weight[where] = weight.get(where, 0) + len(numbers)
                     by_stage.setdefault(where, []).extend(numbers)
         if weight:
-            ranked = sorted(reaching, key=lambda w: (-weight.get(w, 0), order.index(w)))
+            # Only the stages with lines still in the file. History says a stage touched a
+            # file at some point, which is the commits tab's question: a stage is a step in
+            # a journey through the branch as it stands, so it lists a file when it
+            # accounts for something the branch still shows.
+            ranked = sorted(
+                (w for w in reaching if weight.get(w, 0)),
+                key=lambda w: (-weight[w], order.index(w)),
+            )
         else:
-            # A deleted or binary file, or one whose surviving lines predate the branch.
-            # Nothing to weigh, so the strip's own order decides.
+            # Nothing to weigh: the branch deletes this file, or it is binary, or its
+            # surviving lines predate the branch. The removal is in the final diff all the
+            # same, so the stages that reached it keep it, in the strip's own order.
             ranked = sorted(reaching, key=order.index)
         entry["stages"] = ranked
         entry["lines"] = {where: weight.get(where, 0) for where in ranked}
@@ -491,6 +499,17 @@ def final_diff(repo, rng, commits, narrative):
                 f"files: {len(marked)} files marked 'start' under "
                 f"{owner or 'no stage'}: " + ", ".join(marked)
             )
+    # Drawn only if it accounts for something in the final diff. A stage in the strip says
+    # the work passes through it, and one with no file left says that of somewhere the
+    # branch no longer goes. Someone wrote it, so it is named rather than dropped quietly.
+    listing = {where for entry in files for where in entry["stages"]}
+    spent = [where for where in order if where not in listing]
+    for where in spent:
+        warnings.append(
+            f"stage {where!r} is not drawn: nothing it did is in the branch as it stands"
+        )
+    order = [where for where in order if where in listing]
+
     for warning in warnings:
         print(f"narrative: {warning}", file=sys.stderr)
     if problems:
@@ -518,7 +537,7 @@ def final_diff(repo, rng, commits, narrative):
             group = []
         group.append(entry)
     paired.extend(pair_tests(group))
-    return {"files": paired, "order": order}
+    return {"files": paired, "order": order, "spent": spent}
 
 
 def is_placeholder(entry):
@@ -797,6 +816,11 @@ def main():
     if folded:
         default_figures.insert(1, {"k": "follow-ups", "v": str(folded)})
 
+    final = final_diff(repo, rng, commits, narrative)
+    # The strip and the rail are two views of one journey, so a stage the diff no longer
+    # accounts for is in neither.
+    spent = set((final or {}).get("spent") or [])
+
     print(
         json.dumps(
             dict(
@@ -813,10 +837,14 @@ def main():
                     f"compared against {base}."
                 ),
                 eyebrow=narrative.get("eyebrow", ""),
-                final=final_diff(repo, rng, commits, narrative),
+                final=final,
                 figures=[f for f in (narrative.get("figures") or []) if not is_placeholder(f)]
                 or default_figures,
-                stages=[s for s in (narrative.get("stages") or []) if not is_placeholder(s)],
+                stages=[
+                    s
+                    for s in (narrative.get("stages") or [])
+                    if not is_placeholder(s) and s.get("where") not in spent
+                ],
                 notes=[n for n in (narrative.get("notes") or []) if not is_placeholder(n)],
             )
         )

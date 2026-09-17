@@ -208,21 +208,32 @@ def get(base, path):
         return json.loads(answer.read() or b"{}")
 
 
-def build(repo, rng):
+def _build(repo, rng, narrative=None):
+    argv = [sys.executable, str(TOOL / "build_data.py")]
+    if narrative:
+        argv += ["--narrative", str(narrative)]
+    return subprocess.run(argv + ["--", rng], cwd=str(repo), capture_output=True, text=True)
+
+
+def build(repo, rng, narrative=None):
     """The page data for a range, as review.py gets it.
 
     Run as a subprocess rather than imported, because build_data resolves nothing at
     import and this is the interface review.py actually uses.
     """
-    done = subprocess.run(
-        [sys.executable, str(TOOL / "build_data.py"), "--", rng],
-        cwd=str(repo),
-        capture_output=True,
-        text=True,
-    )
+    done = _build(repo, rng, narrative)
     if done.returncode != 0:
         raise Failed(f"build_data failed for {rng!r}:\n{done.stderr.strip()}")
     return json.loads(done.stdout)
+
+
+def build_stderr(repo, rng, narrative=None):
+    """What the build said about the narrative. Warnings go to stderr and the page still
+    builds, so a case that only reads the data never sees them."""
+    done = _build(repo, rng, narrative)
+    if done.returncode != 0:
+        raise Failed(f"build_data failed for {rng!r}:\n{done.stderr.strip()}")
+    return done.stderr
 
 
 def in_page(page, threads, reviewed=None):

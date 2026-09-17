@@ -71,8 +71,10 @@ on the tip of the range says which commit each surviving line came from, and eac
 belongs to a stage, so a file touched by four stages appears under all four, showing
 different lines each time. No stage has to own a file.
 
-A stage can therefore have no lines left in the branch at all. The rail says so and names
-the commits that did the work, which is worth knowing before opening it.
+A stage lists a file when it accounts for something the final diff still shows: lines that
+survive to the tip, or a file the branch removes. A stage that accounts for nothing is not
+part of that journey, so it is not drawn, and the build says which one it dropped and why.
+Its commits then belong to no stage, which the build also says.
 
 Files are ordered within a stage: the code, then what documents it, then what tests it,
 with a test moved to sit under the file whose name it matches. Each file can be opened

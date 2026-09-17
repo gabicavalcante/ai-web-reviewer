@@ -4,10 +4,12 @@ No server and no page. Every case names the failure it holds down, so a case tha
 failing says what is about to go wrong rather than only that something did.
 """
 
+import json
+
 import build_data
 import paths
 
-from harness import case, commit, eq, Failed, sandbox
+from harness import build, build_stderr, case, commit, eq, Failed, sandbox
 
 # --------------------------------------------------------------------------- paths
 
@@ -496,3 +498,126 @@ def parse_patch_marks_a_file_added_or_deleted():
             for f in build_data.parse_patch(build_data.git(repo, "diff", "HEAD~1", "HEAD"))
         }
         eq(got, {"fresh.txt": "added", "gone.txt": "deleted"}, "the statuses")
+
+
+# -------------------------------------------------- what a stage accounts for in the diff
+#
+# A stage is a step in a journey through the branch as it stands, so it lists a file when
+# it accounts for something in the final diff: lines that survive to the tip, or a file the
+# branch removes. Membership taken from history instead says a stage touched a file at some
+# point, which is the commits tab's question asked in the wrong tab.
+
+
+def staged(repo, run, stages, commits):
+    """Build a range whose narrative marks `commits` to `stages`, and report what each
+    stage ends up listing."""
+    narrative = repo / "n.json"
+    narrative.write_text(
+        json.dumps(
+            {
+                "stages": [
+                    {"where": where, "what": "what it does", "marks": marks}
+                    for where, marks in zip(stages, commits)
+                ]
+            }
+        )
+    )
+    data = build(repo, "origin/main..HEAD", narrative=narrative)
+    final = data["final"] or {"order": [], "files": []}
+    return {
+        where: sorted(f["path"] for f in final["files"] if where in (f.get("stages") or []))
+        for where in final["order"]
+    }, data
+
+
+@case
+def a_stage_does_not_list_a_file_it_wrote_nothing_surviving_in():
+    """The first stage edits a file, the second rewrites every line of that edit. History
+    says both touched it; the branch only shows the second."""
+    with sandbox() as (repo, run):
+        (repo / "a.py").write_text("one\ntwo\n")
+        run("add", "-A")
+        run("commit", "-qm", "base")
+        run("update-ref", "refs/remotes/origin/main", "HEAD")
+        (repo / "a.py").write_text("one\nfirst pass\n")
+        run("add", "-A")
+        run("commit", "-qm", "First pass")
+        (repo / "a.py").write_text("one\nsecond pass\n")
+        run("add", "-A")
+        run("commit", "-qm", "Second pass")
+        listed, data = staged(repo, run, ["first", "second"], [["1"], ["2"]])
+        eq(listed.get("second"), ["a.py"], "what the surviving stage lists")
+        # Membership read off the file, so the check holds whether or not the stage that
+        # wrote nothing surviving is still drawn.
+        stages_of = {f["path"]: f["stages"] for f in data["final"]["files"]}
+        eq(stages_of["a.py"], ["second"], "the stages a.py belongs to")
+
+
+@case
+def a_stage_that_only_deletes_a_file_still_lists_it():
+    """Nothing it wrote survives, because the file does not. The removal is in the final
+    diff, so the stage accounts for it and is part of the journey."""
+    with sandbox() as (repo, run):
+        (repo / "keep.py").write_text("one\n")
+        (repo / "legacy.py").write_text("legacy\n")
+        run("add", "-A")
+        run("commit", "-qm", "base")
+        run("update-ref", "refs/remotes/origin/main", "HEAD")
+        (repo / "keep.py").write_text("one\ntwo\n")
+        run("add", "-A")
+        run("commit", "-qm", "The new path")
+        run("rm", "-q", "legacy.py")
+        run("commit", "-qm", "Drop the legacy module")
+        listed, _ = staged(repo, run, ["new", "legacy"], [["1"], ["2"]])
+        eq(listed.get("legacy"), ["legacy.py"], "a stage whose work is a deletion")
+        eq(listed.get("new"), ["keep.py"], "and the one that added")
+
+
+@case
+def a_stage_accounting_for_nothing_is_not_drawn():
+    """It is not a step in a journey through the branch as it stands, and drawing it in the
+    strip says the work passes through somewhere it does not."""
+    with sandbox() as (repo, run):
+        (repo / "a.py").write_text("one\ntwo\n")
+        run("add", "-A")
+        run("commit", "-qm", "base")
+        run("update-ref", "refs/remotes/origin/main", "HEAD")
+        (repo / "a.py").write_text("one\nfirst pass\n")
+        run("add", "-A")
+        run("commit", "-qm", "First pass")
+        (repo / "a.py").write_text("one\nsecond pass\n")
+        run("add", "-A")
+        run("commit", "-qm", "Second pass")
+        _, data = staged(repo, run, ["first", "second"], [["1"], ["2"]])
+        eq([s["where"] for s in data["stages"]], ["second"], "the strip")
+        eq(data["final"]["order"], ["second"], "and the rail")
+
+
+@case
+def dropping_a_stage_says_which_one_and_why():
+    """Someone wrote it. It goes because the branch no longer passes through it, and that
+    is worth being told rather than noticing."""
+    with sandbox() as (repo, run):
+        (repo / "a.py").write_text("one\ntwo\n")
+        run("add", "-A")
+        run("commit", "-qm", "base")
+        run("update-ref", "refs/remotes/origin/main", "HEAD")
+        (repo / "a.py").write_text("one\nfirst pass\n")
+        run("add", "-A")
+        run("commit", "-qm", "First pass")
+        (repo / "a.py").write_text("one\nsecond pass\n")
+        run("add", "-A")
+        run("commit", "-qm", "Second pass")
+        narrative = repo / "n.json"
+        narrative.write_text(
+            json.dumps(
+                {
+                    "stages": [
+                        {"where": "first", "what": "overwritten", "marks": ["1"]},
+                        {"where": "second", "what": "survives", "marks": ["2"]},
+                    ]
+                }
+            )
+        )
+        said = build_stderr(repo, "origin/main..HEAD", narrative)
+        eq("first" in said, True, f"the dropped stage is named ({said!r})")

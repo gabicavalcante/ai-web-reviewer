@@ -130,6 +130,23 @@ order to follow the change. A five-commit refactor that moves data through CI, t
 Django, then a report earns one. Five unrelated fixes do not, and numbering them implies a
 sequence that does not exist.
 
+## What a stage accounts for
+
+A stage lists a file when it accounts for something the final diff still shows: lines that
+survive to the tip, or a file the branch removes. A stage is a step in a journey through
+the branch as it stands, so one that accounts for nothing is not a step in it and is not
+drawn:
+
+```
+narrative: stage 'sqlmigrate' is not drawn: nothing it did is in the branch as it stands
+```
+
+Marks are commits, which is how a person reasons about a change, and what gets drawn is
+read off the final state. So a stage built on commits whose work a later commit rewrote
+disappears, and the commits it claimed become unclaimed, which the build also reports. The
+page already says which commits those are: one with nothing left is marked `skim`, and one
+with less than half left carries its surviving count.
+
 ## Naming a stage
 
 A `where` is a place the work passes through, read in order as a journey. The reader should
