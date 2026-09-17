@@ -156,6 +156,32 @@ Which stages list a file is read off `git blame` on the tip, not off the commits
 diffs. Blame follows a rename and a commit's diff does not, so a stage that wrote lines
 into a file a later commit renamed still lists it under the name the branch ends with.
 
+## Saying what a stage does
+
+`what` says what happens at that step, so it starts with a verb:
+
+```
+git, on the host   List changed migrations
+django             Arm the guard
+```
+
+Naming the subject matter instead reads as a label on a box rather than a step in a
+journey:
+
+```
+the file's shape   Header, data rows and dynamic fields. Returns errors instead of
+                   raising, and drops both Migration ID checks.
+```
+
+The information is there, in the second half. The first half is a list of nouns the reader
+has to hold until the verb arrives, and the sentence is doing the reader's work in the
+wrong order. `Checks the header, the data rows and the dynamic fields, returning errors
+rather than raising` is the same length and says it once.
+
+The test is whether `where` and `what` read as one line: *at the file's shape, check the
+header, the data rows and the dynamic fields.* A `what` that cannot finish that sentence is
+naming something rather than saying it.
+
 ## Naming a stage
 
 A `where` is a place the work passes through, read in order as a journey. The reader should

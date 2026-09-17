@@ -115,6 +115,10 @@ nothing the final diff shows is not drawn, and the build says so. The page tells
 commits those are before you narrate: one with nothing left is marked `skim`, and one with
 less than half left carries its surviving count.
 
+A stage's `what` says what happens at that step and starts with a verb: `Arm the guard`,
+not `The guard, and where it is armed`. The two fields read as one line, so `where` names
+the place and `what` says what is done there.
+
 Name a stage after the place the work passes through, not the function that handles it.
 `the file's shape · the offices it names · each row, checked · each row, imported` is a
 journey a reader can follow; `validate_patent_file_structure_for_partial ·
