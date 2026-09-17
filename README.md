@@ -59,15 +59,17 @@ If you wrote a narrative and labelled that commit yourself, your label stays.
 On a branch that was rewritten many times this can be most of the list. One branch here
 has fifteen commits, and ten of them no longer exist in the final code.
 
-**Files changed** is the branch as it stands now. On a long branch it is the better place
-to start, for the reason above: reading the commits in order means reading code that is no
-longer there.
+**Files changed** is the branch as it stands now, and it is the tab that opens. On a long
+branch it is the better place to start, for the reason above: reading the commits in order
+means reading code that is no longer there. The two answer different questions. The commits
+tell you how the branch got here; the diff tells you what it is.
 
-With a narrative, the files tab is a rail of stages rather than files. Choosing one shows
-only the lines that stage wrote, wherever it wrote them, with three rows either side and
-the gaps counted. `git blame` on the tip of the range says which commit each surviving
-line came from, and each commit belongs to a stage, so a file touched by four stages
-appears under all four, showing different lines each time. No stage has to own a file.
+With a narrative, the files tab is a rail of stages rather than files. A stage is a step in
+a journey through the branch as it stands. Choosing one shows only the lines that stage
+wrote, wherever it wrote them, with three rows either side and the gaps counted. `git blame`
+on the tip of the range says which commit each surviving line came from, and each commit
+belongs to a stage, so a file touched by four stages appears under all four, showing
+different lines each time. No stage has to own a file.
 
 A stage can therefore have no lines left in the branch at all. The rail says so and names
 the commits that did the work, which is worth knowing before opening it.
