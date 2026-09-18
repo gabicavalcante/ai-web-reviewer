@@ -734,8 +734,9 @@ def the_page_carries_the_range_it_was_asked_for():
 
 @case
 def a_removed_line_is_attributed_to_the_stage_that_removed_it():
-    """Blame cannot say who deleted a line, because it reads the file as it stands. The
-    commits' own diffs can: the stage whose commit took out a line with that text."""
+    """Blame reads the file as it stands, so it has nothing to say about a line that is
+    gone. Reverse blame walks the other way and names the last commit that still had the
+    line, and the commit after that one is the commit that took it out."""
     with sandbox() as (repo, run):
         (repo / "a.py").write_text("keep one\nDROP ME\nkeep two\n")
         run("add", "-A")
@@ -749,13 +750,15 @@ def a_removed_line_is_attributed_to_the_stage_that_removed_it():
         run("commit", "-qm", "B drops it")
         _, data = staged(repo, run, ["A", "B"], [["1"], ["2"]])
         entry = next(f for f in data["final"]["files"] if f["path"] == "a.py")
-        eq(entry.get("gone"), {"B": [2]}, f"who removed which line ({entry.get('gone')})")
+        eq(entry.get("gone"), {"B": [[2, 2]]}, f"who removed which line ({entry.get('gone')})")
 
 
 @case
-def a_line_two_stages_removed_is_shown_under_both():
-    """Text is how a removal is attributed, so the same text taken out by two stages
-    belongs to both rather than to whichever is checked first."""
+def two_stages_removing_the_same_text_each_keep_their_own_line():
+    """The same text taken out twice is two removals, not one belonging to both. Matching
+    a removal to a stage by its text alone cannot tell them apart, and gave every stage
+    every line whose text it had removed anywhere in the file: a pane drawn around a
+    deletion thirty lines away that the stage had nothing to do with."""
     with sandbox() as (repo, run):
         (repo / "a.py").write_text("gone\nkeep\ngone\n")
         run("add", "-A")
@@ -770,7 +773,52 @@ def a_line_two_stages_removed_is_shown_under_both():
         _, data = staged(repo, run, ["A", "B"], [["1"], ["2"]])
         entry = next(f for f in data["final"]["files"] if f["path"] == "a.py")
         gone = entry.get("gone") or {}
-        eq(sorted(gone), ["A", "B"], f"both stages named ({gone})")
+        eq(gone, {"A": [[1, 1]], "B": [[3, 3]]}, f"each stage's own removal ({gone})")
+
+
+@case
+def a_stage_that_only_removed_lines_is_still_drawn():
+    """A stage is listed on a file when it accounts for something the branch still shows,
+    and a removal is something the branch shows. Membership was read off blame alone, and
+    blame has nothing to say about a line that is gone, so a stage whose whole job in a
+    file was a deletion was dropped from the rail whenever another stage had added a
+    surviving line to the same file. The removal was recorded and then drawn nowhere."""
+    with sandbox() as (repo, run):
+        (repo / "a.py").write_text("keep one\nDROP ME\nkeep two\n")
+        run("add", "-A")
+        run("commit", "-qm", "base")
+        run("update-ref", "refs/remotes/origin/main", "HEAD")
+        (repo / "a.py").write_text("keep one\nDROP ME\nkeep two\nadded by A\n")
+        run("add", "-A")
+        run("commit", "-qm", "A adds")
+        (repo / "a.py").write_text("keep one\nkeep two\nadded by A\n")
+        run("add", "-A")
+        run("commit", "-qm", "B drops it")
+        listing, data = staged(repo, run, ["A", "B"], [["1"], ["2"]])
+        entry = next(f for f in data["final"]["files"] if f["path"] == "a.py")
+        eq(entry.get("stages"), ["A", "B"], f"who lists the file ({entry.get('stages')})")
+        eq("B" in data["final"]["order"], True, f"the rail ({data['final']['order']})")
+        eq(listing.get("B"), ["a.py"], f"what B lists ({listing})")
+
+
+@case
+def a_removal_survives_a_rename():
+    """A commit's own diff names the path as it was, and the final diff names it as it is,
+    so a removal on a file renamed later matched nothing and the stage that made it lost
+    the file. Blame crosses a rename, which is why the attribution is read from it."""
+    with sandbox() as (repo, run):
+        (repo / "old.py").write_text("".join(f"line {n}\n" for n in range(1, 21)))
+        run("add", "-A")
+        run("commit", "-qm", "base")
+        run("update-ref", "refs/remotes/origin/main", "HEAD")
+        (repo / "old.py").write_text("".join(f"line {n}\n" for n in range(1, 21) if n != 10))
+        run("add", "-A")
+        run("commit", "-qm", "A drops the tenth")
+        run("mv", "old.py", "new.py")
+        run("commit", "-qm", "B renames it")
+        _, data = staged(repo, run, ["A", "B"], [["1"], ["2"]])
+        entry = next(f for f in data["final"]["files"] if f["path"] == "new.py")
+        eq(entry.get("gone"), {"A": [[10, 10]]}, f"the removal ({entry.get('gone')})")
 
 
 @case

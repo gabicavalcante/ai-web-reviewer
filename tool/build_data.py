@@ -69,7 +69,10 @@ def parse_patch(patch):
     for line in patch.split("\n"):
         match = FILE_RE.match(line)
         if match:
-            current = dict(path=match.group(2), status="modified", rows=[])
+            # Both paths. The b side is the file as it stands and names the entry;
+            # the a side is where it was, and a walk backwards through the branch
+            # starts there. They differ exactly when the branch renames the file.
+            current = dict(path=match.group(2), was=match.group(1), status="modified", rows=[])
             files.append(current)
             # Back to reading headers, which a file carrying no hunk at all would
             # otherwise leave unset for the next one.
@@ -241,6 +244,52 @@ def range_tip(rng):
     return tip.strip() or "HEAD"
 
 
+def range_base(rng):
+    """The commit a range starts from, which is where a walk forwards begins."""
+    for sep in ("...", ".."):
+        if sep in rng:
+            return rng.split(sep)[0].strip() or "HEAD"
+    return rng.strip() or "HEAD"
+
+
+def next_commits(repo, base, tip):
+    """For each commit in the range, the one that comes after it.
+
+    Reverse blame names the last commit that still had a line. The commit that took the
+    line out is the one after that, so the walk needs to be able to step forwards. The
+    base is in here too, because a line the first commit removes was last seen in the
+    commit the branch grew from.
+    """
+    walk = git(repo, "rev-list", "--topo-order", "--reverse", f"{base}..{tip}").split()
+    seen = [git(repo, "rev-parse", base).strip()] + walk
+    return {sha: seen[i + 1] for i, sha in enumerate(seen[:-1])}
+
+
+def removed_lines(repo, base, tip, path, after):
+    """Which lines of the file at the base are gone by the tip, and who took each out.
+
+    Blame reads the file as it stands, so a line the branch removed is not in it to be
+    credited to anyone. Reverse blame walks the other way: for each line of the file at
+    the base it names the last commit that still had it. The tip means the line is still
+    there. Any other answer is a line that went, and `after` says which commit went next.
+
+    The path is the one at the base, because that is where the walk starts. Matching a
+    removal by its text instead cannot tell two deletions of the same text apart, and a
+    file the branch renames has no text in common to match on at all.
+    """
+    out = git_maybe(
+        repo, "blame", "--reverse", "--line-porcelain", "-M", f"{base}..{tip}", "--", path
+    )
+    if out is None:
+        return {}
+    gone = {}
+    for row in out.split("\n"):
+        found = BLAME_LINE.match(row)
+        if found and found.group(1) in after:
+            gone[int(found.group(2))] = after[found.group(1)]
+    return gone
+
+
 def surviving_lines(repo, tip, path):
     """Which lines of the file as it stands now came from each commit.
 
@@ -371,7 +420,7 @@ def final_diff(repo, rng, commits, narrative):
         # on the rail has nothing left. Say that rather than leaving the counts unset.
         mark_survival(commits, {})
         return None
-    tip = range_tip(rng)
+    tip, base = range_tip(rng), range_base(rng)
 
     # numstat writes "-" for both counts of a binary file, which is how git says the file
     # has no lines. Blame does not say that: it prints the bytes and leaves the caller to
@@ -394,7 +443,7 @@ def final_diff(repo, rng, commits, narrative):
     # Which stages reach a file, and which commit belongs to which stage. A mark is a rail
     # position, and a commit's followups are part of it, so a fixup belongs to its
     # target's stage.
-    order, touched, stage_of, removed = [], {}, {}, {}
+    order, touched, stage_of, wrote = [], {}, {}, {}
     for stage in narrative.get("stages") or []:
         if is_placeholder(stage) or not stage.get("where"):
             continue
@@ -410,23 +459,18 @@ def final_diff(repo, rng, commits, narrative):
                     touched.setdefault(entry["path"], [])
                     if stage["where"] not in touched[entry["path"]]:
                         touched[entry["path"]].append(stage["where"])
-                    # Which stages took something out of it. Blame only sees what is
-                    # still there, so this is the one contribution it cannot weigh.
-                    # By text, because blame reads the file as it stands and a removed
-                    # line is not in it. A commit's own diff is the only record of what it
-                    # took out, and the text is what matches it to the final diff: the
-                    # line numbers are relative to different files.
-                    gone = removed.setdefault(entry["path"], {})
-                    if entry["status"] == "deleted":
-                        gone.setdefault(None, set()).add(stage["where"])
-                    for row in entry["rows"]:
-                        if row["t"] == "del":
-                            gone.setdefault(row["text"], set()).add(stage["where"])
+                    # Whether the stage put lines into this file as well as taking them
+                    # out. A stage that replaced a line and was replaced in turn has
+                    # nothing of its own left; a stage that only took something away
+                    # still has the removal. The two look identical to blame.
+                    if any(row["t"] == "add" for row in entry["rows"]):
+                        wrote.setdefault(entry["path"], set()).add(stage["where"])
 
     # Blame is already being run over every file below. Totalling it per commit as well
     # costs nothing and answers the question the rail cannot: how much of what a commit
     # added is still in the branch.
     alive_by_sha = {}
+    after = next_commits(repo, base, tip)
 
     # What the narrative says about individual files. The tool can order a file and weigh
     # it; only a person can say what it is for in this change.
@@ -466,6 +510,20 @@ def final_diff(repo, rng, commits, narrative):
 
     for entry in files:
         reaching = touched.get(entry["path"], [])
+        # The old-side line numbers each stage took out, so a pane can draw a removal
+        # rather than only showing one that happens to sit beside something that survived.
+        # Read before the stages are settled, because a stage whose whole contribution to
+        # a file is a removal has to be able to earn its place on it.
+        took = {}
+        if entry["rows"]:
+            by_line = removed_lines(repo, base, tip, entry["was"], after)
+            for row in entry["rows"]:
+                where = stage_of.get(by_line.get(row["o"])) if row["t"] == "del" else None
+                if where:
+                    took.setdefault(where, []).append(row["o"])
+        # Runs, for the same reason the surviving lines are runs: it is what a reader is
+        # shown, and a file the branch deletes is a removal per line.
+        entry["gone"] = {where: to_runs(lines) for where, lines in took.items()}
         # Ordered by how much of the file as it stands now each stage actually wrote.
         # Placing a file under the first stage to mention it put two thirds of this
         # branch under its first stage and left one stage with no files at all.
@@ -496,26 +554,29 @@ def final_diff(repo, rng, commits, narrative):
             #
             # When none of them removed anything, which is a binary file, whose diff has
             # no rows to read, the stages that reached it keep it.
-            took_out = set().union(*removed.get(entry["path"], {}).values() or [set()])
-            takers = [w for w in reaching if w in took_out]
+            takers = [w for w in reaching if w in took]
             ranked = sorted(takers or reaching, key=order.index)
+        # A stage whose contribution here was to take something away. Blame cannot see a
+        # removal, so reading membership off it alone dropped such a stage from the file
+        # and from the rail while its removal sat in the diff belonging to nobody.
+        #
+        # Only where the stage wrote nothing here itself: one that replaced a line and was
+        # replaced in turn has nothing left to show, and its removal reads as part of the
+        # edit that overtook it. Named by the path on both sides, because a commit's own
+        # diff calls a renamed file what it was.
+        penned = wrote.get(entry["path"], set()) | wrote.get(entry["was"], set())
+        ranked = ranked + sorted(
+            (w for w in took if w not in ranked and w not in penned), key=order.index
+        )
         entry["stages"] = ranked
+        # Attribution is not membership: a stage the file does not list cannot draw its
+        # removal anywhere, and leaving it in the data is a claim the page cannot honour.
+        entry["gone"] = {w: runs for w, runs in entry["gone"].items() if w in ranked}
         entry["lines"] = {where: weight.get(where, 0) for where in ranked}
         # Where each stage's surviving lines are, so the page can show a stage's own work
         # inside a file another stage owns. Runs rather than line numbers, because that is
         # what a reader is shown and it keeps the page small.
         entry["runs"] = {where: to_runs(numbers) for where, numbers in by_stage.items()}
-        # The old-side line numbers each stage took out, so a pane can draw a removal
-        # rather than only showing one that happens to sit beside something that survived.
-        # A line two stages removed belongs to both: the text is all there is to go on.
-        by_text = removed.get(entry["path"], {})
-        gone = {}
-        for row in entry["rows"]:
-            if row["t"] != "del":
-                continue
-            for where in by_text.get(row["text"], ()):
-                gone.setdefault(where, []).append(row["o"])
-        entry["gone"] = {where: sorted(lines) for where, lines in gone.items()}
 
     # One place to start per stage, or the mark stops meaning anything. Checked here
     # rather than with the rest, because only now is it known which stage a file is under.

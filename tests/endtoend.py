@@ -991,6 +991,43 @@ def a_line_a_stage_removed_is_drawn_in_its_pane():
 
 
 @case
+def a_big_deletion_is_not_drawn_line_by_line():
+    """Every line of a deleted file is a removal, so seeding a window from each of them
+    draws the whole file back into the page. COLLAPSE_DELETIONS_OVER is the size past
+    which that is not worth the bytes, and the pane says what the stage did instead."""
+    with sandbox() as (repo, run):
+        (repo / "big.py").write_text("".join(f"line {n}\n" for n in range(1, 121)))
+        run("add", "-A")
+        run("commit", "-qm", "base")
+        run("update-ref", "refs/remotes/origin/main", "HEAD")
+        run("rm", "-q", "big.py")
+        run("commit", "-qm", "Drop the old module")
+        (repo / "new.py").write_text("fresh\n")
+        run("add", "-A")
+        run("commit", "-qm", "The new path")
+        rng = paths.resolve_range("origin/main...HEAD", repo)
+        paths.narrative(rng, repo, create=True).write_text(
+            json.dumps(
+                {
+                    "stages": [
+                        {"where": "the old module", "what": "goes", "marks": ["1"]},
+                        {"where": "the new path", "what": "arrives", "marks": ["2"]},
+                    ]
+                }
+            )
+        )
+        subprocess.run(
+            [sys.executable, str(TOOL / "review.py"), "build", "origin/main...HEAD"],
+            cwd=str(repo),
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        drew = in_page(paths.page(rng, repo), [])
+        eq(len(drew["pane"]), 0, f"rows drawn for a 120 line deletion ({len(drew['pane'])})")
+
+
+@case
 def a_sibling_review_with_a_narrative_is_named_too():
     """The guard exists so a review that comes up empty does not leave the reviewer
     wondering where the work went. It counted threads only, and a narrative is the other

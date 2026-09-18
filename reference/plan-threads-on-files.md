@@ -67,18 +67,33 @@ never shown                     : 7
 A deletion standing on its own is invisible, and "Show the whole file" cannot help, because
 the line is not in the file.
 
-So a window is seeded from a deleted line too. Which stage owns it comes from the commits'
-own diffs: the stage whose commit removed a line with that text. Measured on the same
-branch:
+So a window is seeded from a deleted line too. Which stage owns it comes from reverse
+blame: `git blame --reverse merge-base..tip` names, for each line of the file as it was,
+the last commit that still had it. The tip means the line survived; any other answer means
+the commit after that one took it out.
 
-```
-deleted lines the final diff shows  : 56
-attributable to exactly one stage   : 56
-claimed by more than one stage      : 0
-```
+The first attempt matched removals by line text, read from the commits' own diffs. It was
+measured on this branch and looked clean, and it was wrong in two ways the branch did not
+happen to show. Text cannot tell two deletions of the same text apart, so every stage got
+every line whose text it had removed anywhere in the file — a pane drawn around a deletion
+thirty lines away that the stage had nothing to do with. And a commit's diff names a file
+as it was, so a rename between the removal and the tip matched nothing at all. Seven to
+ten percent of deleted lines on this repo's own history share text with another deleted
+line in the same file; a braces-and-blank-lines codebase would be far higher.
 
-Clean on this branch, and a heuristic in general. Where two stages removed the same text,
-show it under both rather than guessing.
+Reverse blame has neither problem: it is per line, not per text, and blame crosses a
+rename. It costs one `git blame` per file with deletions, the same order as the forward
+blame already being run.
+
+Membership follows from it. A stage listed on a file only when blame found surviving lines
+for it is a stage that can never be listed for a removal, because a removed line is not
+there to blame. So a stage earns a file through a removal too — but only where it wrote
+nothing there itself. A stage that replaced a line and was replaced in turn has nothing of
+its own left, and its removal reads as part of the edit that overtook it.
+
+One exception: a file the branch deletes outright is a removal per line, so seeding a
+window from each of them draws the whole file back into the page. Past
+`COLLAPSE_DELETIONS_OVER` the pane says what the stage did instead.
 
 This is worth doing on its own, before any of the thread work. A view of the branch as it
 stands should show what the branch removed.
@@ -104,7 +119,7 @@ layer that is a heuristic in both directions.
 
 ## Order of work
 
-1. Render removed lines deliberately, attributed by stage. Useful alone.
+1. ~~Render removed lines deliberately, attributed by stage.~~ Done.
 2. Make a row on the files tab askable: the click handler, the composer, and `/ask` already
    work from a row's dataset.
 3. Anchor in final-diff coordinates, and mark a thread outdated when the diff no longer

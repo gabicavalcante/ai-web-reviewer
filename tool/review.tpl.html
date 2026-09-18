@@ -1176,8 +1176,15 @@
     /* What this stage took out. A removed line has no number in the file as it stands, so
        blame cannot find it and a window seeded only from what survived shows it just when
        it happens to sit beside something that did. "Why did you drop this" then has
-       nothing to click, and a removal standing on its own is not drawn at all. */
-    const removed = new Set(gone || []);
+       nothing to click, and a removal standing on its own is not drawn at all.
+
+       Not for a file the branch deletes outright, once it is past the size a deletion is
+       collapsed at: every line of such a file is a removal, and seeding a window from
+       each of them draws the whole of it back into the page. */
+    const removed = new Set();
+    if (!f.collapsed) {
+      (gone || []).forEach(([from, to]) => { for (let n = from; n <= to; n++) removed.add(n); });
+    }
 
     const keep = new Set();
     f.rows.forEach((r, i) => {
@@ -1243,7 +1250,11 @@
       }
       last = i;
       const r = f.rows[i];
-      const tr = el("tr", r.t + (r.n && own.has(r.n) ? " own" : ""));
+      /* A removal this stage made is its own work as much as a line it wrote, and
+         reading the same as a removal that merely fell inside the window left the
+         reviewer no way to tell which one the pane is about. */
+      const mine = r.t === "del" ? removed.has(r.o) : r.n && own.has(r.n);
+      const tr = el("tr", r.t + (mine ? " own" : ""));
       if (r.t === "hunk") {
         const td = el("td", "code", r.text);
         td.colSpan = 3;

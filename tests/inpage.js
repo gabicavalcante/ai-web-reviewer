@@ -100,23 +100,27 @@ setTimeout(() => {
   const orphans = threads
     .filter((t) => cards.some((card) => card.includes(header(t))))
     .map((t) => t.id);
-  // A paint that throws is swallowed by refresh()'s catch into the status line, and every
-  // case that only counts orphan cards then passes against a page that drew nothing at
-  // all. The status is reported so a case can tell those apart.
   // The rows a stage's pane actually drew. A pane is seeded from what survived and from
   // what the stage removed, and the removal half is only observable here: the data says a
   // line is gone, and whether the page puts it on screen is a separate question.
+  //
+  // Only inside the stage pane. The all-files view writes into the same container, so a
+  // walk from the container would report its rows too and a case about one view would
+  // pass on the strength of the other.
   const pane = [];
-  const walk = (n) => {
+  const walk = (n, inside) => {
     const cls = String(n.className || "");
-    if (n.tagName === "TR" && cls) {
+    if (inside && n.tagName === "TR") {
       const code = (n.children || []).find((c) => c.className === "code");
-      if (code) pane.push(`${cls.split(" ")[0]} ${code.textContent}`);
+      if (code) pane.push(`${cls.split(" ")[0] || "row"} ${code.textContent}`);
     }
-    (n.children || []).forEach(walk);
+    (n.children || []).forEach((c) => walk(c, inside || cls.split(" ").includes("stagepane")));
   };
-  if (registry.fileGroups) walk(registry.fileGroups);
+  if (registry.fileGroups) walk(registry.fileGroups, false);
 
+  // A paint that throws is swallowed by refresh()'s catch into the status line, and every
+  // case that only counts orphan cards then passes against a page that drew nothing at
+  // all. The status is reported so a case can tell those apart.
   console.log(JSON.stringify({
     cards: cards.length,
     pane,
