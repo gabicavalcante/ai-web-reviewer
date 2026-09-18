@@ -1,83 +1,123 @@
-# Asking a question on the Files changed tab
+# Moving questions to the Files changed tab
 
-Not built. This is the plan, written while the reasoning was fresh.
+Not built. This is the design, and the measurements it rests on.
 
-Today a thread can only be asked on the Commits tab, because the page needs a commit to
-anchor it to and a line there has one. Files changed is the tab that opens, and it is the
-branch as it stands, so it is where a reviewer is reading. They cannot ask there.
+Files changed is the tab that opens and the one a reviewer reads. Questions can only be
+asked on Commits, because a thread anchors to `(commit, file, side, line)` and a line there
+has a commit behind it. So the reader is in one place and the asking is in another.
 
-## Why it is possible at all
+## Threads live on one tab, not two
 
-A thread anchors to `(commit, file, side, line)`. The files tab has three of the four and
-appears to be missing the commit. It is not: `git blame` on the tip of the range says which
-commit each surviving line came from, `surviving_lines()` already returns exactly that, and
-the numbers it returns are the same new-side line numbers the final diff's `add` rows
-carry. The build runs that pass on every file already, to weigh the stages.
+The first version of this plan kept both and tried to make one anchor mean the same thing
+in each. It cannot. A commit's diff numbers lines in that commit's version of the file; the
+final diff numbers them in the final version. Measured on a real branch, the same physical
+line gets the same number in both views **23% of the time**:
 
-So the commit is known. It is thrown away, because `runs` keeps the result grouped by stage
-rather than by commit.
+```
+added rows where both tabs agree on the line number : 178
+added rows where they do not                        : 580
+```
 
-## What is attributable
+One home means one coordinate system, and the problem disappears.
 
-Measured on `origin/main..ft/868kmk8v6-2-patent-partial-validators`, 14 commits, 9 files:
+## Anchored the way a pull request comment is
 
-| row | attributable to a commit in the range |
-| --- | --- |
-| `add` | 758 of 787 |
-| `ctx` | 5 of 134 |
-| `del` | 0 of 56 |
+A review comment on GitHub is `(file, side, line)` in the pull request's own diff, with no
+commit in it. A thread here records the same thing, in the final diff's coordinates.
 
-Added lines are the case, and they are the lines people ask about. Context is mostly
-pre-branch, which is the right answer rather than a gap. The 29 unattributed additions are
-credited to commits outside the range, which a rename carrying content across will do.
+Two reasons beyond simplicity. A reviewer often reads the same change in both places, and
+the two anchors then name the same location. And it settles what happens when the branch
+moves: see below.
 
-Deleted lines cannot be attributed at all. Blame reads the file as it stands and a removed
-line is not in it.
+The commit is still worth recording, because `git blame` on the tip knows it for any
+surviving line, and it is useful to show. It is not part of the anchor.
 
-## The change
+## The diff changes, so a thread goes outdated
 
-**`build_data.py`**. Keep the per-commit owner alongside the per-stage runs. The blame
-pass already produces `sha -> [line numbers]` per file; `runs` reduces it to stages and
-drops the shas. Emit both. One dict, no new git call.
+A question leads to a fixup, the fixup changes the final state, and the final state is what
+the anchor points into. This is unavoidable in a view of the final state.
 
-**`review.tpl.html`**. Two edits.
+GitHub marks such a comment **outdated** and leaves it where it was asked. This does the
+same. Re-anchoring is a text match, and a file has repeated lines:
 
-`renderFileLines` sets `tr.dataset.commit` from that map, the way `renderFile` already does
-from `commitShort`. Once a row carries a commit, the existing click handler, composer and
-`/ask` call work unchanged: they read `tr.dataset.commit`.
+```
+6 times:  )
+5 times:  """
+3 times:  header, lines = get_header_and_lines_from_csv_file(file)
+```
 
-`paintThreads` and `VALID_ANCHORS` have to cover the files pane. `board()` is hardcoded to
-`#board` and every scan for a row runs over that subtree, which was deliberate: the files
-view holds a second copy of the branch and the poll walks it every few seconds. Both panes
-means either scanning both or scanning the visible one.
+A thread placed on the wrong `)` is worse than one marked as no longer matching, so a
+thread is re-anchored only where the match is exact and unique, and marked outdated
+otherwise. That is the same judgement the orphan list already makes.
 
-**`server.py`**. Nothing to do: the anchor format does not change.
+## Removed lines have to be visible
 
-## Why it is additive
+A reviewer asks "why did you drop this", and today there is nothing to click.
 
-Same four-part key, same shas, nothing on disk changes, no migration. A thread asked on
-either tab shows on both, because both know which commit owns the line. Every thread
-already written keeps working.
+`renderFileLines` seeds its windows from `runs`, which are blame-derived surviving line
+numbers. A deleted line has no line number to match on, so it appears only when it happens
+to sit within three rows of a surviving line:
 
-That is the strongest argument for doing it this way rather than inventing a file-level
-anchor that does not need a commit.
+```
+deleted lines in the final diff : 56
+a stage pane renders            : 49   (incidentally, as context)
+never shown                     : 7
+```
 
-## The question to settle first
+A deletion standing on its own is invisible, and "Show the whole file" cannot help, because
+the line is not in the file.
 
-What a question on a **deleted** line means. There is no commit behind it, so either:
+So a window is seeded from a deleted line too. Which stage owns it comes from the commits'
+own diffs: the stage whose commit removed a line with that text. Measured on the same
+branch:
 
-- the files tab does not offer a question on a removed line, which is honest and loses
-  something a reviewer plainly wants; or
-- such a thread anchors to the file with no commit, which is a second kind of thread, and
-  the orphan logic, the squash warning and `VALID_ANCHORS` all assume there is a commit.
+```
+deleted lines the final diff shows  : 56
+attributable to exactly one stage   : 56
+claimed by more than one stage      : 0
+```
 
-This is a design decision, not an engineering one, and it should be made before the code.
+Clean on this branch, and a heuristic in general. Where two stages removed the same text,
+show it under both rather than guessing.
 
-## Cost
+This is worth doing on its own, before any of the thread work. A view of the branch as it
+stands should show what the branch removed.
 
-A day, not a week. The plumbing is small because the anchor is unchanged. The risk is in
-`paintThreads` covering two panes, which is the part of the page that runs every four
-seconds and the part two separate QA rounds have already found bugs in.
+## The narrative does a different job
 
-Do it on its own, with its own QA round. It is the largest change to how threads work since
-they existed.
+A removal that is expected needs framing, not a question: `each row, checked` already says
+"The legacy pass shares the loop and keeps its query". A removal that is surprising needs a
+question, and that is what has no home today. Both, for different moments.
+
+Note the room available. A stage's `what` is capped at 120 characters and a file note at 80.
+Neither fits an explanation of a strategy change; a "before you push" note has no cap and is
+where that belongs.
+
+## What happens to the threads already written
+
+They are in commit coordinates and cannot be translated reliably: 78% of added lines can be
+placed in the final diff, 45% of deleted ones, 56% of context.
+
+So they are not translated. They keep their own section, the way orphans do now, labelled
+as asked on the commits view. That keeps what people wrote without building a translation
+layer that is a heuristic in both directions.
+
+## Order of work
+
+1. Render removed lines deliberately, attributed by stage. Useful alone.
+2. Make a row on the files tab askable: the click handler, the composer, and `/ask` already
+   work from a row's dataset.
+3. Anchor in final-diff coordinates, and mark a thread outdated when the diff no longer
+   matches.
+4. Move the existing threads into their own section.
+
+Steps 1 and 2 are each worth having on their own, which is the order to build them in.
+
+## What this costs
+
+The anchor format changes, so this is a major version. `questions.jsonl` gains rows that
+mean something different from the ones already in it, and every reader of that file has to
+tell them apart.
+
+The risk is in `paintThreads`, which runs every four seconds and which two separate reviews
+have already found bugs in. It should get its own QA round.
