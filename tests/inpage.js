@@ -112,7 +112,10 @@ setTimeout(() => {
     const cls = String(n.className || "");
     if (inside && n.tagName === "TR") {
       const code = (n.children || []).find((c) => c.className === "code");
-      if (code) pane.push(`${cls.split(" ")[0] || "row"} ${code.textContent}`);
+      // The whole class list. Reporting only the first left "del own" and "del"
+      // indistinguishable, so whether a stage's own removal reads differently
+      // from one that merely fell inside the window could not be checked at all.
+      if (code) pane.push(`${cls || "row"} ${code.textContent}`);
     }
     (n.children || []).forEach((c) => walk(c, inside || cls.split(" ").includes("stagepane")));
   };

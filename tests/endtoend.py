@@ -987,7 +987,7 @@ def a_line_a_stage_removed_is_drawn_in_its_pane():
         )
         # The first stage is the one the page opens on, which is the removing one here.
         drew = in_page(paths.page(rng, repo), [])
-        eq("del line 6" in drew["pane"], True, f"the pane ({drew['pane']})")
+        eq("del own line 6" in drew["pane"], True, f"the pane ({drew['pane']})")
 
 
 @case
@@ -1025,6 +1025,84 @@ def a_big_deletion_is_not_drawn_line_by_line():
         )
         drew = in_page(paths.page(rng, repo), [])
         eq(len(drew["pane"]), 0, f"rows drawn for a 120 line deletion ({len(drew['pane'])})")
+
+
+@case
+def a_gutted_file_is_not_drawn_line_by_line():
+    """A file the branch strips down to nothing is a removal per line just as a deleted
+    one is, and seeding a window from each of them draws the whole of it back into the
+    page. The size is what decides that, not whether the file itself is gone."""
+    with sandbox() as (repo, run):
+        (repo / "big.py").write_text("".join(f"line {n}\n" for n in range(1, 211)))
+        run("add", "-A")
+        run("commit", "-qm", "base")
+        run("update-ref", "refs/remotes/origin/main", "HEAD")
+        (repo / "big.py").write_text("".join(f"line {n}\n" for n in range(1, 11)))
+        run("add", "-A")
+        run("commit", "-qm", "Strip it back")
+        (repo / "new.py").write_text("fresh\n")
+        run("add", "-A")
+        run("commit", "-qm", "The new path")
+        rng = paths.resolve_range("origin/main...HEAD", repo)
+        paths.narrative(rng, repo, create=True).write_text(
+            json.dumps(
+                {
+                    "stages": [
+                        {"where": "the old body", "what": "goes", "marks": ["1"]},
+                        {"where": "the new path", "what": "arrives", "marks": ["2"]},
+                    ]
+                }
+            )
+        )
+        subprocess.run(
+            [sys.executable, str(TOOL / "review.py"), "build", "origin/main...HEAD"],
+            cwd=str(repo),
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        drew = in_page(paths.page(rng, repo), [])
+        eq(len(drew["pane"]), 0, f"rows drawn for 200 removed lines ({len(drew['pane'])})")
+
+
+@case
+def a_run_of_removed_lines_is_drawn_whole():
+    """Removals are recorded as runs, and a window seeded from only the first line of a
+    run draws the start of a deletion and stops partway through it."""
+    with sandbox() as (repo, run):
+        (repo / "a.py").write_text("".join(f"line {n}\n" for n in range(1, 41)))
+        run("add", "-A")
+        run("commit", "-qm", "base")
+        run("update-ref", "refs/remotes/origin/main", "HEAD")
+        (repo / "a.py").write_text(
+            "".join(f"line {n}\n" for n in range(1, 41) if not 5 <= n <= 20)
+        )
+        run("add", "-A")
+        run("commit", "-qm", "Drop the middle")
+        (repo / "new.py").write_text("fresh\n")
+        run("add", "-A")
+        run("commit", "-qm", "The new path")
+        rng = paths.resolve_range("origin/main...HEAD", repo)
+        paths.narrative(rng, repo, create=True).write_text(
+            json.dumps(
+                {
+                    "stages": [
+                        {"where": "the middle", "what": "goes", "marks": ["1"]},
+                        {"where": "the new path", "what": "arrives", "marks": ["2"]},
+                    ]
+                }
+            )
+        )
+        subprocess.run(
+            [sys.executable, str(TOOL / "review.py"), "build", "origin/main...HEAD"],
+            cwd=str(repo),
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        drew = in_page(paths.page(rng, repo), [])
+        dels = [row for row in drew["pane"] if row.startswith("del")]
+        eq(len(dels), 16, f"every line of the run ({len(dels)}: {dels[:3]}…)")
 
 
 @case

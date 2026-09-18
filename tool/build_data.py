@@ -259,9 +259,18 @@ def next_commits(repo, base, tip):
     line out is the one after that, so the walk needs to be able to step forwards. The
     base is in here too, because a line the first commit removes was last seen in the
     commit the branch grew from.
+
+    Along the first parents, which is the only walk that is a chain. Where the range holds
+    a fork, the commits either side of it have no order between them, and pairing each
+    with the next one listed made a commit on one side the successor of a commit on the
+    other. A side branch's work belongs to the merge that brought it into this branch,
+    which is also where a reader of the branch meets it.
+
+    The base is resolved to a commit, because an annotated tag names a tag object and no
+    line of blame can ever report that.
     """
-    walk = git(repo, "rev-list", "--topo-order", "--reverse", f"{base}..{tip}").split()
-    seen = [git(repo, "rev-parse", base).strip()] + walk
+    walk = git(repo, "rev-list", "--first-parent", "--reverse", f"{base}..{tip}").split()
+    seen = [git(repo, "rev-parse", f"{base}^{{commit}}").strip()] + walk
     return {sha: seen[i + 1] for i, sha in enumerate(seen[:-1])}
 
 
@@ -276,9 +285,25 @@ def removed_lines(repo, base, tip, path, after):
     The path is the one at the base, because that is where the walk starts. Matching a
     removal by its text instead cannot tell two deletions of the same text apart, and a
     file the branch renames has no text in common to match on at all.
+
+    Along the first parents for the same reason `next_commits` is: without it blame
+    answers with the last commit anywhere in the range that held the line, which across a
+    fork is a commit on the other side that never touched it.
+
+    Without -M, unlike the forward blame. A line moved from one part of a file to another
+    is drawn by the final diff as a removal and an addition, and a reader looking at the
+    removal is owed an answer about it. Following the move tells blame the line survived,
+    which leaves that removal belonging to nobody and no window seeded from it.
     """
     out = git_maybe(
-        repo, "blame", "--reverse", "--line-porcelain", "-M", f"{base}..{tip}", "--", path
+        repo,
+        "blame",
+        "--reverse",
+        "--first-parent",
+        "--line-porcelain",
+        f"{base}..{tip}",
+        "--",
+        path,
     )
     if out is None:
         return {}
@@ -307,6 +332,27 @@ def surviving_lines(repo, tip, path):
         if found:
             lines.setdefault(found.group(1), []).append(int(found.group(2)))
     return lines
+
+
+def plain_removal(rows):
+    """Whether a diff takes lines out of some hunk without putting any back there.
+
+    A removal in a hunk the same commit wrote into is half of a replacement, and a later
+    commit taking the other half away leaves the removal looking like work that still
+    stands on its own. A removal nothing was written into is the commit's own, whatever
+    else it did elsewhere in the file.
+    """
+    dels = adds = 0
+    for row in [*rows, dict(t="hunk")]:
+        if row["t"] == "hunk":
+            if dels and not adds:
+                return True
+            dels = adds = 0
+        elif row["t"] == "del":
+            dels += 1
+        elif row["t"] == "add":
+            adds += 1
+    return False
 
 
 def to_runs(numbers):
@@ -443,7 +489,7 @@ def final_diff(repo, rng, commits, narrative):
     # Which stages reach a file, and which commit belongs to which stage. A mark is a rail
     # position, and a commit's followups are part of it, so a fixup belongs to its
     # target's stage.
-    order, touched, stage_of, wrote = [], {}, {}, {}
+    order, touched, stage_of, plain, opaque = [], {}, {}, {}, set()
     for stage in narrative.get("stages") or []:
         if is_placeholder(stage) or not stage.get("where"):
             continue
@@ -455,16 +501,21 @@ def final_diff(repo, rng, commits, narrative):
             commit = commits[index - 1]
             for source in [commit] + list(commit.get("followups") or []):
                 stage_of[source["hash"]] = stage["where"]
+                # git prints no patch for a merge, so there is nothing to read and
+                # nothing to rule out. What a merge brought in arrived with it, and
+                # which lines those are has already been settled per line.
+                if not source["files"]:
+                    opaque.add(stage["where"])
                 for entry in source["files"]:
                     touched.setdefault(entry["path"], [])
                     if stage["where"] not in touched[entry["path"]]:
                         touched[entry["path"]].append(stage["where"])
-                    # Whether the stage put lines into this file as well as taking them
-                    # out. A stage that replaced a line and was replaced in turn has
-                    # nothing of its own left; a stage that only took something away
-                    # still has the removal. The two look identical to blame.
-                    if any(row["t"] == "add" for row in entry["rows"]):
-                        wrote.setdefault(entry["path"], set()).add(stage["where"])
+                    # Whether the stage took anything out of this file on its own
+                    # account, as opposed to as half of a replacement. Blame cannot tell
+                    # the two apart, and only the first is work that still stands if a
+                    # later stage writes over what this one put in.
+                    if plain_removal(entry["rows"]):
+                        plain.setdefault(entry["path"], set()).add(stage["where"])
 
     # Blame is already being run over every file below. Totalling it per commit as well
     # costs nothing and answers the question the rail cannot: how much of what a commit
@@ -535,6 +586,10 @@ def final_diff(repo, rng, commits, narrative):
                 if where:
                     weight[where] = weight.get(where, 0) + len(numbers)
                     by_stage.setdefault(where, []).extend(numbers)
+        # The stages that took something out of this file on their own account. Named by
+        # the path on both sides, because a commit's own diff calls a renamed file what it
+        # was, and the final diff calls it what it is.
+        alone = plain.get(entry["path"], set()) | plain.get(entry["was"], set()) | opaque
         if weight:
             # The stages blame found lines for, and only those. A stage is a step in a
             # journey through the branch as it stands, so it lists a file when it accounts
@@ -554,19 +609,17 @@ def final_diff(repo, rng, commits, narrative):
             #
             # When none of them removed anything, which is a binary file, whose diff has
             # no rows to read, the stages that reached it keep it.
-            takers = [w for w in reaching if w in took]
+            takers = [w for w in reaching if w in took and w in alone]
             ranked = sorted(takers or reaching, key=order.index)
         # A stage whose contribution here was to take something away. Blame cannot see a
         # removal, so reading membership off it alone dropped such a stage from the file
         # and from the rail while its removal sat in the diff belonging to nobody.
         #
-        # Only where the stage wrote nothing here itself: one that replaced a line and was
-        # replaced in turn has nothing left to show, and its removal reads as part of the
-        # edit that overtook it. Named by the path on both sides, because a commit's own
-        # diff calls a renamed file what it was.
-        penned = wrote.get(entry["path"], set()) | wrote.get(entry["was"], set())
+        # Only a removal the stage made on its own account: one that replaced a line and
+        # was replaced in turn has nothing left to show, and its removal reads as part of
+        # the edit that overtook it.
         ranked = ranked + sorted(
-            (w for w in took if w not in ranked and w not in penned), key=order.index
+            (w for w in took if w not in ranked and w in alone), key=order.index
         )
         entry["stages"] = ranked
         # Attribution is not membership: a stage the file does not list cannot draw its

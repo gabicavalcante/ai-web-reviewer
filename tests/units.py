@@ -822,6 +822,172 @@ def a_removal_survives_a_rename():
 
 
 @case
+def a_removal_on_a_branch_that_forks_keeps_its_own_commit():
+    """Reverse blame names the last commit anywhere in the range that still had a line.
+    Where the range holds a fork, that is a commit on the other side of it, which never
+    touched the line: the removal was credited to a stage that had nothing to do with it
+    and the stage that made it fell off the rail. The branch is read along its first
+    parents, so a side branch's work belongs to the merge that brought it in."""
+    with sandbox() as (repo, run):
+        (repo / "f.txt").write_text("".join(f"line {n}\n" for n in range(1, 11)))
+        run("add", "-A")
+        run("commit", "-qm", "base")
+        run("update-ref", "refs/remotes/origin/main", "HEAD")
+        base = run("rev-parse", "HEAD").stdout.strip()
+        (repo / "f.txt").write_text("".join(f"line {n}\n" for n in range(1, 11) if n != 2))
+        run("commit", "-qam", "L removes line 2")
+        run("checkout", "-q", "-b", "side", base)
+        (repo / "f.txt").write_text("".join(f"line {n}\n" for n in range(1, 11) if n != 9))
+        run("commit", "-qam", "R removes line 9")
+        run("checkout", "-q", "main")
+        run("merge", "-q", "--no-edit", "side")
+        # Which rail position each commit lands on depends on commit dates, so the marks
+        # are read back rather than assumed.
+        stages = [f"s{n}" for n in range(1, 4)]
+        _, data = staged(repo, run, stages, [[str(n)] for n in range(1, 4)])
+        of = {c["subject"].split()[0]: f"s{i + 1}" for i, c in enumerate(data["commits"])}
+        entry = next(f for f in data["final"]["files"] if f["path"] == "f.txt")
+        gone = entry.get("gone") or {}
+        eq(gone.get(of["L"]), [[2, 2]], f"what L removed ({gone}, marks {of})")
+        eq(gone.get(of["Merge"]), [[9, 9]], f"what came in at the merge ({gone}, {of})")
+
+
+@case
+def a_standing_removal_outlives_an_addition_that_did_not():
+    """A stage earns a file through a removal only where it wrote nothing there itself,
+    or a stage that replaced a line and was replaced in turn would come back. Read over
+    the whole file that also caught a stage whose removal and whose addition were separate
+    edits: the addition was rewritten, the removal still stands, and the stage lost both.
+    So it is read per hunk, and a removal nothing was written into is the stage's own."""
+    with sandbox() as (repo, run):
+        (repo / "a.py").write_text("".join(f"line {n}\n" for n in range(1, 31)))
+        run("add", "-A")
+        run("commit", "-qm", "base")
+        run("update-ref", "refs/remotes/origin/main", "HEAD")
+        rows = [f"line {n}\n" for n in range(1, 31) if n != 3]
+        rows.insert(22, "A ADDED\n")
+        (repo / "a.py").write_text("".join(rows))
+        run("commit", "-qam", "A drops one and writes another")
+        (repo / "a.py").write_text("".join(rows).replace("A ADDED\n", "B WROTE\n"))
+        run("commit", "-qam", "B rewrites what A wrote")
+        _, data = staged(repo, run, ["A", "B"], [["1"], ["2"]])
+        entry = next(f for f in data["final"]["files"] if f["path"] == "a.py")
+        eq(entry.get("gone"), {"A": [[3, 3]]}, f"A keeps its removal ({entry.get('gone')})")
+        eq("A" in (entry.get("stages") or []), True, f"A lists it ({entry.get('stages')})")
+
+
+@case
+def a_stage_the_file_does_not_list_carries_no_removals():
+    """A stage that replaced a line and was replaced in turn is not on the file, so the
+    page has nowhere to draw its removal. Recording one anyway is a claim the page cannot
+    honour, which is the shape the first attempt at this shipped in."""
+    with sandbox() as (repo, run):
+        (repo / "a.py").write_text("one\ntwo\n")
+        run("add", "-A")
+        run("commit", "-qm", "base")
+        run("update-ref", "refs/remotes/origin/main", "HEAD")
+        (repo / "a.py").write_text("one\nfirst pass\n")
+        run("add", "-A")
+        run("commit", "-qm", "First pass")
+        (repo / "a.py").write_text("one\nsecond pass\n")
+        run("add", "-A")
+        run("commit", "-qm", "Second pass")
+        _, data = staged(repo, run, ["first", "second"], [["1"], ["2"]])
+        entry = next(f for f in data["final"]["files"] if f["path"] == "a.py")
+        eq(entry.get("stages"), ["second"], f"who lists it ({entry.get('stages')})")
+        eq(entry.get("gone"), {}, f"and no removal recorded ({entry.get('gone')})")
+
+
+@case
+def a_range_that_starts_at_an_annotated_tag_keeps_its_removals():
+    """An annotated tag names a tag object, and no line of blame ever reports one. The
+    base is resolved to the commit it points at, or the first step of the branch loses
+    every removal it made and says nothing about it."""
+    with sandbox() as (repo, run):
+        (repo / "a.py").write_text("keep\nDROP ME\ntail\n")
+        run("add", "-A")
+        run("commit", "-qm", "base")
+        run("update-ref", "refs/remotes/origin/main", "HEAD")
+        run("tag", "-a", "v1", "-m", "release one")
+        (repo / "a.py").write_text("keep\ntail\n")
+        run("add", "-A")
+        run("commit", "-qm", "A drops it")
+        (repo / "b.py").write_text("new\n")
+        run("add", "-A")
+        run("commit", "-qm", "B adds a file")
+        narrative = repo / "n.json"
+        narrative.write_text(
+            json.dumps(
+                {
+                    "stages": [
+                        {"where": "A", "what": "drops", "marks": ["1"]},
+                        {"where": "B", "what": "adds", "marks": ["2"]},
+                    ]
+                }
+            )
+        )
+        data = build(repo, "v1..", narrative=narrative)
+        entry = next(f for f in data["final"]["files"] if f["path"] == "a.py")
+        eq(entry.get("gone"), {"A": [[2, 2]]}, f"the removal ({entry.get('gone')})")
+
+
+@case
+def a_removal_made_after_a_rename_is_still_the_stages_own():
+    """A commit's diff names a file as it was at that commit, so a removal made after the
+    rename is recorded under the name the file has now, and one made before it under the
+    name it had. Both have to be looked for."""
+    with sandbox() as (repo, run):
+        (repo / "old.py").write_text("".join(f"line {n}\n" for n in range(1, 21)))
+        run("add", "-A")
+        run("commit", "-qm", "base")
+        run("update-ref", "refs/remotes/origin/main", "HEAD")
+        run("mv", "old.py", "new.py")
+        (repo / "new.py").write_text(
+            "".join(f"line {n}\n" for n in range(1, 21)) + "added by A\n"
+        )
+        run("add", "-A")
+        run("commit", "-qm", "A renames it and writes a line")
+        (repo / "new.py").write_text(
+            "".join(f"line {n}\n" for n in range(1, 21) if n != 10) + "added by A\n"
+        )
+        run("add", "-A")
+        run("commit", "-qm", "B drops the tenth")
+        _, data = staged(repo, run, ["A", "B"], [["1"], ["2"]])
+        entry = next(f for f in data["final"]["files"] if f["path"] == "new.py")
+        eq(entry.get("gone"), {"B": [[10, 10]]}, f"the removal ({entry.get('gone')})")
+        eq("B" in (entry.get("stages") or []), True, f"B lists it ({entry.get('stages')})")
+
+
+@case
+def a_line_moved_within_a_file_is_still_a_removal():
+    """A move is drawn by the final diff as a removal and an addition, and a reader looking
+    at the removal is owed an answer about it. Telling blame to follow the move answers
+    that the line survived, which leaves that removal belonging to nobody."""
+    with sandbox() as (repo, run):
+        rows = [f"line {n}\n" for n in range(1, 41)]
+        rows[4] = "DISTINCTIVE MARKER LINE\n"
+        (repo / "a.py").write_text("".join(rows))
+        run("add", "-A")
+        run("commit", "-qm", "base")
+        run("update-ref", "refs/remotes/origin/main", "HEAD")
+        moved = [r for r in rows if "MARKER" not in r]
+        moved.insert(30, "DISTINCTIVE MARKER LINE\n")
+        (repo / "a.py").write_text("".join(moved))
+        run("add", "-A")
+        run("commit", "-qm", "A moves the marker down")
+        (repo / "b.py").write_text("new\n")
+        run("add", "-A")
+        run("commit", "-qm", "B adds a file")
+        _, data = staged(repo, run, ["A", "B"], [["1"], ["2"]])
+        entry = next(f for f in data["final"]["files"] if f["path"] == "a.py")
+        eq(
+            [5, 5] in (entry.get("gone") or {}).get("A", []),
+            True,
+            f"where the marker was ({entry.get('gone')})",
+        )
+
+
+@case
 def a_file_with_nothing_removed_has_no_gone_lines():
     with sandbox() as (repo, run):
         (repo / "a.py").write_text("one\n")

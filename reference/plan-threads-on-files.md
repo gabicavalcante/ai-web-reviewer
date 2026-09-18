@@ -82,18 +82,34 @@ ten percent of deleted lines on this repo's own history share text with another 
 line in the same file; a braces-and-blank-lines codebase would be far higher.
 
 Reverse blame has neither problem: it is per line, not per text, and blame crosses a
-rename. It costs one `git blame` per file with deletions, the same order as the forward
-blame already being run.
+rename. It costs one `git blame` per file with deletions, roughly 7 to 45 ms per changed
+file, the same order as the forward blame already being run.
+
+Both the blame and the walk go along first parents. Without that, blame answers with the
+last commit *anywhere in the range* that held the line, which across a fork is a commit on
+the other side that never touched it; and pairing each commit with the next one `rev-list`
+prints made a commit on one side the successor of a commit on the other. Measured on a
+branch with two parallel removals merged together, the removals were credited to the wrong
+side and to the merge, and the stage that made one of them fell off the rail. Along first
+parents a side branch's work belongs to the merge that brought it in, which is also where
+a reader of the branch meets it.
 
 Membership follows from it. A stage listed on a file only when blame found surviving lines
 for it is a stage that can never be listed for a removal, because a removed line is not
-there to blame. So a stage earns a file through a removal too — but only where it wrote
-nothing there itself. A stage that replaced a line and was replaced in turn has nothing of
+there to blame. So a stage earns a file through a removal too — but only a removal it made
+on its own account. A stage that replaced a line and was replaced in turn has nothing of
 its own left, and its removal reads as part of the edit that overtook it.
 
-One exception: a file the branch deletes outright is a removal per line, so seeding a
-window from each of them draws the whole file back into the page. Past
-`COLLAPSE_DELETIONS_OVER` the pane says what the stage did instead.
+That is read per hunk, not per file. Over the whole file it also caught a stage whose
+removal and whose addition were separate edits: the addition was rewritten by a later
+stage, the removal still stood, and the stage lost both. A hunk the stage took lines out
+of without putting any back is the stage's own work, whatever else it did elsewhere in
+the same file.
+
+One ceiling: a file emptied out is a removal per line, whether or not the file itself is
+gone, so seeding a window from each of them draws the whole of it back into the page. Past
+`MAX_GONE_ROWS` the pane says what the stage did instead. Gating that on the file being
+deleted missed a file the branch guts but keeps, which is at least as common.
 
 This is worth doing on its own, before any of the thread work. A view of the branch as it
 stands should show what the branch removed.

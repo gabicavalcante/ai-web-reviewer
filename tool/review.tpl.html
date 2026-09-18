@@ -1166,6 +1166,12 @@
 
   const CONTEXT_ROWS = 3;
 
+  /* Past this many, a stage's removals are what the file was rather than a change
+
+     worth reading line by line, and the pane says what the stage did instead. */
+
+  const MAX_GONE_ROWS = 40;
+
   /* One file, showing only what a stage wrote in it, with a few rows either side. A stage
      can be three lines in a file another stage owns, and those three lines are the whole
      of what it did: showing the file entire would bury them, and showing them alone would
@@ -1178,11 +1184,13 @@
        it happens to sit beside something that did. "Why did you drop this" then has
        nothing to click, and a removal standing on its own is not drawn at all.
 
-       Not for a file the branch deletes outright, once it is past the size a deletion is
-       collapsed at: every line of such a file is a removal, and seeding a window from
-       each of them draws the whole of it back into the page. */
+       Not past MAX_GONE_ROWS. A file the branch empties out is a removal per line,
+       whether or not the file itself is gone, and seeding a window from each of them
+       draws the whole of it back into the page. What decides that is how much was taken
+       out, so it is counted here rather than read off the file's status. */
     const removed = new Set();
-    if (!f.collapsed) {
+    const goneRows = (gone || []).reduce((n, [from, to]) => n + (to - from + 1), 0);
+    if (goneRows <= MAX_GONE_ROWS) {
       (gone || []).forEach(([from, to]) => { for (let n = from; n <= to; n++) removed.add(n); });
     }
 
