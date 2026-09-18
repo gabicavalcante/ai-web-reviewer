@@ -412,10 +412,16 @@ def final_diff(repo, rng, commits, narrative):
                         touched[entry["path"]].append(stage["where"])
                     # Which stages took something out of it. Blame only sees what is
                     # still there, so this is the one contribution it cannot weigh.
-                    if entry["status"] == "deleted" or any(
-                        row["t"] == "del" for row in entry["rows"]
-                    ):
-                        removed.setdefault(entry["path"], set()).add(stage["where"])
+                    # By text, because blame reads the file as it stands and a removed
+                    # line is not in it. A commit's own diff is the only record of what it
+                    # took out, and the text is what matches it to the final diff: the
+                    # line numbers are relative to different files.
+                    gone = removed.setdefault(entry["path"], {})
+                    if entry["status"] == "deleted":
+                        gone.setdefault(None, set()).add(stage["where"])
+                    for row in entry["rows"]:
+                        if row["t"] == "del":
+                            gone.setdefault(row["text"], set()).add(stage["where"])
 
     # Blame is already being run over every file below. Totalling it per commit as well
     # costs nothing and answers the question the rail cannot: how much of what a commit
@@ -490,7 +496,8 @@ def final_diff(repo, rng, commits, narrative):
             #
             # When none of them removed anything, which is a binary file, whose diff has
             # no rows to read, the stages that reached it keep it.
-            takers = [w for w in reaching if w in removed.get(entry["path"], ())]
+            took_out = set().union(*removed.get(entry["path"], {}).values() or [set()])
+            takers = [w for w in reaching if w in took_out]
             ranked = sorted(takers or reaching, key=order.index)
         entry["stages"] = ranked
         entry["lines"] = {where: weight.get(where, 0) for where in ranked}
@@ -498,6 +505,17 @@ def final_diff(repo, rng, commits, narrative):
         # inside a file another stage owns. Runs rather than line numbers, because that is
         # what a reader is shown and it keeps the page small.
         entry["runs"] = {where: to_runs(numbers) for where, numbers in by_stage.items()}
+        # The old-side line numbers each stage took out, so a pane can draw a removal
+        # rather than only showing one that happens to sit beside something that survived.
+        # A line two stages removed belongs to both: the text is all there is to go on.
+        by_text = removed.get(entry["path"], {})
+        gone = {}
+        for row in entry["rows"]:
+            if row["t"] != "del":
+                continue
+            for where in by_text.get(row["text"], ()):
+                gone.setdefault(where, []).append(row["o"])
+        entry["gone"] = {where: sorted(lines) for where, lines in gone.items()}
 
     # One place to start per stage, or the mark stops meaning anything. Checked here
     # rather than with the rest, because only now is it known which stage a file is under.

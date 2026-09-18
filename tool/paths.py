@@ -110,9 +110,14 @@ def commit_range(rng, repo=None):
     normalising there would rename every folder on disk and orphan the threads inside.
     This is only for asking git which commits a range holds.
     """
-    if "..." not in rng:
+    # Both forms, because both mislead, in opposite directions. `git log a...b` is the
+    # symmetric difference where `git diff a...b` is one side; `git log a..b` is one side
+    # where `git diff a..b` is the difference between the two tips, so everything a gained
+    # since b left is drawn as a removal from b. The merge base is what both want.
+    sep = "..." if "..." in rng else ".." if ".." in rng else None
+    if sep is None:
         return rng
-    left, _, right = rng.partition("...")
+    left, _, right = rng.partition(sep)
     left, right = left.strip() or "origin/main", right.strip()
     found = subprocess.run(
         ["git", "-C", str(repo or repo_root()), "merge-base", left, right],

@@ -950,6 +950,47 @@ def the_rail_says_what_a_deleting_stage_did():
 
 
 @case
+def a_line_a_stage_removed_is_drawn_in_its_pane():
+    """A pane seeded only from what survived cannot show a removal, because a removed line
+    has no number in the file as it stands for blame to find. A deletion standing on its
+    own was then drawn nowhere, and "why did you drop this" had nothing to point at."""
+    with sandbox() as (repo, run):
+        (repo / "legacy.py").write_text("".join(f"line {n}\n" for n in range(1, 13)))
+        run("add", "-A")
+        run("commit", "-qm", "base")
+        run("update-ref", "refs/remotes/origin/main", "HEAD")
+        # Removed on its own, with nothing added anywhere near it, so the only thing that
+        # can put it on screen is the removal itself.
+        (repo / "legacy.py").write_text("".join(f"line {n}\n" for n in range(1, 13) if n != 6))
+        run("add", "-A")
+        run("commit", "-qm", "Drop the sixth check")
+        (repo / "new.py").write_text("fresh\n")
+        run("add", "-A")
+        run("commit", "-qm", "The new path")
+        rng = paths.resolve_range("origin/main...HEAD", repo)
+        paths.narrative(rng, repo, create=True).write_text(
+            json.dumps(
+                {
+                    "stages": [
+                        {"where": "the dropped check", "what": "goes", "marks": ["1"]},
+                        {"where": "the new path", "what": "arrives", "marks": ["2"]},
+                    ]
+                }
+            )
+        )
+        subprocess.run(
+            [sys.executable, str(TOOL / "review.py"), "build", "origin/main...HEAD"],
+            cwd=str(repo),
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        # The first stage is the one the page opens on, which is the removing one here.
+        drew = in_page(paths.page(rng, repo), [])
+        eq("del line 6" in drew["pane"], True, f"the pane ({drew['pane']})")
+
+
+@case
 def a_sibling_review_with_a_narrative_is_named_too():
     """The guard exists so a review that comes up empty does not leave the reviewer
     wondering where the work went. It counted threads only, and a narrative is the other

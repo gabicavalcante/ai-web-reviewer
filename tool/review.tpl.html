@@ -1170,13 +1170,18 @@
      can be three lines in a file another stage owns, and those three lines are the whole
      of what it did: showing the file entire would bury them, and showing them alone would
      strip the code that gives them meaning. */
-  function renderFileLines(f, runs) {
+  function renderFileLines(f, runs, gone) {
     const own = new Set();
     runs.forEach(([from, to]) => { for (let n = from; n <= to; n++) own.add(n); });
+    /* What this stage took out. A removed line has no number in the file as it stands, so
+       blame cannot find it and a window seeded only from what survived shows it just when
+       it happens to sit beside something that did. "Why did you drop this" then has
+       nothing to click, and a removal standing on its own is not drawn at all. */
+    const removed = new Set(gone || []);
 
     const keep = new Set();
     f.rows.forEach((r, i) => {
-      if (r.t !== "hunk" && r.n && own.has(r.n)) {
+      if (r.t === "del" ? removed.has(r.o) : r.t !== "hunk" && r.n && own.has(r.n)) {
         for (let j = Math.max(0, i - CONTEXT_ROWS); j <= Math.min(f.rows.length - 1, i + CONTEXT_ROWS); j++) {
           keep.add(j);
         }
@@ -1282,8 +1287,9 @@
     const silent = [];
     const here = startFirst(final.files.filter(f => (f.stages || []).includes(where)));
     here.forEach(f => {
-      const runs = (f.runs || {})[where];
-      const box = runs && runs.length ? renderFileLines(f, runs) : null;
+      const runs = (f.runs || {})[where] || [];
+      const gone = (f.gone || {})[where] || [];
+      const box = runs.length || gone.length ? renderFileLines(f, runs, gone) : null;
       if (box) { pane.appendChild(box); drawn += 1; } else { silent.push(f); }
     });
 

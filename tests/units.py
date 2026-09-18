@@ -722,3 +722,97 @@ def the_page_carries_the_range_it_was_asked_for():
         run("commit", "-qm", "The work")
         data = build(repo, "origin/main...feature")
         eq(data["range"], "origin/main...feature", "the range the page carries")
+
+
+# --------------------------------------------------------- what the branch took out
+#
+# A stage pane draws windows around the lines a stage wrote, found by blame. A removed line
+# has no line number in the file as it stands, so blame cannot find it and the pane can
+# only show it when it happens to sit near something that survived. "Why did you drop this"
+# then has nothing to click.
+
+
+@case
+def a_removed_line_is_attributed_to_the_stage_that_removed_it():
+    """Blame cannot say who deleted a line, because it reads the file as it stands. The
+    commits' own diffs can: the stage whose commit took out a line with that text."""
+    with sandbox() as (repo, run):
+        (repo / "a.py").write_text("keep one\nDROP ME\nkeep two\n")
+        run("add", "-A")
+        run("commit", "-qm", "base")
+        run("update-ref", "refs/remotes/origin/main", "HEAD")
+        (repo / "a.py").write_text("keep one\nDROP ME\nkeep two\nadded by A\n")
+        run("add", "-A")
+        run("commit", "-qm", "A adds")
+        (repo / "a.py").write_text("keep one\nkeep two\nadded by A\n")
+        run("add", "-A")
+        run("commit", "-qm", "B drops it")
+        _, data = staged(repo, run, ["A", "B"], [["1"], ["2"]])
+        entry = next(f for f in data["final"]["files"] if f["path"] == "a.py")
+        eq(entry.get("gone"), {"B": [2]}, f"who removed which line ({entry.get('gone')})")
+
+
+@case
+def a_line_two_stages_removed_is_shown_under_both():
+    """Text is how a removal is attributed, so the same text taken out by two stages
+    belongs to both rather than to whichever is checked first."""
+    with sandbox() as (repo, run):
+        (repo / "a.py").write_text("gone\nkeep\ngone\n")
+        run("add", "-A")
+        run("commit", "-qm", "base")
+        run("update-ref", "refs/remotes/origin/main", "HEAD")
+        (repo / "a.py").write_text("keep\ngone\nadded by A\n")
+        run("add", "-A")
+        run("commit", "-qm", "A drops the first")
+        (repo / "a.py").write_text("keep\nadded by A\n")
+        run("add", "-A")
+        run("commit", "-qm", "B drops the second")
+        _, data = staged(repo, run, ["A", "B"], [["1"], ["2"]])
+        entry = next(f for f in data["final"]["files"] if f["path"] == "a.py")
+        gone = entry.get("gone") or {}
+        eq(sorted(gone), ["A", "B"], f"both stages named ({gone})")
+
+
+@case
+def a_file_with_nothing_removed_has_no_gone_lines():
+    with sandbox() as (repo, run):
+        (repo / "a.py").write_text("one\n")
+        run("add", "-A")
+        run("commit", "-qm", "base")
+        run("update-ref", "refs/remotes/origin/main", "HEAD")
+        (repo / "a.py").write_text("one\ntwo\n")
+        run("add", "-A")
+        run("commit", "-qm", "A adds")
+        _, data = staged(repo, run, ["A"], [["1"]])
+        entry = next(f for f in data["final"]["files"] if f["path"] == "a.py")
+        eq(entry.get("gone"), {}, f"nothing was removed ({entry.get('gone')})")
+
+
+@case
+def a_two_dot_range_diffs_from_where_the_branch_left():
+    """`git log a..b` is the commits b has and a does not. `git diff a..b` is the
+    difference between the two tips, so everything a gained since b left shows up as a
+    removal from b. The rail and the diff then answer different questions again, and this
+    time the diff is the one that is wrong."""
+    with sandbox() as (repo, run):
+        (repo / "mine.txt").write_text("mine\n")
+        run("add", "-A")
+        run("commit", "-qm", "Mine")
+        run("checkout", "-q", "-b", "feature")
+        (repo / "mine.txt").write_text("mine\nand more\n")
+        run("add", "-A")
+        run("commit", "-qm", "My work")
+        run("checkout", "-q", "main")
+        for n in (1, 2):
+            (repo / f"theirs{n}.txt").write_text(f"theirs {n}\n")
+            run("add", "-A")
+            run("commit", "-qm", f"Theirs {n}")
+        run("update-ref", "refs/remotes/origin/main", "HEAD")
+        run("checkout", "-q", "feature")
+        data = build(repo, "origin/main..feature")
+        eq([c["subject"] for c in data["commits"]], ["My work"], "the rail")
+        eq(
+            sorted(f["path"] for f in data["final"]["files"]),
+            ["mine.txt"],
+            "the files the diff shows",
+        )

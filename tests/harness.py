@@ -271,6 +271,7 @@ def in_page(page, threads, reviewed=None):
         raise Failed(f"the page never painted: {drew['status']!r}")
     drew["reviewed"] = int(drew.get("reviewed") or 0)
     drew.setdefault("rail", [])
+    drew.setdefault("pane", [])
     return drew
 
 
