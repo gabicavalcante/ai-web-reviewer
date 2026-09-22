@@ -1720,6 +1720,41 @@ def a_composer_left_in_a_stage_pane_does_not_outlive_the_listing():
 
 
 @case
+def a_files_question_recorded_without_a_view_is_read_as_one():
+    """A server already running when the files tab learned to record which diff a question
+    was asked on writes the new shape without the new field: no commit, because the row
+    was asked on the branch's own diff, and no view, because it does not know about them.
+
+    A question asked on the commits tab always carries the commit that anchors it, so a
+    row with neither can only have come from the files tab. Read as a commit anchor it
+    matches nothing and is filed as asked on code that is no longer here, which is the
+    one thing it is not."""
+    with sandbox() as (repo, run):
+        make_fixup(repo, run)
+        rng = paths.resolve_range("origin/main...HEAD", repo)
+        paths.logs(rng, repo, create=True)["questions"].write_text(
+            json.dumps(
+                {
+                    "id": "mid1",
+                    "asked_at": "2026-09-22 18:13:23",
+                    "branch": "main",
+                    "question": "why have you done that?",
+                    "commit": "",
+                    "file": "a.txt",
+                    "side": "add",
+                    "line": "2",
+                    "code": "v2",
+                }
+            )
+            + "\n"
+        )
+        with serving(repo, "origin/main...HEAD") as base:
+            threads = get(base, "/thread")["threads"]
+            eq(len(threads), 1, f"the row is served ({threads})")
+            eq(threads[0].get("view"), "files", f"read as a files anchor ({threads[0]})")
+
+
+@case
 def the_server_does_not_take_the_view_on_trust():
     """The view decides how every reader of questions.jsonl reads the anchor, so it is one
     of two known values rather than whatever was posted."""

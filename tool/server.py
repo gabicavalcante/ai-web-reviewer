@@ -232,7 +232,12 @@ class Handler(http.server.BaseHTTPRequestHandler):
             threads = [
                 {
                     **question,
-                    "view": question.get("view") or "commits",
+                    # Which diff the anchor is in, for a row written before that was
+                    # recorded. A question asked on the commits tab always carries the
+                    # commit that anchors it, so a row with neither was asked on the
+                    # branch's own diff by a server that had not learned the field yet.
+                    "view": question.get("view")
+                    or ("commits" if question.get("commit") else "files"),
                     "turns": turns.get(question.get("id"), []),
                     "resolved": resolved.get(question.get("id"), False),
                 }
