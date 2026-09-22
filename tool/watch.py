@@ -8,7 +8,9 @@ session was attached reaches the next one. Keeps a heartbeat the page reads to t
 
 import json
 import pathlib
+import re
 import signal
+import subprocess
 import sys
 import time
 
@@ -65,6 +67,9 @@ def review_of(rng):
 
 
 _arg = review_range(sys.argv[1:])
+# The range, when the watcher was told one. Without it there is a folder and no way back
+# to the commits it holds, which is the one thing the fixup target needs.
+RANGE = _arg if isinstance(_arg, str) else None
 WHERE = _arg[1] if isinstance(_arg, tuple) else review_of(_arg)
 QUESTIONS = WHERE / "questions.jsonl"
 MESSAGES = WHERE / "messages.jsonl"
@@ -180,6 +185,64 @@ def backlog():
     return waiting
 
 
+BLAME_SHA = re.compile(r"^([0-9a-f]{40}) ")
+
+
+def git(*args):
+    """git in the reviewed repo, or None when it fails.
+
+    Blame fails for ordinary reasons here: a path the range does not hold, a line past
+    the end of the file. None of them is worth stopping the watcher for.
+    """
+    done = subprocess.run(
+        ["git", "-C", str(paths.repo_root()), *args],
+        capture_output=True,
+        text=True,
+        errors="replace",
+    )
+    return done.stdout if done.returncode == 0 else None
+
+
+def fixup_target(row, rng=None):
+    """The commit a change answering this question should be a fixup of, or None.
+
+    A question asked on the files tab records no commit: a sha noted when the question
+    was asked is stale as soon as a fixup rewrites it, and that is exactly when it has to
+    be right. Blame on the tip of the range knows who last wrote a line that is still
+    there, and reading the question is when that answer is wanted.
+
+    None for a removed line, which is not in the file to blame, and whose question is
+    answered by putting something back rather than by correcting whoever took it out.
+    None for a line older than the branch: it belongs to a commit outside the review, and
+    fixing that up rewrites history nobody asked about.
+    """
+    rng = rng or RANGE
+    if not rng or row.get("view") != "files" or row.get("side") == "del":
+        return None
+    line, path = str(row.get("line") or ""), row.get("file")
+    if not line.isdigit() or not path:
+        return None
+    span = paths.commit_range(rng)
+    blamed = git(
+        "blame",
+        "--line-porcelain",
+        "-L",
+        f"{line},{line}",
+        paths.range_tip(span),
+        "--",
+        path,
+    )
+    found = BLAME_SHA.match(blamed or "")
+    if not found:
+        return None
+    sha = found.group(1)
+    # Only a commit the review holds. Blame answers for the whole history, and most lines
+    # of most files were written long before the branch started.
+    if sha not in (git("rev-list", span) or "").split():
+        return None
+    return (git("rev-parse", "--short", sha) or sha).strip()
+
+
 def describe_question(row):
     # Where to look, in the terms of the diff it was asked on. A line number means one
     # place in a commit's diff and another in the final diff, so saying which is the
@@ -194,11 +257,13 @@ def describe_question(row):
             "as the file was before this branch" if removed else "in the branch as it stands"
         )
         code = (row.get("code") or "").strip()
-        return "QUESTION {id} · {file}:{line} {where}{code} · {question}".format(
+        target = fixup_target(row)
+        return "QUESTION {id} · {file}:{line} {where}{target}{code} · {question}".format(
             id=row.get("id", "?"),
             file=row.get("file", "?"),
             line=row.get("line", "?"),
             where=where,
+            target=f" · fix up {target}" if target else "",
             code=f" · {code}" if code else "",
             question=row.get("question", "").strip(),
         )

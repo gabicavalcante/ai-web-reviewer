@@ -1782,6 +1782,133 @@ def the_server_does_not_take_the_view_on_trust():
             )
 
 
+def ask_and_hear(repo, payload, rng="origin/main...HEAD"):
+    """Ask a question through the server and return what the watcher said about it."""
+    with watching(repo, rng) as lines:
+        with serving(repo, rng) as base:
+            status, body = post(base, "/ask", payload)
+            eq(status, 200, f"asking ({body})")
+            said = until(lambda: [x for x in lines() if payload["question"] in x])
+        eq(bool(said), True, f"the watcher said something ({lines()})")
+        return said[0]
+
+
+@case
+def a_question_on_a_surviving_line_names_the_commit_to_fix_up():
+    """A question on the files tab records no commit, because a sha noted when the
+    question was asked is stale the moment a fixup rewrites it, which is the moment it
+    has to be right. Blame on the tip knows who last wrote a line that is still there,
+    and answering is when that has to be resolved. Without it the session is told to run
+    `git commit --fixup` with nothing to pass it."""
+    with sandbox() as (repo, run):
+        (repo / "a.txt").write_text("base\nwritten by the branch\n")
+        run("add", "-A")
+        run("commit", "-qm", "The branch writes a line")
+        wrote = run("log", "--format=%h", "-1", "HEAD").stdout.strip()
+        paths.logs(paths.resolve_range("origin/main...HEAD", repo), repo, create=True)
+        said = ask_and_hear(
+            repo,
+            {
+                "question": "why this line?",
+                "view": "files",
+                "file": "a.txt",
+                "side": "add",
+                "line": "2",
+                "code": "written by the branch",
+            },
+        )
+        eq(f"fix up {wrote}" in said, True, f"the commit to fix up ({said!r}, want {wrote})")
+
+
+@case
+def a_question_on_a_removed_line_names_no_commit_to_fix_up():
+    """A removed line is not in the file for blame to read, and "why did you drop this"
+    is answered by putting something back rather than by correcting the commit that took
+    it out. Naming one would send the session to amend the wrong thing."""
+    with sandbox() as (repo, run):
+        # The removed line's number still names a line at the tip, and a later commit of
+        # this branch owns it. Blame answers about that line, which is a different line
+        # written for a different reason by a commit that removed nothing.
+        (repo / "b.txt").write_text("".join(f"line {n}\n" for n in range(1, 11)))
+        run("add", "-A")
+        run("commit", "-qm", "more base")
+        run("update-ref", "refs/remotes/origin/main", "HEAD")
+        kept = [f"line {n}\n" for n in range(1, 11) if n != 3]
+        (repo / "b.txt").write_text("".join(kept))
+        run("add", "-A")
+        run("commit", "-qm", "The branch drops the third")
+        kept[2] = "rewritten by a later commit\n"
+        (repo / "b.txt").write_text("".join(kept))
+        run("add", "-A")
+        run("commit", "-qm", "And rewrites what moved up into its place")
+        paths.logs(paths.resolve_range("origin/main...HEAD", repo), repo, create=True)
+        said = ask_and_hear(
+            repo,
+            {
+                "question": "why drop it?",
+                "view": "files",
+                "file": "b.txt",
+                "side": "del",
+                "line": "3",
+                "code": "line 3",
+            },
+        )
+        eq("fix up" in said, False, f"no commit to correct ({said!r})")
+
+
+@case
+def a_question_on_a_line_older_than_the_branch_names_no_commit():
+    """A context line the branch never touched belongs to a commit outside the review.
+    Fixing that up rewrites history the reviewer did not ask about."""
+    with sandbox() as (repo, run):
+        (repo / "a.txt").write_text("base\nand something new\n")
+        run("add", "-A")
+        run("commit", "-qm", "The branch adds below it")
+        paths.logs(paths.resolve_range("origin/main...HEAD", repo), repo, create=True)
+        said = ask_and_hear(
+            repo,
+            {
+                "question": "what is this for?",
+                "view": "files",
+                "file": "a.txt",
+                "side": "ctx",
+                "line": "1",
+                "code": "base",
+            },
+        )
+        eq("fix up" in said, False, f"no commit to correct ({said!r})")
+
+
+@case
+def the_commit_to_fix_up_is_read_from_the_branch_not_the_checkout():
+    """One checkout can hold several reviews, and the reviewer can be standing on another
+    branch while reading one. Blaming whatever is checked out answers about a file that
+    is not the one on screen."""
+    with sandbox() as (repo, run):
+        run("checkout", "-q", "-b", "feature")
+        (repo / "a.txt").write_text("base\nwritten on the feature branch\n")
+        run("add", "-A")
+        run("commit", "-qm", "The feature branch writes a line")
+        wrote = run("log", "--format=%h", "-1", "HEAD").stdout.strip()
+        # Standing somewhere else while the review is read.
+        run("checkout", "-q", "main")
+        rng = "origin/main...feature"
+        paths.logs(paths.resolve_range(rng, repo), repo, create=True)
+        said = ask_and_hear(
+            repo,
+            {
+                "question": "why this line?",
+                "view": "files",
+                "file": "a.txt",
+                "side": "add",
+                "line": "2",
+                "code": "written on the feature branch",
+            },
+            rng=rng,
+        )
+        eq(f"fix up {wrote}" in said, True, f"the branch's commit ({said!r}, want {wrote})")
+
+
 @case
 def a_sibling_review_with_a_narrative_is_named_too():
     """The guard exists so a review that comes up empty does not leave the reviewer

@@ -96,6 +96,32 @@ def append_row(path, row):
         os.fsync(handle.fileno())
 
 
+def range_tip(rng):
+    """The commit a range ends at.
+
+    Blame has to read the branch under review, not whatever happens to be checked out.
+    One repo can hold two reviews, and building one of them while the other's branch is
+    checked out found nothing to attribute and said so silently.
+    """
+    # Three dots before two, or "origin/main...HEAD" splits into ".HEAD", which is not a
+    # revision and which blame refuses for every file in silence.
+    if "..." in rng:
+        tip = rng.split("...")[-1]
+    elif ".." in rng:
+        tip = rng.split("..")[-1]
+    else:
+        tip = rng
+    return tip.strip() or "HEAD"
+
+
+def range_base(rng):
+    """The commit a range starts from, which is where a walk forwards begins."""
+    for sep in ("...", ".."):
+        if sep in rng:
+            return rng.split(sep)[0].strip() or "HEAD"
+    return rng.strip() or "HEAD"
+
+
 def commit_range(rng, repo=None):
     """The range as one set of commits, for anything that has to count them.
 

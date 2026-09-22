@@ -226,32 +226,6 @@ def git_maybe(repo, *args):
 BLAME_LINE = re.compile(r"^([0-9a-f]{40}) \d+ (\d+)")
 
 
-def range_tip(rng):
-    """The commit a range ends at.
-
-    Blame has to read the branch under review, not whatever happens to be checked out.
-    One repo can hold two reviews, and building one of them while the other's branch is
-    checked out found nothing to attribute and said so silently.
-    """
-    # Three dots before two, or "origin/main...HEAD" splits into ".HEAD", which is not a
-    # revision and which blame refuses for every file in silence.
-    if "..." in rng:
-        tip = rng.split("...")[-1]
-    elif ".." in rng:
-        tip = rng.split("..")[-1]
-    else:
-        tip = rng
-    return tip.strip() or "HEAD"
-
-
-def range_base(rng):
-    """The commit a range starts from, which is where a walk forwards begins."""
-    for sep in ("...", ".."):
-        if sep in rng:
-            return rng.split(sep)[0].strip() or "HEAD"
-    return rng.strip() or "HEAD"
-
-
 def next_commits(repo, base, tip):
     """For each commit in the range, the one that comes after it.
 
@@ -466,7 +440,7 @@ def final_diff(repo, rng, commits, narrative):
         # on the rail has nothing left. Say that rather than leaving the counts unset.
         mark_survival(commits, {})
         return None
-    tip, base = range_tip(rng), range_base(rng)
+    tip, base = paths.range_tip(rng), paths.range_base(rng)
 
     # numstat writes "-" for both counts of a binary file, which is how git says the file
     # has no lines. Blame does not say that: it prints the bytes and leaves the caller to
