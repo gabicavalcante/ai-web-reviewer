@@ -1182,6 +1182,9 @@ def a_thread_in_final_diff_coordinates_draws_on_the_files_tab():
             True,
             f"matched to the row it names ({drew['asked']})",
         )
+        # One thread is a dot, not a count: a badge reading "1" on every asked line is
+        # noise that says nothing.
+        eq(drew["gutter"], [], f"no count for a single thread ({drew['gutter']})")
 
 
 @case
@@ -1245,7 +1248,13 @@ def asking_on_the_files_tab_sends_a_final_diff_anchor():
         drew = in_page(
             paths.page(rng, repo),
             [],
-            ask={"anchor": "files a.py:2 del", "question": "why did this go?"},
+            ask={
+                "steps": [
+                    {"gutter": "files a.py:2 del"},
+                    {"type": "why did this go?"},
+                    {"send": True},
+                ]
+            },
         )
         eq(len(drew["posted"]), 1, f"one question sent ({drew['posted']})")
         sent = drew["posted"][0]
@@ -1254,6 +1263,9 @@ def asking_on_the_files_tab_sends_a_final_diff_anchor():
         eq(sent.get("line"), "2", f"the line ({sent})")
         eq(sent.get("side"), "del", f"the side ({sent})")
         eq(sent.get("question"), "why did this go?", f"the question ({sent})")
+        # The text of the line, which is what the panel and an orphan card show.
+        eq(sent.get("code"), "DROP ME", f"the line it names ({sent})")
+        eq(drew["composers"], 0, "the composer closes once the question is sent")
         eq("commit" in sent, True, f"the field is sent ({sent})")
         eq(sent["commit"], "", f"and holds no commit ({sent})")
 
@@ -1279,13 +1291,9 @@ def the_docked_panel_opens_on_a_files_tab_row():
         drew = in_page(
             paths.page(rng, repo),
             [thread],
-            ask={
-                "anchor": "files a.py:2 del",
-                "question": "unused",
-                "thenClose": True,
-            },
+            ask={"steps": [{"gutter": "files a.py:2 del"}, {"closeSide": True}]},
         )
-        eq(drew["asking"].get("composer"), None, f"no composer ({drew['asking']})")
+        eq("side" in drew["asking"], True, f"the panel opened ({drew['asking']})")
         eq("a.py" in drew["side"], True, f"the panel points at the line ({drew['side']!r})")
         eq(drew["sideOpen"], False, "closing hides the panel")
         marked = [row for row in drew["pane"] if "side-open-row" in row]
@@ -1316,10 +1324,21 @@ def a_review_without_stages_is_askable_too():
         drew = in_page(
             paths.page(rng, repo),
             [],
-            ask={"open": True, "anchor": "files a.py:3 add", "question": "why this?"},
+            ask={
+                "steps": [
+                    {"open": True},
+                    {"gutter": "files a.py:3 add"},
+                    {"type": "why this?"},
+                    {"send": True},
+                ]
+            },
         )
-        eq(len(drew["posted"]), 1, f"one question sent ({drew['asking']}, {drew['anchors']})")
+        eq(len(drew["posted"]), 1, f"one question sent ({drew['asking']})")
         eq(drew["posted"][0].get("view"), "files", f"which diff ({drew['posted'][0]})")
+        # These rows are drawn by the commits view's renderer with no commit given, and a
+        # dataset stringifies whatever it is handed: writing the missing one put the text
+        # "null" on the row and sent it as the anchor's commit.
+        eq(drew["posted"][0].get("commit"), "", f"no commit invented ({drew['posted'][0]})")
 
 
 @case
@@ -1351,6 +1370,381 @@ def a_question_written_before_views_existed_reads_as_a_commit_one():
             threads = get(base, "/thread")["threads"]
             eq(len(threads), 1, f"the row is served ({threads})")
             eq(threads[0].get("view"), "commits", f"read as a commit anchor ({threads[0]})")
+
+
+@case
+def the_watcher_says_which_diff_a_question_was_asked_on():
+    """A line number means one place in a commit's diff and another in the final diff. The
+    session reading the question opens a file at that line, so which diff it is in decides
+    whether it lands in the right place.
+
+    Driven through the watcher process rather than by importing it: watch.py resolves its
+    review while being imported and exits when it cannot, so importing it from a case
+    aborted the whole suite on any checkout without exactly one review, which is every
+    fresh one. The suite ran nothing at all and said so only through watch.py's own usage
+    message."""
+    with sandbox() as (repo, run):
+        make_fixup(repo, run)
+        rng = paths.resolve_range("origin/main...HEAD", repo)
+        paths.logs(rng, repo, create=True)
+        with watching(repo, "origin/main...HEAD") as lines:
+            with serving(repo, "origin/main...HEAD") as base:
+                post(
+                    base,
+                    "/ask",
+                    {
+                        "question": "why did this go?",
+                        "view": "files",
+                        "file": "a.txt",
+                        "side": "del",
+                        "line": "2",
+                        "code": "DROP ME",
+                    },
+                )
+                said = until(lambda: [x for x in lines() if "why did this go?" in x])
+            eq(bool(said), True, f"the watcher said something ({lines()})")
+            one = said[0]
+            eq("commit ?" in one, False, f"no commit invented ({one})")
+            eq("a.txt" in one and ":2" in one, True, f"where to look ({one})")
+            # A removed line is numbered in the file as it was, not as it stands, so
+            # saying "as it stands" sends the reader to a line holding something else.
+            eq(
+                "as it stands" in one,
+                False,
+                f"a removed line is not numbered in the branch ({one})",
+            )
+            eq("DROP ME" in one, True, f"and the text it names ({one})")
+
+
+FILES_THREAD = {
+    "id": "q1",
+    "view": "files",
+    "file": "a.py",
+    "side": "del",
+    "line": "2",
+    "code": "DROP ME",
+    "question": "why did this go?",
+    "turns": [],
+    "resolved": False,
+}
+
+
+@case
+def a_thread_comes_back_when_its_stage_is_selected_again():
+    """Selecting a stage rebuilds the pane from the branch data, which knows nothing about
+    threads. The markers were painted once and never again, so a reviewer who looked at
+    another stage and came back found a clean gutter and no way to get the thread back:
+    the poll only repaints when the threads themselves change, which on a quiet review is
+    never."""
+    with sandbox() as (repo, run):
+        rng = files_review(repo, run)
+        drew = in_page(
+            paths.page(rng, repo),
+            [FILES_THREAD],
+            ask={"steps": [{"stage": "the new file"}, {"stage": "the rework"}]},
+        )
+        eq(
+            "files a.py:2 del true" in drew["asked"],
+            True,
+            f"marked again after coming back ({drew['asked']}, {drew['asking']})",
+        )
+
+
+@case
+def an_abandoned_composer_does_not_stop_the_page_painting():
+    """A composer is a row inside the table a stage pane rebuilds wholesale, so selecting
+    another stage takes it off the page. The flag saying one was open stayed set, and
+    every later paint returned early on it: threads stopped being drawn for the rest of
+    the session, while the status strip went on counting them."""
+    with sandbox() as (repo, run):
+        rng = files_review(repo, run)
+        drew = in_page(
+            paths.page(rng, repo),
+            [FILES_THREAD],
+            ask={
+                "steps": [
+                    {"gutter": "files a.py:3 add"},
+                    {"type": "half typed"},
+                    {"stage": "the new file"},
+                    {"stage": "the rework"},
+                ]
+            },
+        )
+        eq(
+            "files a.py:2 del true" in drew["asked"],
+            True,
+            f"the page still paints ({drew['asked']}, {drew['asking']})",
+        )
+
+
+@case
+def showing_the_whole_file_keeps_the_threads_on_it():
+    """The whole-file toggle replaces the table body, which takes every thread row and
+    every marker with it."""
+    with sandbox() as (repo, run):
+        rng = files_review(repo, run)
+        drew = in_page(
+            paths.page(rng, repo),
+            [FILES_THREAD],
+            ask={"steps": [{"whole": True}]},
+        )
+        eq(
+            "files a.py:2 del true" in drew["asked"],
+            True,
+            f"still marked with the whole file shown ({drew['asked']}, {drew['asking']})",
+        )
+
+
+@case
+def an_orphaned_files_thread_is_not_labelled_with_a_commit():
+    """A thread whose anchor no longer names a line still has to be readable. A files
+    thread has no commit, and the orphan card printed one anyway and blamed a commit for
+    not being in the diff."""
+    with sandbox() as (repo, run):
+        rng = files_review(repo, run)
+        stale = {
+            **FILES_THREAD,
+            "id": "q9",
+            "line": "99",
+            "side": "add",
+            "question": "asked on a line that is gone",
+        }
+        drew = in_page(paths.page(rng, repo), [stale])
+        eq(drew["orphans"], ["q9"], f"it is orphaned ({drew['orphans']})")
+        card = " ".join(drew["orphanCards"])
+        eq("?" in card, False, f"no commit invented ({card!r})")
+        eq("commit" in card, False, f"and no commit blamed ({card!r})")
+
+
+@case
+def a_thread_on_the_commits_tab_is_still_marked_on_its_line():
+    """Both tabs carry askable rows now, and every scan runs over both. The commits half
+    of that was invisible to these checks until the page's panes were nested the way the
+    document nests them, so nothing held it down."""
+    with sandbox() as (repo, run):
+        rng = files_review(repo, run)
+        page = paths.page(rng, repo)
+        short = run("log", "--format=%h", "-1", "HEAD~1").stdout.strip()
+        thread = {
+            "id": "c1",
+            "view": "commits",
+            "commit": short,
+            "file": "a.py",
+            "side": "add",
+            "line": "3",
+            "code": "added by A",
+            "question": "what is this?",
+            "turns": [],
+            "resolved": False,
+        }
+        drew = in_page(page, [thread])
+        eq(drew["orphans"], [], f"it is not orphaned ({drew['orphans']})")
+        eq(
+            "commits a.py:3 add true" in drew["asked"],
+            True,
+            f"marked on the commits tab ({drew['asked']})",
+        )
+
+
+@case
+def a_paint_clears_the_marks_the_last_one_left():
+    """Threads come and go: one gets resolved and hidden, or a rebuild drops it. Each
+    paint clears what the last left behind before drawing, over both panes, or a line goes
+    on claiming a question nobody can open."""
+    with sandbox() as (repo, run):
+        rng = files_review(repo, run)
+        drew = in_page(
+            paths.page(rng, repo),
+            [FILES_THREAD],
+            ask={"steps": [{"serve": []}, {"tick": True}]},
+        )
+        eq(drew["asked"], [], f"nothing still claims a thread ({drew['asked']})")
+
+
+@case
+def two_questions_on_one_line_are_counted_in_the_gutter():
+    """One line can carry several threads, and the gutter shows how many. A dot that reads
+    the same for one and for four hides the rest."""
+    with sandbox() as (repo, run):
+        rng = files_review(repo, run)
+        second = {**FILES_THREAD, "id": "q2", "question": "and what replaced it?"}
+        drew = in_page(paths.page(rng, repo), [FILES_THREAD, second])
+        eq(drew["gutter"], ["2"], f"the count in the gutter ({drew['gutter']})")
+
+
+@case
+def a_resolved_files_thread_marks_its_line_as_resolved():
+    """The page hides resolved threads on request, and the row says which it is carrying.
+    A row marked the same either way cannot be hidden."""
+    with sandbox() as (repo, run):
+        rng = files_review(repo, run)
+        drew = in_page(paths.page(rng, repo), [{**FILES_THREAD, "resolved": True}])
+        eq(
+            "files a.py:2 del resolved" in drew["asked"],
+            True,
+            f"marked as resolved ({drew['asked']})",
+        )
+
+
+@case
+def opening_one_thread_puts_back_the_line_the_last_one_marked():
+    """The docked panel marks the line it is showing. Opening another has to clear the
+    first, and the line it marked can be on either tab."""
+    with sandbox() as (repo, run):
+        rng = files_review(repo, run)
+        other = {**FILES_THREAD, "id": "q2", "side": "add", "line": "3", "code": "added by A"}
+        drew = in_page(
+            paths.page(rng, repo),
+            [FILES_THREAD, other],
+            ask={"steps": [{"gutter": "files a.py:2 del"}, {"gutter": "files a.py:3 add"}]},
+        )
+        marked = [row for row in drew["pane"] if "side-open-row" in row]
+        eq(len(marked), 1, f"one line marked, not two ({marked})")
+        eq("added by A" in marked[0], True, f"and it is the open one ({marked})")
+
+
+@case
+def the_docked_panel_opens_on_a_commits_tab_row_too():
+    """Both tabs carry threads, so the panel has to find its line on either."""
+    with sandbox() as (repo, run):
+        rng = files_review(repo, run)
+        short = run("log", "--format=%h", "-1", "HEAD~1").stdout.strip()
+        thread = {
+            "id": "c1",
+            "view": "commits",
+            "commit": short,
+            "file": "a.py",
+            "side": "add",
+            "line": "3",
+            "code": "added by A",
+            "question": "what is this?",
+            "turns": [],
+            "resolved": False,
+        }
+        drew = in_page(
+            paths.page(rng, repo),
+            [thread],
+            ask={"steps": [{"gutter": "commits a.py:3 add"}]},
+        )
+        eq("side" in drew["asking"], True, f"the panel opened ({drew['asking']})")
+        eq("a.py" in drew["side"], True, f"pointing at the line ({drew['side']!r})")
+
+
+@case
+def files_no_stage_claims_keep_their_threads():
+    """The rail's last entry is the files no stage accounts for, and it is drawn by a
+    different function from the stage panes. It rebuilds the view the same way."""
+    with sandbox() as (repo, run):
+        rng = files_review(repo, run)
+        # A third commit no stage marks, so its file belongs to no stage.
+        (repo / "loose.py").write_text("unclaimed\n")
+        run("add", "-A")
+        run("commit", "-qm", "Something nobody narrated")
+        subprocess.run(
+            [sys.executable, str(TOOL / "review.py"), "build", "origin/main...HEAD"],
+            cwd=str(repo),
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        thread = {
+            **FILES_THREAD,
+            "file": "loose.py",
+            "side": "add",
+            "line": "1",
+            "code": "unclaimed",
+        }
+        drew = in_page(
+            paths.page(rng, repo),
+            [thread],
+            ask={"steps": [{"stage": "not in any stage"}, {"open": True}]},
+        )
+        eq(
+            "files loose.py:1 add true" in drew["asked"],
+            True,
+            f"marked in the listing ({drew['asked']}, {drew['asking']})",
+        )
+
+
+@case
+def a_composer_left_in_a_stage_pane_does_not_outlive_the_listing():
+    """The rail's last entry is drawn by a different function from the stage panes, and it
+    replaces the pane a composer was open in just the same. It builds no rows of its own
+    until a file is opened, so there is nothing to repaint there, but a composer still
+    counted as open stops every later paint."""
+    with sandbox() as (repo, run):
+        rng = files_review(repo, run)
+        (repo / "loose.py").write_text("unclaimed\n")
+        run("add", "-A")
+        run("commit", "-qm", "Something nobody narrated")
+        subprocess.run(
+            [sys.executable, str(TOOL / "review.py"), "build", "origin/main...HEAD"],
+            cwd=str(repo),
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        short = run("log", "--format=%h", "-1", "HEAD~2").stdout.strip()
+        later = {
+            "id": "c1",
+            "view": "commits",
+            "commit": short,
+            "file": "a.py",
+            "side": "add",
+            "line": "3",
+            "code": "added by A",
+            "question": "asked while the composer was orphaned",
+            "turns": [],
+            "resolved": False,
+        }
+        # The listing builds no rows until a file is opened, so the paint it stops is one
+        # on the other tab, whose rows are still there.
+        drew = in_page(
+            paths.page(rng, repo),
+            [],
+            ask={
+                "steps": [
+                    {"gutter": "files a.py:3 add"},
+                    {"type": "half typed"},
+                    {"stage": "not in any stage"},
+                    {"serve": [later]},
+                    {"tick": True},
+                ]
+            },
+        )
+        eq(
+            "commits a.py:3 add true" in drew["asked"],
+            True,
+            f"the page still paints ({drew['asked']}, {drew['asking']})",
+        )
+
+
+@case
+def the_server_does_not_take_the_view_on_trust():
+    """The view decides how every reader of questions.jsonl reads the anchor, so it is one
+    of two known values rather than whatever was posted."""
+    with sandbox() as (repo, run):
+        make_fixup(repo, run)
+        with serving(repo, "origin/main...HEAD") as base:
+            status, _ = post(
+                base,
+                "/ask",
+                {
+                    "question": "hostile",
+                    "view": "../../../etc/passwd",
+                    "file": "a.txt",
+                    "side": "add",
+                    "line": "1",
+                    "code": "v2",
+                },
+            )
+            eq(status, 200, "the question is still accepted")
+            threads = get(base, "/thread")["threads"]
+            eq(
+                threads[0].get("view"),
+                "commits",
+                f"an unknown view is not kept ({threads[0]})",
+            )
 
 
 @case

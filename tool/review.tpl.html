@@ -831,7 +831,14 @@
     let built = box.dataset.open === "true";
     head.addEventListener("click", () => {
       const opening = box.dataset.open !== "true";
-      if (opening && !built) { box.appendChild(buildRows()); built = true; }
+      if (opening && !built) {
+        box.appendChild(buildRows());
+        built = true;
+        /* Rows that have only just been made carry nothing that was drawn on this file
+           before it was opened, so a question asked on one of them was invisible until
+           the threads themselves next changed. */
+        redrawThreads();
+      }
       box.dataset.open = opening ? "true" : "false";
     });
 
@@ -1003,6 +1010,18 @@
 
   /* ---------- inline Q&A with Claude ---------- */
   let THREADS = [];
+  /* The files tab is painted once while this file is still being evaluated, before the
+     rest of this section exists. Repainting threads from there reached a const above its
+     own declaration, and there is nothing to draw that early anyway. */
+  let threadsLive = false;
+  function redrawThreads() {
+    if (!threadsLive) return;
+    /* A pane that has just been rebuilt carries neither the threads that were on it nor
+       the composer that was open in it, and a composer still counted as open stops every
+       later paint. */
+    closeComposer();
+    paintThreads();
+  }
   /* Whether a Monitor is tailing the logs. Assumed true until the first poll says
      otherwise, so a live review never flashes the detached state on load. */
   let WATCHER_LIVE = true;
@@ -1063,8 +1082,11 @@
 
   function orphanCard(t, why) {
     const box = el("div", "orphan");
+    /* A question asked on the files tab has no commit, and printing one anyway named a
+       commit that does not exist and blamed it for not being in the diff. */
     box.appendChild(el("div", "where",
-      (t.commit || "?") + " · " + (t.file || "?") + ":" + (t.line || "?") + " · " + why));
+      (t.view === "files" ? "" : (t.commit || "?") + " · ")
+      + (t.file || "?") + ":" + (t.line || "?") + " · " + why));
     if (t.code) box.appendChild(el("div", "snippet", t.code));
     const q = el("div", "turn you");
     q.appendChild(el("span", "who", "you"));
@@ -1088,8 +1110,9 @@
     const list = document.getElementById("orphanList");
     section.hidden = orphans.length === 0;
     list.replaceChildren();
-    orphans.forEach(t => list.appendChild(
-      orphanCard(t, "this commit is not part of the diff shown here")));
+    orphans.forEach(t => list.appendChild(orphanCard(t, t.view === "files"
+      ? "no line of the branch as it stands is at this anchor any more"
+      : "this commit is not part of the diff shown here")));
   }
 
   /* One thread renderer for both layouts: the row under the line, and the docked panel.
@@ -1250,6 +1273,8 @@
       showingAll = !showingAll;
       whole.textContent = showingAll ? "Show only this stage" : "Show the whole file";
       draw(showingAll ? f.rows.map((_, i) => i) : [...keep].sort((a, b) => a - b));
+      // The rows are new, so whatever was drawn on the old ones has to be drawn again.
+      redrawThreads();
     });
 
     const wrap = el("div", "diffwrap");
@@ -1359,6 +1384,10 @@
                 : "")));
     }
     groups.appendChild(pane);
+    /* The pane is built from the branch, which knows nothing about threads, and it has
+       just replaced whatever was on screen. A composer that was open went with it, so the
+       flag saying one is open has to go too or every later paint returns early on it. */
+    redrawThreads();
   }
 
   function paintAllFiles() {
@@ -1436,7 +1465,8 @@
         groups.appendChild(box);
       });
     }
-
+    // Same as a stage pane: the listing has just replaced what was on screen.
+    redrawThreads();
   }
 
   /* The rail is the strip again, read as a list. Every file is the branch as it stands;
@@ -1454,7 +1484,8 @@
       document.getElementById("filesBoard").classList.add("norail");
       paintAllFiles();
       document.getElementById("filesNote").textContent =
-        final.files.length + " file(s) as they stand now. This review has no stages.";
+        final.files.length + " file(s) as they stand now. This review has no stages. "
+        + "Ask about a line by clicking its number.";
       return true;
     }
 
@@ -1507,9 +1538,11 @@
         buttons.forEach((b, j) => b.setAttribute("aria-current", String(j === i)));
         if (entry.where === null) paintAllFiles(); else paintStage(entry.where);
         document.getElementById("filesNote").textContent = entry.where === null
-          ? "Files no stage claims. The narrative does not say where these belong."
+          ? "Files no stage claims. The narrative does not say where these belong. "
+            + "Ask about a line by clicking its number."
           : "Only what " + entry.where + " wrote, with a few lines either side. "
-            + "Open a file whole from the button under it.";
+            + "Ask about a line by clicking its number, or open a file whole from the "
+            + "button under it.";
       });
       buttons.push(btn);
       rail.appendChild(btn);
@@ -1520,7 +1553,8 @@
     if (entries[0].where === null) paintAllFiles(); else paintStage(entries[0].where);
     document.getElementById("filesNote").textContent =
       "Only what " + entries[0].label + " wrote, with a few lines either side. "
-      + "Ask about a line by clicking its number.";
+      + "Ask about a line by clicking its number, or open a file whole from the "
+      + "button under it.";
     return true;
   }
 
@@ -1548,8 +1582,8 @@
     });
     /* The branch as it stands is what a reviewer came to read, so it is what opens. The
        commits are how it got there, which is the second question and sometimes not one at
-       all. Questions are still asked on the commits tab, where a line has a commit behind
-       it to anchor to. */
+       all. A line here is asked about in the branch's own numbering, the way a pull
+       request comment is anchored. */
     paintFiles();
     filesPainted = true;
     showTab("files");
@@ -1771,7 +1805,7 @@
   }
 
   function closeComposer() {
-    document.querySelectorAll("tr.composer-row").forEach(n => n.remove());
+    panes().forEach(root => root.querySelectorAll("tr.composer-row").forEach(n => n.remove()));
     composerOpen = false;
   }
 
@@ -2013,6 +2047,7 @@
   };
 
   refresh();
+  threadsLive = true;
   setInterval(() => { if (!document.hidden) refresh(); }, 4000);
 
   document.addEventListener("keydown", e => {

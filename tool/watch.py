@@ -185,13 +185,21 @@ def describe_question(row):
     # place in a commit's diff and another in the final diff, so saying which is the
     # difference between opening the right file at the right line and the wrong one.
     if row.get("view") == "files":
-        return (
-            "QUESTION {id} · {file}:{line} ({side}) in the branch as it stands · {question}"
-        ).format(
+        # A removed line is numbered in the file as it was, because that is the only place
+        # it exists. Reading it as a line of the branch opens whatever now sits at that
+        # number, so the text is given as well: for a removal it is the only way back to
+        # what was asked about.
+        removed = row.get("side") == "del"
+        where = (
+            "as the file was before this branch" if removed else "in the branch as it stands"
+        )
+        code = (row.get("code") or "").strip()
+        return "QUESTION {id} · {file}:{line} {where}{code} · {question}".format(
             id=row.get("id", "?"),
             file=row.get("file", "?"),
             line=row.get("line", "?"),
-            side=row.get("side", "?"),
+            where=where,
+            code=f" · {code}" if code else "",
             question=row.get("question", "").strip(),
         )
     return "QUESTION {id} · commit {commit} · {file}:{line} ({side}) · {question}".format(

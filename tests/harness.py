@@ -278,6 +278,9 @@ def in_page(page, threads, reviewed=None, ask=None):
     drew["reviewed"] = int(drew.get("reviewed") or 0)
     drew.setdefault("rail", [])
     drew.setdefault("posted", [])
+    drew.setdefault("orphanCards", [])
+    drew.setdefault("gutter", [])
+    drew.setdefault("composers", 0)
     return drew
 
 

@@ -33,6 +33,11 @@ const mk = (tag) => {
     focus() {}, closest() { return null; },
     setAttribute(k, v) { node[k] = v; }, getAttribute(k) { return node[k]; },
     matches() { return false; },
+    // The page scans its own subtrees when it rebuilds one. Nothing here answers with
+    // real nodes, which is the point: this checks that the script runs, not what it drew.
+    querySelectorAll() { return []; },
+    querySelector() { return null; },
+    scrollIntoView() {},
   };
   return node;
 };

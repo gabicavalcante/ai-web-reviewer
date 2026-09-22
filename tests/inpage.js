@@ -64,7 +64,7 @@ const mk = (tag) => {
   const node = {
     tagName: (tag || "div").toUpperCase(),
     children: [],
-    dataset: {},
+    dataset: new Proxy({}, { set(target, key, value) { target[key] = String(value); return true; } }),
     style: {},
     classList: {
       _s: new Set(),
@@ -104,34 +104,46 @@ const mk = (tag) => {
 // of them, so a case cannot reach it without these being kept.
 const docHandlers = {};
 const registry = {};
+const node = (id) => (registry[id] = registry[id] || mk("div"));
+const nest = (parent, kids) => kids.forEach((id) => node(parent).appendChild(node(id)));
 globalThis.document = {
   title: "",
   body: mk("body"),
   createElement: mk,
   createTextNode: (t) => ({ nodeValue: t }),
-  getElementById: (id) => (registry[id] = registry[id] || mk("div")),
+  getElementById: node,
   querySelectorAll: () => [],
   addEventListener: (type, fn) => { docHandlers[type] = fn; },
   hidden: false,
 };
+nest("board", ["pane", "side"]);
+nest("filesView", ["stageRail", "filePane"]);
+nest("filePane", ["fileGroups"]);
+// Both carry the hidden attribute in the page, so they start hidden as they really do.
+node("side").hidden = true;
+node("filesView").hidden = true;
+
 // The reviewed ticks live in localStorage, keyed by sha, so a case can seed them.
 const stored = process.argv[4] ? fs.readFileSync(process.argv[4], "utf8") || null : null;
 globalThis.localStorage = { getItem: () => stored, setItem: () => {} };
 // A drag that ends on a row is a selection, not a click, and the page checks for one
 // before opening a thread. Nothing here selects anything.
 globalThis.window = { confirm: () => false, location: { reload() {} }, getSelection: () => "" };
-globalThis.setInterval = () => 0;
+let poll = null;
+// The page's own four second poll, kept so a case can make time pass on purpose.
+globalThis.setInterval = (fn) => { poll = fn; return 0; };
 
 const threads = JSON.parse(fs.readFileSync(process.argv[3], "utf8"));
 // { anchor: "files a.py:2 del", question: "…" } — the row to click and what to type.
 const plan = process.argv[5] ? JSON.parse(fs.readFileSync(process.argv[5], "utf8")) : null;
 const posted = [];
+let served = threads;
 // The page reads its threads from /thread on the first poll, so that is where they go in.
 globalThis.fetch = (url, init) => {
   if (String(url).startsWith("/thread")) {
     return Promise.resolve({
       ok: true,
-      json: () => Promise.resolve({ threads, revision: "", watcher: true }),
+      json: () => Promise.resolve({ threads: served, revision: "", watcher: true }),
     });
   }
   if (String(url) === "/ask") {
@@ -156,39 +168,65 @@ const anchorOf = (n) => {
   return `${d.view || "commits"} ${d.file}:${d.line} ${d.side}`;
 };
 
-/* Drive a question the way a reviewer does: click the gutter of a row, type into the
-   composer that opens, and press the button. Every step of that runs through the page's
-   own handlers, so a row the page will not open a composer on fails here too. */
-function askOn(plan) {
+/* Drive the page the way a reviewer does, one step at a time. Every step runs through
+   the page's own handlers, so anything the page will not do fails here too.
+
+   Steps: {open} expand every file box, {gutter} click a line's number, {type} fill the
+   composer, {send} press the button, {stage} click a rail entry, {whole} press "Show the
+   whole file", {closeSide} press the panel's X, {tick} run the poll. */
+function drive(steps) {
   // getElementById hands out standalone nodes, so the page's subtrees hang off those
   // rather than off body. A search from body alone found nothing at all.
   const roots = () => [registry.fileGroups, registry.board, document.body].filter(Boolean);
   const all = (sel) => roots().flatMap((r) => queryAll(r, sel));
-  if (plan.open) {
-    all("button.file-head").forEach((head) => head._on && head._on.click && head._on.click());
+  const press = (n) => n && n._on && n._on.click && n._on.click();
+  const done = [];
+  for (const step of steps) {
+    if (step.open) {
+      all("button.file-head").forEach(press);
+      done.push("open");
+    } else if (step.gutter !== undefined) {
+      const row = all("tr[data-line]").find((n) => anchorOf(n) === step.gutter);
+      if (!row) return [...done, `no row anchored ${step.gutter}`];
+      if (!docHandlers.click) return [...done, "the page registered no click handler"];
+      docHandlers.click({ target: queryAll(row, "td.gut")[0] || row, preventDefault() {} });
+      done.push(all("div.composer").length ? "composer" : "side");
+    } else if (step.type !== undefined) {
+      const input = all("div.composer").flatMap((c) => queryAll(c, "textarea"))[0];
+      if (!input) return [...done, "no composer to type into"];
+      input.value = step.type;
+      done.push("typed");
+    } else if (step.send) {
+      const send = all("div.composer")
+        .flatMap((c) => queryAll(c, "button.btn"))
+        .find((b) => b.textContent === "Ask Claude");
+      if (!send) return [...done, "no send button"];
+      press(send);
+      done.push("sent");
+    } else if (step.stage !== undefined) {
+      const btn = queryAll(registry.stageRail || mk("div"), "button.commit-btn")
+        .find((b) => queryAll(b, "span.cb-head").some((h) => h.textContent === step.stage));
+      if (!btn) return [...done, `no rail entry named ${step.stage}`];
+      press(btn);
+      done.push(`stage ${step.stage}`);
+    } else if (step.whole) {
+      const btn = all("button.wholefile")[0];
+      if (!btn) return [...done, "no whole-file button"];
+      press(btn);
+      done.push("whole");
+    } else if (step.closeSide) {
+      press(registry.sideClose);
+      done.push("closed");
+    } else if (step.serve !== undefined) {
+      served = step.serve;
+      done.push(`serving ${served.length}`);
+    } else if (step.tick) {
+      if (!poll) return [...done, "the page registered no poll"];
+      poll();
+      done.push("tick");
+    }
   }
-  const row = all("tr[data-line]").find((n) => anchorOf(n) === plan.anchor);
-  if (!row) return { error: `no row anchored ${plan.anchor}` };
-  const gut = queryAll(row, "td.gut")[0] || row;
-  if (!docHandlers.click) return { error: "the page registered no click handler" };
-  docHandlers.click({ target: gut, preventDefault() {} });
-  const composer = all("div.composer")[0];
-  // A row that already carries a thread opens the docked panel instead, which is the
-  // other thing a click can do and worth reporting rather than failing on.
-  if (!composer) return { composer: null };
-  const input = queryAll(composer, "textarea")[0];
-  input.value = plan.question;
-  const send = queryAll(composer, "button.btn").find((b) => b.textContent === "Ask Claude");
-  if (!send) return { error: "no send button" };
-  send._on.click();
-  return { composer: (queryAll(composer, "div.anchor")[0] || {}).textContent || "" };
-}
-
-/* The X on the docked panel. Closing has to put back every mark opening made, and the
-   row it marked can be on either tab. */
-function closeSidePanel() {
-  const close = registry.sideClose;
-  if (close && close._on && close._on.click) close._on.click();
+  return done;
 }
 
 // The poll is a promise; let it settle before reading what it drew.
@@ -200,7 +238,11 @@ setTimeout(() => {
   // a card for "Q10" contains "Q1", so one thread was reported orphaned because another
   // one was.
   const cards = (registry.orphanList ? registry.orphanList.children : []).map(text);
-  const header = (t) => `${t.commit || "?"} · ${t.file || "?"}:${t.line || "?"}`;
+  // A files thread has no commit, so its card names only where the line was.
+  const header = (t) =>
+    t.view === "files"
+      ? `${t.file || "?"}:${t.line || "?"}`
+      : `${t.commit || "?"} · ${t.file || "?"}:${t.line || "?"}`;
   const orphans = threads
     .filter((t) => cards.some((card) => card.includes(header(t))))
     .map((t) => t.id);
@@ -208,9 +250,13 @@ setTimeout(() => {
   // A paint that throws is swallowed by refresh()'s catch into the status line, and every
   // case that only counts orphan cards then passes against a page that drew nothing at
   // all. The status is reported so a case can tell those apart.
-  const asking = plan ? askOn(plan) : null;
-  if (plan && plan.thenClose) closeSidePanel();
+  const asking = plan ? drive(plan.steps || []) : null;
 
+
+  // A step can be asynchronous — a send, or a poll that refetches — so the page is read
+  // only once those have settled. Walking it straight after the steps reported the page
+  // as it was before the last one landed.
+  setTimeout(() => {
   // The rows a stage's pane actually drew. A pane is seeded from what survived and from
   // what the stage removed, and the removal half is only observable here: the data says a
   // line is gone, and whether the page puts it on screen is a separate question.
@@ -224,7 +270,7 @@ setTimeout(() => {
   // neither is visible in the row text.
   const anchors = [];
   const asked = [];
-  let filesThreads = 0;
+  const gutter = [];
   const walk = (n, inside) => {
     const cls = classesOf(n).join(" ");
     if (n.tagName === "TR") {
@@ -234,7 +280,9 @@ setTimeout(() => {
       // Whether the page matched a thread to this row. Set in both layouts, unlike the
       // inline thread row, which the docked panel replaces.
       if (d.line && d.asked) asked.push(`${at} ${d.asked}`);
-      if (cls.split(" ").includes("thread-row")) filesThreads += 1;
+      // The badge saying how many questions a line carries.
+      const g = (n.children || []).find((c) => classesOf(c).includes("gut"));
+      if (g && (g.dataset || {}).threads) gutter.push(g.dataset.threads);
     }
     if (inside && n.tagName === "TR") {
       const code = (n.children || []).find((c) => c.className === "code");
@@ -245,24 +293,29 @@ setTimeout(() => {
     }
     (n.children || []).forEach((c) => walk(c, inside || classesOf(n).includes("stagepane")));
   };
-  if (registry.fileGroups) walk(registry.fileGroups, false);
+  [registry.board, registry.fileGroups].forEach((root) => root && walk(root, false));
 
-  // The send is a promise too; let it run before reporting what reached /ask.
-  setTimeout(() => console.log(JSON.stringify({
+  console.log(JSON.stringify({
     asking,
     posted,
     side: registry.sideAnchor ? registry.sideAnchor.textContent : "",
     // Hidden is what closing does; the anchor text is left where it was.
     sideOpen: !!(registry.side && registry.side.hidden === false),
     cards: cards.length,
+    orphanCards: cards,
     pane,
     anchors,
     asked,
-    filesThreads,
+    gutter,
+    // Composer rows still on the page. Sending is supposed to take it away.
+    composers: [registry.board, registry.fileGroups]
+      .filter(Boolean)
+      .flatMap((r) => queryAll(r, "tr.composer-row")).length,
     orphans,
     anchored: threads.map((t) => t.id).filter((id) => !orphans.includes(id)),
     status: registry.qnaStatus ? registry.qnaStatus.textContent : "",
     rail: (registry.stageRail ? registry.stageRail.children : []).map(text),
     reviewed: (registry.progressText ? registry.progressText.textContent : "").split(" ")[0],
-  })), 10);
+  }));
+  }, 10);
 }, 50);

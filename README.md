@@ -45,8 +45,8 @@ question about line 161 has been answered beside the code it is about.](docs/scr
 ## Two ways to read a branch
 
 **Commits** is the rail down the left: one commit at a time, in order, with its diff
-beside it. This is where questions are asked, because a line here has a commit behind it
-to anchor a thread to.
+beside it. A line here has a commit behind it, so a question asked on it is anchored to
+that commit's own numbering of the file.
 
 Later commits often rewrite what earlier ones wrote. `git blame` tells you, for the branch
 as it stands now, which commit each line came from, so the page can count how much of each
@@ -83,7 +83,9 @@ narrative: stage 'sqlmigrate' is not drawn: nothing it did is in the branch as i
 
 Files are ordered within a stage: the code, then what documents it, then what tests it,
 with a test moved to sit under the file whose name it matches. Each file can be opened
-whole from a button beneath it. Questions are asked on the Commits tab, not here.
+whole from a button beneath it. Click a line number to ask about it: a question here is
+anchored to the file, the side and the line in the branch as it stands, the way a pull
+request comment is, with no commit in it.
 
 Without a narrative there are no stages, so the tab lists the files plainly.
 
