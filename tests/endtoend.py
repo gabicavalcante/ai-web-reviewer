@@ -1105,6 +1105,254 @@ def a_run_of_removed_lines_is_drawn_whole():
         eq(len(dels), 16, f"every line of the run ({len(dels)}: {dels[:3]}…)")
 
 
+def files_review(repo, run):
+    """A branch with two stages, where the first both adds a line and removes one."""
+    (repo / "a.py").write_text("keep one\nDROP ME\nkeep two\n")
+    run("add", "-A")
+    run("commit", "-qm", "base")
+    run("update-ref", "refs/remotes/origin/main", "HEAD")
+    (repo / "a.py").write_text("keep one\nkeep two\nadded by A\n")
+    run("add", "-A")
+    run("commit", "-qm", "A reworks it")
+    (repo / "b.py").write_text("fresh\n")
+    run("add", "-A")
+    run("commit", "-qm", "B adds a file")
+    rng = paths.resolve_range("origin/main...HEAD", repo)
+    paths.narrative(rng, repo, create=True).write_text(
+        json.dumps(
+            {
+                "stages": [
+                    {"where": "the rework", "what": "reworks", "marks": ["1"]},
+                    {"where": "the new file", "what": "arrives", "marks": ["2"]},
+                ]
+            }
+        )
+    )
+    subprocess.run(
+        [sys.executable, str(TOOL / "review.py"), "build", "origin/main...HEAD"],
+        cwd=str(repo),
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    return rng
+
+
+@case
+def a_row_on_the_files_tab_carries_an_anchor():
+    """Questions are asked from a row's dataset. The files tab rendered its rows without
+    one, so there was nothing to ask about: the reader was on the tab that opens and the
+    asking was on the other one."""
+    with sandbox() as (repo, run):
+        rng = files_review(repo, run)
+        drew = in_page(paths.page(rng, repo), [])
+        eq(
+            "files a.py:3 add" in drew["anchors"],
+            True,
+            f"the added line is askable ({drew['anchors']})",
+        )
+        eq(
+            "files a.py:2 del" in drew["anchors"],
+            True,
+            f"the removed line is askable ({drew['anchors']})",
+        )
+
+
+@case
+def a_thread_in_final_diff_coordinates_draws_on_the_files_tab():
+    """A thread anchored the way a pull request comment is: the file, the side and the
+    line in the branch as it stands, with no commit in it."""
+    with sandbox() as (repo, run):
+        rng = files_review(repo, run)
+        thread = {
+            "id": "q1",
+            "view": "files",
+            "file": "a.py",
+            "side": "del",
+            "line": "2",
+            "code": "DROP ME",
+            "question": "why did this go?",
+            "turns": [],
+            "resolved": False,
+        }
+        drew = in_page(paths.page(rng, repo), [thread])
+        eq(drew["orphans"], [], f"it is not orphaned ({drew['orphans']})")
+        eq(
+            "files a.py:2 del true" in drew["asked"],
+            True,
+            f"matched to the row it names ({drew['asked']})",
+        )
+
+
+@case
+def a_question_from_the_files_tab_records_which_view_it_came_from():
+    """The anchor means something different depending on the tab it was asked on: a
+    commit's diff numbers lines in that commit's version of a file, the final diff numbers
+    them in the branch's. Every reader of questions.jsonl has to tell them apart."""
+    with sandbox() as (repo, run):
+        make_fixup(repo, run)
+        with serving(repo, "origin/main...HEAD") as base:
+            status, _ = post(
+                base,
+                "/ask",
+                {
+                    "question": "why did this go?",
+                    "view": "files",
+                    "file": "a.txt",
+                    "side": "del",
+                    "line": "2",
+                    "code": "DROP ME",
+                },
+            )
+            eq(status, 200, "asking from the files tab")
+            threads = get(base, "/thread")["threads"]
+            eq(len(threads), 1, f"one thread ({threads})")
+            eq(threads[0].get("view"), "files", f"which view ({threads[0]})")
+            eq(threads[0].get("commit"), "", f"and no commit in the anchor ({threads[0]})")
+
+
+@case
+def a_question_from_the_commits_tab_still_says_so():
+    """Rows already in questions.jsonl carry no view and are commit anchored, so that is
+    what a missing one means."""
+    with sandbox() as (repo, run):
+        make_fixup(repo, run)
+        with serving(repo, "origin/main...HEAD") as base:
+            status, _ = post(
+                base,
+                "/ask",
+                {
+                    "question": "what is this?",
+                    "commit": "0000000",
+                    "file": "a.txt",
+                    "side": "add",
+                    "line": "1",
+                    "code": "v2",
+                },
+            )
+            eq(status, 200, "asking from the commits tab")
+            threads = get(base, "/thread")["threads"]
+            eq(threads[0].get("view"), "commits", f"which view ({threads[0]})")
+
+
+@case
+def asking_on_the_files_tab_sends_a_final_diff_anchor():
+    """The whole path a reviewer takes: click the gutter of a line on the files tab, type,
+    and send. What reaches the server has to say which diff the line number is in, and
+    must not carry a commit it does not have."""
+    with sandbox() as (repo, run):
+        rng = files_review(repo, run)
+        drew = in_page(
+            paths.page(rng, repo),
+            [],
+            ask={"anchor": "files a.py:2 del", "question": "why did this go?"},
+        )
+        eq(len(drew["posted"]), 1, f"one question sent ({drew['posted']})")
+        sent = drew["posted"][0]
+        eq(sent.get("view"), "files", f"which diff ({sent})")
+        eq(sent.get("file"), "a.py", f"the file ({sent})")
+        eq(sent.get("line"), "2", f"the line ({sent})")
+        eq(sent.get("side"), "del", f"the side ({sent})")
+        eq(sent.get("question"), "why did this go?", f"the question ({sent})")
+        eq("commit" in sent, True, f"the field is sent ({sent})")
+        eq(sent["commit"], "", f"and holds no commit ({sent})")
+
+
+@case
+def the_docked_panel_opens_on_a_files_tab_row():
+    """Clicking a line that already carries a thread docks it at the side. Every scan for
+    the row ran over the commits view, so a thread asked on the files tab opened a panel
+    that immediately closed again for want of a line to point at."""
+    with sandbox() as (repo, run):
+        rng = files_review(repo, run)
+        thread = {
+            "id": "q1",
+            "view": "files",
+            "file": "a.py",
+            "side": "del",
+            "line": "2",
+            "code": "DROP ME",
+            "question": "why did this go?",
+            "turns": [],
+            "resolved": False,
+        }
+        drew = in_page(
+            paths.page(rng, repo),
+            [thread],
+            ask={
+                "anchor": "files a.py:2 del",
+                "question": "unused",
+                "thenClose": True,
+            },
+        )
+        eq(drew["asking"].get("composer"), None, f"no composer ({drew['asking']})")
+        eq("a.py" in drew["side"], True, f"the panel points at the line ({drew['side']!r})")
+        eq(drew["sideOpen"], False, "closing hides the panel")
+        marked = [row for row in drew["pane"] if "side-open-row" in row]
+        eq(marked, [], f"and puts the row it marked back ({marked})")
+
+
+@case
+def a_review_without_stages_is_askable_too():
+    """With no narrative the files tab is one plain listing rather than a strip of stage
+    panes, and that listing is drawn by the commits view's own renderer. It was told not
+    to anchor its rows, so the tab that opens had nothing to ask about."""
+    with sandbox() as (repo, run):
+        (repo / "a.py").write_text("keep one\nkeep two\n")
+        run("add", "-A")
+        run("commit", "-qm", "base")
+        run("update-ref", "refs/remotes/origin/main", "HEAD")
+        (repo / "a.py").write_text("keep one\nkeep two\nadded by A\n")
+        run("add", "-A")
+        run("commit", "-qm", "A adds a line")
+        rng = paths.resolve_range("origin/main...HEAD", repo)
+        subprocess.run(
+            [sys.executable, str(TOOL / "review.py"), "build", "origin/main...HEAD"],
+            cwd=str(repo),
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        drew = in_page(
+            paths.page(rng, repo),
+            [],
+            ask={"open": True, "anchor": "files a.py:3 add", "question": "why this?"},
+        )
+        eq(len(drew["posted"]), 1, f"one question sent ({drew['asking']}, {drew['anchors']})")
+        eq(drew["posted"][0].get("view"), "files", f"which diff ({drew['posted'][0]})")
+
+
+@case
+def a_question_written_before_views_existed_reads_as_a_commit_one():
+    """Every row already in questions.jsonl was asked on the commits tab and carries no
+    view. Serving them without one leaves the page unable to tell which diff they belong
+    to, and it anchors them in the wrong coordinates."""
+    with sandbox() as (repo, run):
+        make_fixup(repo, run)
+        rng = paths.resolve_range("origin/main...HEAD", repo)
+        legacy = paths.logs(rng, repo, create=True)["questions"]
+        legacy.write_text(
+            json.dumps(
+                {
+                    "id": "old1",
+                    "asked_at": "2025-01-01 00:00:00",
+                    "branch": "main",
+                    "question": "asked before the files tab existed",
+                    "commit": "0000000",
+                    "file": "a.txt",
+                    "side": "add",
+                    "line": "1",
+                    "code": "v2",
+                }
+            )
+            + "\n"
+        )
+        with serving(repo, "origin/main...HEAD") as base:
+            threads = get(base, "/thread")["threads"]
+            eq(len(threads), 1, f"the row is served ({threads})")
+            eq(threads[0].get("view"), "commits", f"read as a commit anchor ({threads[0]})")
+
+
 @case
 def a_sibling_review_with_a_narrative_is_named_too():
     """The guard exists so a review that comes up empty does not leave the reviewer

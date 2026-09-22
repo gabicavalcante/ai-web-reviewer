@@ -232,6 +232,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
             threads = [
                 {
                     **question,
+                    "view": question.get("view") or "commits",
                     "turns": turns.get(question.get("id"), []),
                     "resolved": resolved.get(question.get("id"), False),
                 }
@@ -344,6 +345,11 @@ class Handler(http.server.BaseHTTPRequestHandler):
             # split one review into several.
             "branch": current_branch(),
             "question": question[:4000],
+            # Which diff the line number belongs to. A commit's diff numbers lines in that
+            # commit's version of a file and the final diff numbers them in the branch's,
+            # so the same anchor means two different places. Rows written before this
+            # existed are all commit anchored, which is what a missing value means.
+            "view": "files" if payload.get("view") == "files" else "commits",
             "commit": str(payload.get("commit", ""))[:40],
             "file": str(payload.get("file", ""))[:300],
             "side": str(payload.get("side", ""))[:8],

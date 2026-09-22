@@ -8,6 +8,7 @@ import json
 
 import build_data
 import paths
+import watch
 
 from harness import build, build_stderr, case, commit, eq, Failed, sandbox
 
@@ -985,6 +986,36 @@ def a_line_moved_within_a_file_is_still_a_removal():
             True,
             f"where the marker was ({entry.get('gone')})",
         )
+
+
+@case
+def the_watcher_says_which_diff_a_question_was_asked_on():
+    """A line number means one thing in a commit's diff and another in the final diff. The
+    session reading the question opens a file at that line, so the line on its own is an
+    instruction to look in the wrong place."""
+    on_files = watch.describe_question(
+        {
+            "id": "q1",
+            "view": "files",
+            "file": "a.py",
+            "line": "12",
+            "side": "del",
+            "question": "why did this go?",
+        }
+    )
+    eq("commit ?" in on_files, False, f"no commit invented ({on_files})")
+    eq("as it stands" in on_files, True, f"which diff it is in ({on_files})")
+    on_commits = watch.describe_question(
+        {
+            "id": "q2",
+            "commit": "abc1234",
+            "file": "a.py",
+            "line": "12",
+            "side": "add",
+            "question": "what is this?",
+        }
+    )
+    eq("abc1234" in on_commits, True, f"the commit it was asked on ({on_commits})")
 
 
 @case

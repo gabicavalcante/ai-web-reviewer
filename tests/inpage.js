@@ -12,6 +12,54 @@
 // this diff. Which is the thing that goes wrong, and the thing worth asserting on.
 const fs = require("fs");
 
+// Enough of a selector engine for the ones the page uses: a descendant chain of
+// tag/.class/[attr] compounds. Returning [] from querySelectorAll, as this did, meant
+// paintThreads walked an empty document and every case about it passed without it having
+// drawn anything. It is the function that runs every four seconds and the one two review
+// rounds have found bugs in, so it is worth being able to see.
+// A class can arrive two ways: el() sets className, and the page calls classList.add.
+// Reading only the first made a row marked by classList invisible both to the page's own
+// querySelectorAll and to what this reports.
+const classesOf = (node) => [
+  ...String(node.className || "").split(" ").filter(Boolean),
+  ...(node.classList && node.classList._s ? [...node.classList._s] : []),
+];
+
+const matchesOne = (node, sel) => {
+  const tag = (sel.match(/^[a-zA-Z]+/) || [])[0];
+  if (tag && node.tagName !== tag.toUpperCase()) return false;
+  const have = classesOf(node);
+  if (![...sel.matchAll(/\.([\w-]+)/g)].every((m) => have.includes(m[1]))) return false;
+  return [...sel.matchAll(/\[([\w-]+)(?:=["']?([^\]"']*)["']?)?\]/g)].every(([, name, want]) => {
+    const key = name.startsWith("data-")
+      ? name.slice(5).replace(/-(\w)/g, (_, c) => c.toUpperCase())
+      : name;
+    const got = name.startsWith("data-") ? (node.dataset || {})[key] : node[name];
+    return want === undefined ? got !== undefined : String(got) === want;
+  });
+};
+
+const descendants = (node, out = []) => {
+  (node.children || []).forEach((c) => { out.push(c); descendants(c, out); });
+  return out;
+};
+
+const queryAll = (root, selector) =>
+  selector.split(",").flatMap((one) => {
+    const parts = one.trim().split(/\s+/);
+    const last = parts[parts.length - 1];
+    return descendants(root).filter((node) => {
+      if (!matchesOne(node, last)) return false;
+      let up = node.parentNode;
+      for (let i = parts.length - 2; i >= 0; i--) {
+        while (up && up !== root && !matchesOne(up, parts[i])) up = up.parentNode;
+        if (!up || up === root) return matchesOne(root, parts[i]) && i === 0;
+        up = up.parentNode;
+      }
+      return true;
+    });
+  });
+
 const mk = (tag) => {
   const node = {
     tagName: (tag || "div").toUpperCase(),
@@ -38,18 +86,23 @@ const mk = (tag) => {
       sib.parentNode = p;
     },
     addEventListener(type, fn) { (node._on = node._on || {})[type] = fn; },
-    focus() {}, closest() { return null; },
+    focus() {},
+    closest(sel) {
+      for (let up = node; up; up = up.parentNode) if (matchesOne(up, sel)) return up;
+      return null;
+    },
     setAttribute(k, v) { node[k] = v; }, getAttribute(k) { return node[k]; },
     matches() { return false; },
-    // The page scans its own subtree for diff rows. Without these, paintThreads threw and
-    // paintOrphans never ran, so every thread read as anchored whatever the page did.
-    querySelectorAll() { return []; },
-    querySelector() { return null; },
+    querySelectorAll(sel) { return queryAll(node, sel); },
+    querySelector(sel) { return queryAll(node, sel)[0] || null; },
     scrollIntoView() {},
   };
   return node;
 };
 
+// Handlers the page puts on the document itself. The click that opens a question is one
+// of them, so a case cannot reach it without these being kept.
+const docHandlers = {};
 const registry = {};
 globalThis.document = {
   title: "",
@@ -58,24 +111,35 @@ globalThis.document = {
   createTextNode: (t) => ({ nodeValue: t }),
   getElementById: (id) => (registry[id] = registry[id] || mk("div")),
   querySelectorAll: () => [],
-  addEventListener: () => {},
+  addEventListener: (type, fn) => { docHandlers[type] = fn; },
   hidden: false,
 };
 // The reviewed ticks live in localStorage, keyed by sha, so a case can seed them.
-const stored = process.argv[4] ? fs.readFileSync(process.argv[4], "utf8") : null;
+const stored = process.argv[4] ? fs.readFileSync(process.argv[4], "utf8") || null : null;
 globalThis.localStorage = { getItem: () => stored, setItem: () => {} };
-globalThis.window = { confirm: () => false, location: { reload() {} } };
+// A drag that ends on a row is a selection, not a click, and the page checks for one
+// before opening a thread. Nothing here selects anything.
+globalThis.window = { confirm: () => false, location: { reload() {} }, getSelection: () => "" };
 globalThis.setInterval = () => 0;
 
 const threads = JSON.parse(fs.readFileSync(process.argv[3], "utf8"));
+// { anchor: "files a.py:2 del", question: "…" } — the row to click and what to type.
+const plan = process.argv[5] ? JSON.parse(fs.readFileSync(process.argv[5], "utf8")) : null;
+const posted = [];
 // The page reads its threads from /thread on the first poll, so that is where they go in.
-globalThis.fetch = (url) =>
-  String(url).startsWith("/thread")
-    ? Promise.resolve({
-        ok: true,
-        json: () => Promise.resolve({ threads, revision: "", watcher: true }),
-      })
-    : Promise.reject(new Error("only /thread is served here"));
+globalThis.fetch = (url, init) => {
+  if (String(url).startsWith("/thread")) {
+    return Promise.resolve({
+      ok: true,
+      json: () => Promise.resolve({ threads, revision: "", watcher: true }),
+    });
+  }
+  if (String(url) === "/ask") {
+    posted.push(JSON.parse((init || {}).body || "{}"));
+    return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve({ ok: true }) });
+  }
+  return Promise.reject(new Error("only /thread and /ask are served here"));
+};
 
 const html = fs.readFileSync(process.argv[2], "utf8");
 const script = html.split("<script>")[1].split("</script>").slice(0, -1).join("</script>");
@@ -85,6 +149,46 @@ try {
 } catch (error) {
   console.error(`page script threw: ${error.constructor.name}: ${error.message}`);
   process.exit(1);
+}
+
+const anchorOf = (n) => {
+  const d = n.dataset || {};
+  return `${d.view || "commits"} ${d.file}:${d.line} ${d.side}`;
+};
+
+/* Drive a question the way a reviewer does: click the gutter of a row, type into the
+   composer that opens, and press the button. Every step of that runs through the page's
+   own handlers, so a row the page will not open a composer on fails here too. */
+function askOn(plan) {
+  // getElementById hands out standalone nodes, so the page's subtrees hang off those
+  // rather than off body. A search from body alone found nothing at all.
+  const roots = () => [registry.fileGroups, registry.board, document.body].filter(Boolean);
+  const all = (sel) => roots().flatMap((r) => queryAll(r, sel));
+  if (plan.open) {
+    all("button.file-head").forEach((head) => head._on && head._on.click && head._on.click());
+  }
+  const row = all("tr[data-line]").find((n) => anchorOf(n) === plan.anchor);
+  if (!row) return { error: `no row anchored ${plan.anchor}` };
+  const gut = queryAll(row, "td.gut")[0] || row;
+  if (!docHandlers.click) return { error: "the page registered no click handler" };
+  docHandlers.click({ target: gut, preventDefault() {} });
+  const composer = all("div.composer")[0];
+  // A row that already carries a thread opens the docked panel instead, which is the
+  // other thing a click can do and worth reporting rather than failing on.
+  if (!composer) return { composer: null };
+  const input = queryAll(composer, "textarea")[0];
+  input.value = plan.question;
+  const send = queryAll(composer, "button.btn").find((b) => b.textContent === "Ask Claude");
+  if (!send) return { error: "no send button" };
+  send._on.click();
+  return { composer: (queryAll(composer, "div.anchor")[0] || {}).textContent || "" };
+}
+
+/* The X on the docked panel. Closing has to put back every mark opening made, and the
+   row it marked can be on either tab. */
+function closeSidePanel() {
+  const close = registry.sideClose;
+  if (close && close._on && close._on.click) close._on.click();
 }
 
 // The poll is a promise; let it settle before reading what it drew.
@@ -100,6 +204,13 @@ setTimeout(() => {
   const orphans = threads
     .filter((t) => cards.some((card) => card.includes(header(t))))
     .map((t) => t.id);
+
+  // A paint that throws is swallowed by refresh()'s catch into the status line, and every
+  // case that only counts orphan cards then passes against a page that drew nothing at
+  // all. The status is reported so a case can tell those apart.
+  const asking = plan ? askOn(plan) : null;
+  if (plan && plan.thenClose) closeSidePanel();
+
   // The rows a stage's pane actually drew. A pane is seeded from what survived and from
   // what the stage removed, and the removal half is only observable here: the data says a
   // line is gone, and whether the page puts it on screen is a separate question.
@@ -108,8 +219,23 @@ setTimeout(() => {
   // walk from the container would report its rows too and a case about one view would
   // pass on the strength of the other.
   const pane = [];
+  // What a row on the files tab offers a question: the anchor it carries, and whether a
+  // thread was drawn under it. Both are the point of the tab being askable at all, and
+  // neither is visible in the row text.
+  const anchors = [];
+  const asked = [];
+  let filesThreads = 0;
   const walk = (n, inside) => {
-    const cls = String(n.className || "");
+    const cls = classesOf(n).join(" ");
+    if (n.tagName === "TR") {
+      const d = n.dataset || {};
+      const at = `${d.view || "commits"} ${d.file}:${d.line} ${d.side}`;
+      if (d.line) anchors.push(at);
+      // Whether the page matched a thread to this row. Set in both layouts, unlike the
+      // inline thread row, which the docked panel replaces.
+      if (d.line && d.asked) asked.push(`${at} ${d.asked}`);
+      if (cls.split(" ").includes("thread-row")) filesThreads += 1;
+    }
     if (inside && n.tagName === "TR") {
       const code = (n.children || []).find((c) => c.className === "code");
       // The whole class list. Reporting only the first left "del own" and "del"
@@ -117,20 +243,26 @@ setTimeout(() => {
       // from one that merely fell inside the window could not be checked at all.
       if (code) pane.push(`${cls || "row"} ${code.textContent}`);
     }
-    (n.children || []).forEach((c) => walk(c, inside || cls.split(" ").includes("stagepane")));
+    (n.children || []).forEach((c) => walk(c, inside || classesOf(n).includes("stagepane")));
   };
   if (registry.fileGroups) walk(registry.fileGroups, false);
 
-  // A paint that throws is swallowed by refresh()'s catch into the status line, and every
-  // case that only counts orphan cards then passes against a page that drew nothing at
-  // all. The status is reported so a case can tell those apart.
-  console.log(JSON.stringify({
+  // The send is a promise too; let it run before reporting what reached /ask.
+  setTimeout(() => console.log(JSON.stringify({
+    asking,
+    posted,
+    side: registry.sideAnchor ? registry.sideAnchor.textContent : "",
+    // Hidden is what closing does; the anchor text is left where it was.
+    sideOpen: !!(registry.side && registry.side.hidden === false),
     cards: cards.length,
     pane,
+    anchors,
+    asked,
+    filesThreads,
     orphans,
     anchored: threads.map((t) => t.id).filter((id) => !orphans.includes(id)),
     status: registry.qnaStatus ? registry.qnaStatus.textContent : "",
     rail: (registry.stageRail ? registry.stageRail.children : []).map(text),
     reviewed: (registry.progressText ? registry.progressText.textContent : "").split(" ")[0],
-  }));
+  })), 10);
 }, 50);

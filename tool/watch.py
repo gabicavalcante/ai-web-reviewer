@@ -181,6 +181,19 @@ def backlog():
 
 
 def describe_question(row):
+    # Where to look, in the terms of the diff it was asked on. A line number means one
+    # place in a commit's diff and another in the final diff, so saying which is the
+    # difference between opening the right file at the right line and the wrong one.
+    if row.get("view") == "files":
+        return (
+            "QUESTION {id} · {file}:{line} ({side}) in the branch as it stands · {question}"
+        ).format(
+            id=row.get("id", "?"),
+            file=row.get("file", "?"),
+            line=row.get("line", "?"),
+            side=row.get("side", "?"),
+            question=row.get("question", "").strip(),
+        )
     return "QUESTION {id} · commit {commit} · {file}:{line} ({side}) · {question}".format(
         id=row.get("id", "?"),
         commit=row.get("commit", "?"),

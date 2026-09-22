@@ -236,7 +236,7 @@ def build_stderr(repo, rng, narrative=None):
     return done.stderr
 
 
-def in_page(page, threads, reviewed=None):
+def in_page(page, threads, reviewed=None, ask=None):
     """Hand a built page some threads and ticks, and report what it made of them.
 
     Fails without node rather than returning quietly: a case that returns early counts as
@@ -246,14 +246,20 @@ def in_page(page, threads, reviewed=None):
     if not shutil.which("node"):
         raise Failed("node is needed to run the page, and is not installed")
     handles = []
-    for payload in (threads, reviewed):
+    for payload in (threads, reviewed, ask):
         if payload is None:
             handles.append(None)
             continue
         with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False) as handle:
             json.dump(payload, handle)
             handles.append(handle.name)
-    argv = [str(page), handles[0]] + ([handles[1]] if handles[1] else [])
+    # The ask plan is the fifth argument, so a case that wants one but no ticks still
+    # lines up: an empty placeholder keeps the positions honest.
+    argv = [str(page), handles[0]]
+    if handles[2]:
+        argv += [handles[1] or "", handles[2]]
+    elif handles[1]:
+        argv += [handles[1]]
     try:
         done = subprocess.run(
             ["node", str(HERE / "inpage.js"), *argv], capture_output=True, text=True
@@ -271,6 +277,7 @@ def in_page(page, threads, reviewed=None):
         raise Failed(f"the page never painted: {drew['status']!r}")
     drew["reviewed"] = int(drew.get("reviewed") or 0)
     drew.setdefault("rail", [])
+    drew.setdefault("posted", [])
     return drew
 
 

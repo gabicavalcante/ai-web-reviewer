@@ -848,11 +848,12 @@
         tr.appendChild(td);
       } else {
         const lineNo = r.t === "del" ? r.o : r.n;
-        /* A thread anchors to a commit, a file and a line. The files view has no single
-           commit behind a line, so its rows carry no anchor, and the click handler that
-           opens a question matches on data-line and passes them over. */
+        /* A thread anchors to a file, a side and a line, in the diff it was asked on.
+           On a commit's diff that is that commit's version of the file; on the branch's
+           own diff there is no single commit behind a line, and none is recorded. */
         if (anchored) {
-          tr.dataset.commit = commitShort;
+          tr.dataset.view = commitShort ? "commits" : "files";
+          if (commitShort) tr.dataset.commit = commitShort;
           tr.dataset.file = f.path;
           tr.dataset.side = r.t;
           tr.dataset.line = String(lineNo);
@@ -1026,15 +1027,25 @@
   const VALID_ANCHORS = new Set();
   DATA.commits.forEach(c => withFollowups(c).forEach(src => src.files.forEach(f => f.rows.forEach(r => {
     if (r.t === "hunk") return;
-    VALID_ANCHORS.add([src.short, f.path, r.t, String(r.t === "del" ? r.o : r.n)].join("\u0000"));
+    VALID_ANCHORS.add(["commits", src.short, f.path, r.t, String(r.t === "del" ? r.o : r.n)].join("\u0000"));
   }))));
+  /* And every line of the branch as it stands, which is what the files tab numbers. */
+  ((DATA.final || {}).files || []).forEach(f => f.rows.forEach(r => {
+    if (r.t === "hunk") return;
+    VALID_ANCHORS.add(["files", f.path, r.t, String(r.t === "del" ? r.o : r.n)].join("\u0000"));
+  }));
   let composerOpen = false;
-  const anchorKey = d => [canonicalSha(d.commit), d.file, d.side, d.line].join("\u0000");
+  /* The diff a question was asked on is part of the anchor, because the same file, side
+     and line name two different places depending on it. A row written before the files
+     tab could be asked on carries no view, and every one of those is commit anchored. */
+  const anchorKey = d => (d.view === "files"
+    ? ["files", d.file, d.side, d.line]
+    : ["commits", canonicalSha(d.commit), d.file, d.side, d.line]).join("\u0000");
 
-  /* Threads live in the commits view only, so every scan for a row runs over that
-     subtree rather than the document. The files view holds a second copy of the branch
-     once it has been opened, and the poll walks this every few seconds. */
+  /* The two subtrees a row can be asked on, rather than the whole document: the poll
+     walks these every few seconds, and everything outside them is chrome. */
   const board = () => document.getElementById("board");
+  const panes = () => [board(), document.getElementById("fileGroups")].filter(Boolean);
 
   /* Every thread the page is given belongs to this review: the server reads the review's
      own logs and nothing else. The branch on a row says where a question was asked, which
@@ -1269,6 +1280,13 @@
         tr.appendChild(td);
       } else {
         const lineNo = r.t === "del" ? r.o : r.n;
+        /* The branch as it stands is one diff, so a line here is named by the file, the
+           side and the number, the way a pull request comment is. */
+        tr.dataset.view = "files";
+        tr.dataset.file = f.path;
+        tr.dataset.side = r.t;
+        tr.dataset.line = String(lineNo);
+        tr.dataset.code = r.text;
         tr.appendChild(el("td", "gut", String(lineNo)));
         tr.appendChild(el("td", "sign", r.t === "add" ? "+" : r.t === "del" ? "−" : ""));
         tr.appendChild(el("td", "code", r.text));
@@ -1370,7 +1388,7 @@
         if (owner && byWhat.get(owner)) box.appendChild(el("p", "what", byWhat.get(owner)));
         groups.appendChild(box);
       }
-      const plain = renderFile({...f, collapsed: true}, null, false);
+      const plain = renderFile({...f, collapsed: true}, null, true);
       box.appendChild(plain);
       // A review with no stages still gets the sentence, which is the whole of what the
       // list is read by.
@@ -1502,7 +1520,7 @@
     if (entries[0].where === null) paintAllFiles(); else paintStage(entries[0].where);
     document.getElementById("filesNote").textContent =
       "Only what " + entries[0].label + " wrote, with a few lines either side. "
-      + "Questions are asked on the Commits tab, where a line has a commit behind it.";
+      + "Ask about a line by clicking its number.";
     return true;
   }
 
@@ -1548,12 +1566,12 @@
     sideKey = null;
     document.getElementById("side").hidden = true;
     document.body.classList.remove("side-open");
-    board().querySelectorAll("tr.side-open-row")
-      .forEach(n => n.classList.remove("side-open-row"));
+    panes().forEach(root => root.querySelectorAll("tr.side-open-row")
+      .forEach(n => n.classList.remove("side-open-row")));
   }
 
   function rowForKey(key) {
-    return [...board().querySelectorAll("table.diff tr[data-line]")]
+    return panes().flatMap(root => [...root.querySelectorAll("table.diff tr[data-line]")])
       .find(tr => anchorKey(tr.dataset) === key) || null;
   }
 
@@ -1565,8 +1583,8 @@
     // resolved and hidden. Closing beats showing a thread with nothing to point at.
     if (!tr || !list) { closeSide(); return; }
 
-    board().querySelectorAll("tr.side-open-row")
-      .forEach(n => n.classList.remove("side-open-row"));
+    panes().forEach(root => root.querySelectorAll("tr.side-open-row")
+      .forEach(n => n.classList.remove("side-open-row")));
     tr.classList.add("side-open-row");
 
     document.getElementById("sideAnchor").textContent =
@@ -1617,16 +1635,18 @@
        lands while it is open. Carry the draft across instead. */
     const draft = typingIn ? captureDraft(typingIn) : null;
     replyInputs.clear();
-    board().querySelectorAll("tr.thread-row").forEach(n => n.remove());
-    board().querySelectorAll("table.diff tr[data-asked]").forEach(n => {
-      delete n.dataset.asked;
-      const g = n.querySelector("td.gut");
-      if (g) delete g.dataset.threads;
+    panes().forEach(root => {
+      root.querySelectorAll("tr.thread-row").forEach(n => n.remove());
+      root.querySelectorAll("table.diff tr[data-asked]").forEach(n => {
+        delete n.dataset.asked;
+        const g = n.querySelector("td.gut");
+        if (g) delete g.dataset.threads;
+      });
     });
 
     const byAnchor = threadsByAnchor();
     const side = sideMode();
-    board().querySelectorAll("table.diff tr[data-line]").forEach(tr => {
+    panes().flatMap(root => [...root.querySelectorAll("table.diff tr[data-line]")]).forEach(tr => {
       const list = byAnchor.get(anchorKey(tr.dataset));
       if (!list) return;
       const allResolved = list.every(t => t.resolved);
@@ -1793,7 +1813,8 @@
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             question,
-            commit: tr.dataset.commit,
+            view: tr.dataset.view === "files" ? "files" : "commits",
+            commit: tr.dataset.commit || "",
             file: tr.dataset.file,
             side: tr.dataset.side,
             line: tr.dataset.line,
