@@ -361,6 +361,13 @@
   .btn.ghost:hover { background: var(--accent-soft); }
   .btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
   .composer .hint, .reply .hint { font-family: var(--mono); font-size: 10.5px; color: var(--ink-faint); }
+  /* A thread whose line has changed under it. Muted rather than alarming: the question
+     is still worth reading, it just no longer describes what is on that line. */
+  .stale { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; font-family: var(--sans); font-size: 12px; color: var(--ink-faint); }
+  .stale .tag { font-family: var(--mono); font-size: 10px; letter-spacing: .06em; text-transform: uppercase; color: var(--ink-faint); border: 1px solid var(--line); border-radius: 3px; padding: 1px 5px; }
+  .stale .snippet { flex: 1 0 100%; font-family: var(--mono); font-size: 11.5px; color: var(--ink-soft); background: var(--surface-2); border-radius: 3px; padding: 5px 8px; overflow-x: auto; white-space: pre; }
+  table.diff tr[data-outdated] .gut { box-shadow: inset 3px 0 0 var(--ink-faint); }
+  table.diff tr[data-outdated] .gut::before { background: transparent; box-shadow: inset 0 0 0 1px var(--ink-faint); }
   .thread.done { opacity: .58; }
   .reply .row .btn.resolve { margin-left: auto; flex: none; }
   .btn.small { font-size: 12px; padding: 4px 10px; }
@@ -1061,6 +1068,47 @@
     ? ["files", d.file, d.side, d.line]
     : ["commits", canonicalSha(d.commit), d.file, d.side, d.line]).join("\u0000");
 
+  /* The final diff by position and by text, so a thread can be found again after the
+     branch moves under it. */
+  const FINAL_AT = new Map();
+  const FINAL_BY_TEXT = new Map();
+  ((DATA.final || {}).files || []).forEach(f => f.rows.forEach(r => {
+    if (r.t === "hunk") return;
+    const line = String(r.t === "del" ? r.o : r.n);
+    FINAL_AT.set([f.path, r.t, line].join("\u0000"), r.text);
+    const byText = [f.path, r.t, r.text].join("\u0000");
+    if (!FINAL_BY_TEXT.has(byText)) FINAL_BY_TEXT.set(byText, []);
+    FINAL_BY_TEXT.get(byText).push(line);
+  }));
+
+  /* Where a thread belongs now, or null when the page cannot place it at all.
+     A question leads to a fixup, the fixup changes the final state, and the final state
+     is what the anchor points into. So the line a thread names can hold something else
+     afterwards, or be numbered differently.
+     The text it was asked about decides, and only where there is one of it: a file
+     repeats its brackets, its quotes and its blank lines, and a thread put on the wrong
+     one of those is worse than a thread that says it no longer matches. */
+  function placeThread(t) {
+    if (t.view !== "files") {
+      const key = anchorKey(t);
+      return VALID_ANCHORS.has(key) ? { key, outdated: false } : null;
+    }
+    const line = String(t.line);
+    const at = FINAL_AT.get([t.file, t.side, line].join("\u0000"));
+    const keyFor = where => ["files", t.file, t.side, where].join("\u0000");
+    if (at !== undefined && at === t.code) return { key: keyFor(line), outdated: false };
+    const same = FINAL_BY_TEXT.get([t.file, t.side, t.code].join("\u0000")) || [];
+    if (same.length === 1) return { key: keyFor(same[0]), outdated: false };
+    // The line is still there and says something else. Left where it was asked, which is
+    // what the reviewer will recognise, and said to be out of date.
+    if (at !== undefined) return { key: keyFor(line), outdated: true };
+    return null;
+  }
+
+  /* Threads drawn against a line that no longer holds what they asked about. Rebuilt
+     with the map, because a rebuild is what changes it. */
+  let outdatedThreads = new Set();
+
   /* The two subtrees a row can be asked on, rather than the whole document: the poll
      walks these every few seconds, and everything outside them is chrome. */
   const board = () => document.getElementById("board");
@@ -1072,10 +1120,13 @@
 
   function threadsByAnchor() {
     const map = new Map();
+    outdatedThreads = new Set();
     THREADS.forEach(t => {
-      const key = anchorKey(t);
-      if (!map.has(key)) map.set(key, []);
-      map.get(key).push(t);
+      const placed = placeThread(t);
+      if (!placed) return;
+      if (placed.outdated) outdatedThreads.add(t.id);
+      if (!map.has(placed.key)) map.set(placed.key, []);
+      map.get(placed.key).push(t);
     });
     return map;
   }
@@ -1105,7 +1156,7 @@
     /* One reason a thread cannot be anchored now: its commit was rewritten out of the
        range. Threads from another review used to land here too, and needed telling
        apart; they are in that review's own logs and never reach this page. */
-    const orphans = THREADS.filter(t => !VALID_ANCHORS.has(anchorKey(t)));
+    const orphans = THREADS.filter(t => !placeThread(t));
     const section = document.getElementById("orphans");
     const list = document.getElementById("orphanList");
     section.hidden = orphans.length === 0;
@@ -1147,6 +1198,16 @@
 
         thread.appendChild(box);
         return;
+      }
+      if (outdatedThreads.has(t.id)) {
+        /* The line is still numbered the same and holds something else now. Saying so
+           beats drawing the question against code the reviewer never asked about. */
+        const stale = el("div", "stale");
+        stale.appendChild(el("span", "tag", "outdated"));
+        stale.appendChild(document.createTextNode(
+          "the line this was asked on has changed since"));
+        if (t.code) stale.appendChild(el("div", "snippet", t.code));
+        thread.appendChild(stale);
       }
       const q = el("div", "turn you");
       q.appendChild(el("span", "who", "you"));
@@ -1673,6 +1734,7 @@
       root.querySelectorAll("tr.thread-row").forEach(n => n.remove());
       root.querySelectorAll("table.diff tr[data-asked]").forEach(n => {
         delete n.dataset.asked;
+        delete n.dataset.outdated;
         const g = n.querySelector("td.gut");
         if (g) delete g.dataset.threads;
       });
@@ -1685,6 +1747,7 @@
       if (!list) return;
       const allResolved = list.every(t => t.resolved);
       tr.dataset.asked = allResolved ? "resolved" : "true";
+      if (list.some(t => outdatedThreads.has(t.id))) tr.dataset.outdated = "true";
       const gut = tr.querySelector("td.gut");
       if (gut) {
         if (list.length > 1) gut.dataset.threads = String(list.length);

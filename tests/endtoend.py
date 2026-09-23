@@ -1553,12 +1553,15 @@ def a_paint_clears_the_marks_the_last_one_left():
     on claiming a question nobody can open."""
     with sandbox() as (repo, run):
         rng = files_review(repo, run)
+        # Outdated as well as asked, so both marks a paint can leave are checked.
+        stale = {**FILES_THREAD, "code": "what used to be here"}
         drew = in_page(
             paths.page(rng, repo),
-            [FILES_THREAD],
+            [stale],
             ask={"steps": [{"serve": []}, {"tick": True}]},
         )
         eq(drew["asked"], [], f"nothing still claims a thread ({drew['asked']})")
+        eq(drew["outdated"], [], f"and none still reads as outdated ({drew['outdated']})")
 
 
 @case
@@ -1907,6 +1910,99 @@ def the_commit_to_fix_up_is_read_from_the_branch_not_the_checkout():
             rng=rng,
         )
         eq(f"fix up {wrote}" in said, True, f"the branch's commit ({said!r}, want {wrote})")
+
+
+def repeats_review(repo, run):
+    """A branch whose diff holds the same added text twice, which is the ordinary case a
+    text match cannot resolve: closing brackets, docstring quotes, blank lines."""
+    (repo / "r.py").write_text("head\n")
+    run("add", "-A")
+    run("commit", "-qm", "base")
+    run("update-ref", "refs/remotes/origin/main", "HEAD")
+    (repo / "r.py").write_text("head\nfirst\n)\nsecond\n)\n")
+    run("add", "-A")
+    run("commit", "-qm", "The branch adds two blocks")
+    rng = paths.resolve_range("origin/main...HEAD", repo)
+    subprocess.run(
+        [sys.executable, str(TOOL / "review.py"), "build", "origin/main...HEAD"],
+        cwd=str(repo),
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    return rng
+
+
+@case
+def a_thread_whose_line_still_says_what_was_asked_about_stays_put():
+    """The ordinary case, and the one the others are measured against."""
+    with sandbox() as (repo, run):
+        rng = files_review(repo, run)
+        t = {**FILES_THREAD, "side": "add", "line": "3", "code": "added by A"}
+        drew = in_page(paths.page(rng, repo), [t])
+        eq("files a.py:3 add true" in drew["asked"], True, f"marked ({drew['asked']})")
+        eq(drew["outdated"], [], f"and not outdated ({drew['outdated']})")
+
+
+@case
+def a_thread_follows_its_line_when_the_diff_moves_it():
+    """A fixup changes the final diff, and the line a question was asked on is numbered
+    differently afterwards. Where the text it was asked about is still there, and there
+    is only one of it, the thread belongs to it."""
+    with sandbox() as (repo, run):
+        rng = files_review(repo, run)
+        # Asked at line 1 ; that text is at line 3 now, and nowhere else.
+        t = {**FILES_THREAD, "side": "add", "line": "1", "code": "added by A"}
+        drew = in_page(paths.page(rng, repo), [t])
+        eq(drew["orphans"], [], f"not orphaned ({drew['orphans']})")
+        eq("files a.py:3 add true" in drew["asked"], True, f"moved to it ({drew['asked']})")
+        eq(drew["outdated"], [], f"and not outdated ({drew['outdated']})")
+
+
+@case
+def a_thread_whose_line_changed_under_it_is_marked_outdated():
+    """The line is still numbered the same and holds something else. Drawing the question
+    against it says the reviewer asked about code they never saw."""
+    with sandbox() as (repo, run):
+        rng = files_review(repo, run)
+        t = {**FILES_THREAD, "side": "add", "line": "3", "code": "what used to be here"}
+        drew = in_page(paths.page(rng, repo), [t])
+        eq(drew["orphans"], [], f"still on the page ({drew['orphans']})")
+        eq("files a.py:3 add" in drew["outdated"], True, f"marked ({drew['outdated']})")
+
+
+@case
+def a_thread_is_not_moved_onto_a_line_that_could_be_either():
+    """Re-anchoring is a text match and a file repeats itself. Two candidates is no
+    answer, and a thread on the wrong bracket is worse than one that says it no longer
+    matches."""
+    with sandbox() as (repo, run):
+        rng = repeats_review(repo, run)
+        # ")" is added twice. The thread was asked on a line that is now something else.
+        t = {**FILES_THREAD, "file": "r.py", "side": "add", "line": "2", "code": ")"}
+        # No narrative, so the tab is the plain listing and its files start closed.
+        drew = in_page(paths.page(rng, repo), [t], ask={"steps": [{"open": True}]})
+        eq(
+            "files r.py:2 add" in drew["outdated"],
+            True,
+            f"marked outdated ({drew['outdated']})",
+        )
+        eq(
+            [a for a in drew["asked"] if "r.py:3" in a or "r.py:5" in a],
+            [],
+            f"and not guessed onto either ({drew['asked']})",
+        )
+
+
+@case
+def a_thread_whose_line_and_text_are_both_gone_is_orphaned():
+    """Nothing to move it to and no row to mark: that is the orphan list, which already
+    exists for the case where the anchor names nothing."""
+    with sandbox() as (repo, run):
+        rng = files_review(repo, run)
+        t = {**FILES_THREAD, "id": "q9", "side": "add", "line": "99", "code": "gone entirely"}
+        drew = in_page(paths.page(rng, repo), [t])
+        eq(drew["orphans"], ["q9"], f"orphaned ({drew['orphans']})")
 
 
 @case

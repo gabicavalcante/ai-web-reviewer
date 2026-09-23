@@ -136,13 +136,12 @@ layer that is a heuristic in both directions.
 ## Order of work
 
 1. ~~Render removed lines deliberately, attributed by stage.~~ Done.
-2. Make a row on the files tab askable: the click handler, the composer, and `/ask` already
-   work from a row's dataset.
-3. Anchor in final-diff coordinates, and mark a thread outdated when the diff no longer
-   matches.
+2. ~~Make a row on the files tab askable.~~ Done.
+3. ~~Anchor in final-diff coordinates, and mark a thread outdated when the diff no longer
+   matches.~~ Done. The anchoring came with step 2; what step 3 added is the placing:
+   a thread follows its text where there is one of it, and says it is out of date where
+   there is not.
 4. Move the existing threads into their own section.
-
-Steps 1 and 2 are each worth having on their own, which is the order to build them in.
 
 ## What this costs
 

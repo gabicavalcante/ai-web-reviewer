@@ -280,6 +280,7 @@ def in_page(page, threads, reviewed=None, ask=None):
     drew.setdefault("posted", [])
     drew.setdefault("orphanCards", [])
     drew.setdefault("gutter", [])
+    drew.setdefault("outdated", [])
     drew.setdefault("composers", 0)
     return drew
 

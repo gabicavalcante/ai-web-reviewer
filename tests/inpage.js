@@ -270,6 +270,7 @@ setTimeout(() => {
   // neither is visible in the row text.
   const anchors = [];
   const asked = [];
+  const outdated = [];
   const gutter = [];
   const walk = (n, inside) => {
     const cls = classesOf(n).join(" ");
@@ -280,6 +281,8 @@ setTimeout(() => {
       // Whether the page matched a thread to this row. Set in both layouts, unlike the
       // inline thread row, which the docked panel replaces.
       if (d.line && d.asked) asked.push(`${at} ${d.asked}`);
+      // A thread whose line still exists but no longer holds what was asked about.
+      if (d.line && d.outdated) outdated.push(at);
       // The badge saying how many questions a line carries.
       const g = (n.children || []).find((c) => classesOf(c).includes("gut"));
       if (g && (g.dataset || {}).threads) gutter.push(g.dataset.threads);
@@ -306,6 +309,7 @@ setTimeout(() => {
     pane,
     anchors,
     asked,
+    outdated,
     gutter,
     // Composer rows still on the page. Sending is supposed to take it away.
     composers: [registry.board, registry.fileGroups]
