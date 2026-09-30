@@ -2069,7 +2069,9 @@
 
     const submit = async () => {
       const text = input.value.trim();
-      if (!text) return;
+      // Ctrl+Enter reaches this without the button, so the button being disabled while a
+      // send is in flight is checked here rather than trusted to stop a second one.
+      if (!text || send.disabled) return;
       send.disabled = true;
       send.textContent = "Sending…";
       if (!(await sendReply(threadId, text, "answer", input))) {
@@ -2143,7 +2145,8 @@
 
     const submit = async () => {
       const question = input.value.trim();
-      if (!question) return;
+      // The same guard as a reply's: the keyboard goes around the disabled button.
+      if (!question || send.disabled) return;
       send.disabled = true;
       send.textContent = "Sending…";
       try {

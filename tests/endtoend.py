@@ -1844,6 +1844,29 @@ def every_half_typed_reply_survives_a_repaint():
 
 
 @case
+def a_question_or_reply_sent_twice_from_the_keyboard_goes_once():
+    """The button is disabled while a send is in flight, and Ctrl+Enter went around it:
+    pressed twice, it asked the same question twice, and Claude answered it twice."""
+    with sandbox() as (repo, run):
+        rng = files_review(repo, run)
+        drew = in_page(paths.page(rng, repo), [], ask={"steps": [
+            {"gutter": "files a.py:3 add"},
+            {"type": "once, please"},
+            {"ctrlEnterTwice": True},
+        ]})
+        asks = [row for row in drew["posted"] if "url" not in row]
+        eq(len(asks), 1, f"questions posted ({drew['posted']})")
+        orphan = {"id": "q1", "view": "files", "file": "a.py", "side": "add", "line": "80",
+                  "code": "gone", "question": "?", "turns": [], "resolved": False}
+        drew = in_page(paths.page(rng, repo), [orphan], ask={"steps": [
+            {"reply": {"id": "q1", "text": "once"}},
+            {"replyEnterTwice": "q1"},
+        ]})
+        replies = [row for row in drew["posted"] if row.get("url") == "/reply"]
+        eq(len(replies), 1, f"replies posted ({drew['posted']})")
+
+
+@case
 def the_docked_panel_opens_on_a_commits_tab_row_too():
     """Both tabs carry threads, so the panel has to find its line on either."""
     with sandbox() as (repo, run):
