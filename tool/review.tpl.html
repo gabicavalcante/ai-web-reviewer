@@ -1133,12 +1133,10 @@
   /* Whether a Monitor is tailing the logs. Assumed true until the first poll says
      otherwise, so a live review never flashes the detached state on load. */
   let WATCHER_LIVE = true;
-  /* The reply box being typed in, by place and thread, so a repaint can carry its draft
-     across. One thread can have a box in more than one place, and the draft goes back
-     into the one it was typed in. */
-  let typingAt = null;
   /* The live textarea per place and thread, so a repaint can hand a half-typed reply to
-     the element that replaces it. */
+     the element that replaces it. By place as well as thread, because one thread can
+     have a box in more than one place, and a draft goes back into the one it was typed
+     in. */
   const replyInputs = new Map();
 
   /* Declines written before the reply carried a kind. Matched on the exact text the
@@ -1890,9 +1888,7 @@
     paintSide();
   }
 
-  function captureDraft(key) {
-    const input = replyInputs.get(key);
-    if (!input) return null;
+  function captureDraft(key, input) {
     return {
       key,
       focused: document.activeElement === input,
@@ -1922,8 +1918,11 @@
   function paintThreads() {
     /* A poll must not wipe a half-typed reply, and must not skip the redraw to protect
        one either: a box holding focus would freeze the thread, hiding an answer that
-       lands while it is open. Carry the draft across instead. */
-    const draft = typingAt ? captureDraft(typingAt) : null;
+       lands while it is open. Carry the drafts across instead, every one of them: a
+       reader can start a reply in one thread and move on to type in another. */
+    const drafts = [...replyInputs]
+      .map(([key, input]) => captureDraft(key, input))
+      .filter(draft => draft.value);
     replyInputs.clear();
     panes().forEach(root => {
       root.querySelectorAll("tr.thread-row").forEach(n => n.remove());
@@ -1964,7 +1963,7 @@
        next answer to land on any thread. */
     paintOrphans();
     paintCommitThreads();
-    if (draft) restoreDraft(draft);
+    drafts.forEach(restoreDraft);
   }
 
   /* A question on the files tab is found by reading until a dot turns up in the gutter,
@@ -2041,7 +2040,9 @@
   }
 
 
-  async function sendReply(threadId, text, kind) {
+  /* `input` is the box the reply was typed in. It is emptied before the refresh, which
+     repaints and would otherwise carry the reply just sent back into the box as a draft. */
+  async function sendReply(threadId, text, kind, input) {
     try {
       const res = await fetch("/reply", {
         method: "POST",
@@ -2049,7 +2050,7 @@
         body: JSON.stringify({ thread_id: threadId, text, kind: kind || "answer" })
       });
       if (!res.ok) throw new Error("HTTP " + res.status);
-      typingAt = null;
+      if (input) input.value = "";
       await refresh();
       return true;
     } catch (err) {
@@ -2071,9 +2072,7 @@
       if (!text) return;
       send.disabled = true;
       send.textContent = "Sending…";
-      if (await sendReply(threadId, text)) {
-        input.value = "";
-      } else {
+      if (!(await sendReply(threadId, text, "answer", input))) {
         send.disabled = false;
         send.textContent = "Reply";
       }
@@ -2081,12 +2080,6 @@
 
     const key = place + "\u0000" + threadId;
     replyInputs.set(key, input);
-    input.addEventListener("focus", () => { typingAt = key; });
-    input.addEventListener("blur", () => {
-      if (!input.value.trim()) {
-        typingAt = null;
-      }
-    });
     input.addEventListener("keydown", e => {
       if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) { e.preventDefault(); submit(); }
     });

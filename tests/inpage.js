@@ -264,7 +264,8 @@ async function drive(steps) {
     } else if (step.reply !== undefined) {
       const box = replyBoxes().find((b) => b.thread === step.reply.id);
       if (!box) return [...done, `no reply box on ${step.reply.id}`];
-      box.input._on.focus();
+      const on = box.input._on || {};
+      if (on.focus) on.focus();
       box.input.value = step.reply.text;
       done.push(`typing in ${step.reply.id}`);
     } else if (step.review !== undefined) {

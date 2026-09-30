@@ -1811,6 +1811,39 @@ def an_open_composer_does_not_stop_the_page_repainting():
 
 
 @case
+def every_half_typed_reply_survives_a_repaint():
+    """Only the box last focused was carried across a repaint, so a reply started in one
+    thread was wiped by the next poll once the reader had moved on to type in another.
+    And sending any reply forgot the draft of every other box, not just its own."""
+    with sandbox() as (repo, run):
+        rng = files_review(repo, run)
+        base = {"turns": [], "view": "files", "resolved": False}
+        # Both on lines that are not in the diff, so both are drawn in the orphan list at
+        # once, each with a reply box.
+        one = {**base, "id": "q1", "file": "a.py", "side": "add", "line": "80",
+               "code": "gone", "question": "first?"}
+        two = {**base, "id": "q2", "file": "a.py", "side": "add", "line": "90",
+               "code": "gone too", "question": "second?"}
+        changed = {**two, "turns": [{"role": "claude", "text": "an answer"}]}
+        drew = in_page(paths.page(rng, repo), [one, two], ask={"steps": [
+            {"reply": {"id": "q1", "text": "started here"}},
+            {"reply": {"id": "q2", "text": "then here"}},
+            {"serve": [one, changed]},
+            {"tick": True},
+        ]})
+        eq(sorted(drew["replies"]), ["q1: started here", "q2: then here"],
+           f"the drafts after a poll ({drew['asking']})")
+        drew = in_page(paths.page(rng, repo), [one, two], ask={"steps": [
+            {"reply": {"id": "q1", "text": "kept"}},
+            {"reply": {"id": "q2", "text": "sent"}},
+            {"replyEnterTwice": "q2"},
+            {"serve": [one, changed]},
+            {"tick": True},
+        ]})
+        eq(drew["replies"], ["q1: kept"], f"the drafts after sending another ({drew['asking']})")
+
+
+@case
 def the_docked_panel_opens_on_a_commits_tab_row_too():
     """Both tabs carry threads, so the panel has to find its line on either."""
     with sandbox() as (repo, run):
