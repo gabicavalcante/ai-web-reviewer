@@ -822,14 +822,18 @@
 
     const head = el("button", "file-head");
     head.type = "button";
-    head.appendChild(el("span", "chev", "▾"));
-    head.appendChild(el("span", "fpath", f.path));
-    head.appendChild(el("span", "status " + f.status, f.status));
+    /* The header is a column so the files view can put a sentence under the path. This
+       one has no sentence, but its row still has to be a row. */
+    const top = el("span", "file-top");
+    top.appendChild(el("span", "chev", "▾"));
+    top.appendChild(el("span", "fpath", f.path));
+    top.appendChild(el("span", "status " + f.status, f.status));
     const stat = el("span", "fstat");
     stat.appendChild(el("span", "plus", "+" + f.additions));
     stat.appendChild(document.createTextNode(" "));
     stat.appendChild(el("span", "minus", "−" + f.deletions));
-    head.appendChild(stat);
+    top.appendChild(stat);
+    head.appendChild(top);
     box.appendChild(head);
 
     /* A closed file builds nothing until it is opened. Hiding rows with CSS still costs
