@@ -150,6 +150,10 @@ globalThis.fetch = (url, init) => {
     posted.push(JSON.parse((init || {}).body || "{}"));
     return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve({ ok: true }) });
   }
+  if (String(url) === "/reply" || String(url) === "/resolve") {
+    posted.push({ url, ...JSON.parse((init || {}).body || "{}") });
+    return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve({ ok: true }) });
+  }
   return Promise.reject(new Error("only /thread and /ask are served here"));
 };
 
@@ -194,8 +198,15 @@ const anchorOf = (n) => {
    whole file", {closeSide} press the panel's X, {tick} run the poll, {review} tick the
    file at that path as reviewed, {reply} type into the first reply box of the thread with
    that id, the way a reader does: focus, then text, {commit} click that commit on the
-   rail, {showOnCommits} press the way to the Commits tab on a listed commit thread. */
-function drive(steps) {
+   rail, {showOnCommits} press the way to the Commits tab on a listed commit thread,
+   {cancel} press the composer's Cancel, {key} press a key on the page, {ctrlEnterTwice}
+   send the composer twice from the keyboard, {replyEnterTwice} the same in a reply box,
+   {yes} press "Yes, investigate", {tab} press a tab, {openFile} open a file by its path,
+   {wholeOf} press "Show the whole file" under that file.
+
+   A few milliseconds pass after each step, so a poll or a send can settle between two
+   presses the way it does between a reader's clicks. */
+async function drive(steps) {
   // getElementById hands out standalone nodes, so the page's subtrees hang off those
   // rather than off body. A search from body alone found nothing at all.
   const roots = () => [registry.fileGroups, registry.board, document.body].filter(Boolean);
@@ -203,6 +214,7 @@ function drive(steps) {
   const press = (n) => n && n._on && n._on.click && n._on.click();
   const done = [];
   for (const step of steps) {
+    await new Promise((settle) => setTimeout(settle, 5));
     if (step.open) {
       all("button.file-head").forEach(press);
       done.push("open");
@@ -263,6 +275,43 @@ function drive(steps) {
       box.checked = true;
       box._on.change();
       done.push(`reviewed ${step.review}`);
+    } else if (step.cancel) {
+      const b = all("div.composer").flatMap((c) => queryAll(c, "button.btn")).find((b) => b.textContent === "Cancel");
+      if (!b) return [...done, "no cancel"];
+      press(b); done.push("cancelled");
+    } else if (step.key !== undefined) {
+      if (!docHandlers.keydown) return [...done, "no keydown"];
+      docHandlers.keydown({ key: step.key, target: mk("div"), preventDefault() {} });
+      done.push("key " + step.key);
+    } else if (step.ctrlEnterTwice) {
+      const input = all("div.composer").flatMap((c) => queryAll(c, "textarea"))[0];
+      if (!input) return [...done, "no composer"];
+      const ev = { key: "Enter", ctrlKey: true, preventDefault() {} };
+      input._on.keydown(ev); input._on.keydown(ev);
+      done.push("ctrl-enter x2");
+    } else if (step.replyEnterTwice !== undefined) {
+      const box = replyBoxes().find((b) => b.thread === step.replyEnterTwice);
+      if (!box) return [...done, "no reply box"];
+      const ev = { key: "Enter", ctrlKey: true, preventDefault() {} };
+      box.input._on.keydown(ev); box.input._on.keydown(ev);
+      done.push("reply ctrl-enter x2");
+    } else if (step.yes !== undefined) {
+      const b = [registry.board, registry.fileGroups, registry.sideBody, registry.orphanList,
+        registry.commitThreadList].filter(Boolean)
+        .flatMap((r) => queryAll(r, "button.btn")).find((n) => n.textContent === "Yes, investigate");
+      if (!b) return [...done, "no yes button"];
+      press(b); done.push("yes");
+    } else if (step.tab !== undefined) {
+      press(step.tab === "files" ? registry.tabFiles : registry.tabCommits);
+      done.push("tab " + step.tab);
+    } else if (step.openFile !== undefined) {
+      const h = all("button.file-head").find((b) => queryAll(b, "span.fpath").some((n) => n.textContent === step.openFile));
+      if (!h) return [...done, "no file " + step.openFile];
+      press(h); done.push("opened " + step.openFile);
+    } else if (step.wholeOf !== undefined) {
+      const b = all("button.wholefile").find((n) => n.dataset.file === step.wholeOf);
+      if (!b) return [...done, "no whole " + step.wholeOf];
+      press(b); done.push("whole " + step.wholeOf);
     } else if (step.serve !== undefined) {
       served = step.serve;
       done.push(`serving ${served.length}`);
@@ -276,7 +325,7 @@ function drive(steps) {
 }
 
 // The poll is a promise; let it settle before reading what it drew.
-setTimeout(() => {
+setTimeout(async () => {
   const text = (n) =>
     (n.children || []).length ? (n.children || []).map(text).join(" ") : (n.textContent || "");
   // An orphan card is identified by the anchor printed in its header, not by the thread
@@ -296,7 +345,7 @@ setTimeout(() => {
   // A paint that throws is swallowed by refresh()'s catch into the status line, and every
   // case that only counts orphan cards then passes against a page that drew nothing at
   // all. The status is reported so a case can tell those apart.
-  const asking = plan ? drive(plan.steps || []) : null;
+  const asking = plan ? await drive(plan.steps || []) : null;
 
 
   // A step can be asynchronous — a send, or a poll that refetches — so the page is read
@@ -363,6 +412,11 @@ setTimeout(() => {
     outdated,
     gutter,
     // Composer rows still on the page. Sending is supposed to take it away.
+    // What each open composer holds, so a case can tell one kept from one rebuilt empty.
+    composerTexts: [registry.board, registry.fileGroups]
+      .filter(Boolean)
+      .flatMap((r) => queryAll(r, "div.composer textarea"))
+      .map((t) => t.value || ""),
     composers: [registry.board, registry.fileGroups]
       .filter(Boolean)
       .flatMap((r) => queryAll(r, "tr.composer-row")).length,

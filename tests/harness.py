@@ -289,6 +289,7 @@ def in_page(page, threads, reviewed=None, ask=None):
     drew.setdefault("flags", [])
     drew.setdefault("replies", [])
     drew.setdefault("commitCards", [])
+    drew.setdefault("composerTexts", [])
     return drew
 
 
