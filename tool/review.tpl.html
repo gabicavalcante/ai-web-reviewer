@@ -2368,6 +2368,9 @@
   document.addEventListener("keydown", e => {
     if (e.target.matches("input, textarea, summary")) return;
     if (e.key === "Escape" && sideKey) { e.preventDefault(); closeSide(); return; }
+    // The commits are stepped through only where they are shown. On Files changed these
+    // moved the hidden tab, closed the reader's panel, and kept the arrows from scrolling.
+    if (document.getElementById("board").hidden) return;
     if (e.key === "j" || e.key === "ArrowDown") { e.preventDefault(); select(Math.min(selected + 1, DATA.commits.length - 1)); }
     if (e.key === "k" || e.key === "ArrowUp") { e.preventDefault(); select(Math.max(selected - 1, 0)); }
   });

@@ -1920,6 +1920,25 @@ def opening_one_file_leaves_a_composer_in_another_alone():
 
 
 @case
+def the_commit_keys_only_move_the_commits_tab():
+    """j, k and the arrows step through the commits. Pressed on Files changed they moved
+    the hidden Commits tab instead, closed the panel the reader had open on the way, and
+    kept the arrows from scrolling the page."""
+    with sandbox() as (repo, run):
+        rng = files_review(repo, run)
+        thread = {"id": "q1", "view": "files", "file": "a.py", "side": "del", "line": "2",
+                  "code": "DROP ME", "question": "?", "turns": [], "resolved": False}
+        drew = in_page(paths.page(rng, repo), [thread], ask={"steps": [
+            {"gutter": "files a.py:2 del"},
+            {"key": "ArrowDown"},
+        ]})
+        eq(drew["sideOpen"], True, f"the panel after ArrowDown on Files changed ({drew['asking']})")
+        eq(drew["selectedCommit"], 0, "the commit selected")
+        drew = in_page(paths.page(rng, repo), [], ask={"steps": [{"tab": "commits"}, {"key": "j"}]})
+        eq(drew["selectedCommit"], 1, f"j on the Commits tab ({drew['asking']})")
+
+
+@case
 def the_docked_panel_opens_on_a_commits_tab_row_too():
     """Both tabs carry threads, so the panel has to find its line on either."""
     with sandbox() as (repo, run):
