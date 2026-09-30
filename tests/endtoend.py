@@ -1663,6 +1663,38 @@ def opening_one_thread_puts_back_the_line_the_last_one_marked():
 
 
 @case
+def the_files_tab_says_where_its_questions_are():
+    """A question on the files tab was found by reading until a dot turned up in a
+    gutter, and a stage can be a dozen closed files. So the tab, the stage and the file
+    each say how many they hold. What is counted is open questions; a place whose only
+    questions are resolved says so without asking for attention."""
+    with sandbox() as (repo, run):
+        rng = files_review(repo, run)
+        base = {"turns": [], "view": "files"}
+        threads = [
+            {**base, "id": "q1", "file": "a.py", "side": "del", "line": "2",
+             "code": "DROP ME", "question": "why did this go?", "resolved": False},
+            {**base, "id": "q2", "file": "b.py", "side": "add", "line": "1",
+             "code": "fresh", "question": "is this new?", "resolved": True},
+        ]
+        drew = in_page(paths.page(rng, repo), threads)
+        eq(
+            drew["flags"],
+            [
+                "tab Files: 1 question",
+                "stage the rework: 1 question",
+                "stage the new file: 1 resolved (quiet)",
+                "file a.py: 1 question",
+            ],
+            "the counts the page drew",
+        )
+        # The other stage's pane holds the resolved one, and its file says so.
+        drew = in_page(paths.page(rng, repo), threads,
+                       ask={"steps": [{"stage": "the new file"}]})
+        eq("file b.py: 1 resolved (quiet)" in drew["flags"], True, f"b.py ({drew['flags']})")
+
+
+@case
 def the_docked_panel_opens_on_a_commits_tab_row_too():
     """Both tabs carry threads, so the panel has to find its line on either."""
     with sandbox() as (repo, run):

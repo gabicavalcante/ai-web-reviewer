@@ -286,6 +286,7 @@ def in_page(page, threads, reviewed=None, ask=None):
     drew.setdefault("outdated", [])
     drew.setdefault("composers", 0)
     drew.setdefault("stale", [])
+    drew.setdefault("flags", [])
     return drew
 
 

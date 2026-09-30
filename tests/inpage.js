@@ -339,6 +339,17 @@ setTimeout(() => {
       .filter((b) => queryAll(b, "span.changed").some((n) => !n.hidden))
       .map((b) => queryAll(b, "span.fpath")[0].textContent),
     squash: !!registry.squash && registry.squash.hidden === false,
+    // The question counts, as the page wrote them into data-q: where each is drawn, what
+    // it says, and whether it is the quiet kind that only has resolved questions behind it.
+    flags: [
+      ["tab Files", registry.tabFiles],
+      ["tab Commits", registry.tabCommits],
+      ...(registry.stageRail ? registry.stageRail.children : []).map((b) => [
+        "stage " + queryAll(b, "span.cb-head").map((h) => h.textContent).join(""), b]),
+      ...queryAll(registry.fileGroups, "span.qflag").map((n) => ["file " + n.dataset.file, n]),
+      ...queryAll(registry.fileGroups, "button.wholefile").map((n) => ["whole " + n.dataset.file, n]),
+    ].filter(([, n]) => n && n.dataset && n.dataset.q)
+      .map(([at, n]) => `${at}: ${n.dataset.q}${n.dataset.quiet === "true" ? " (quiet)" : ""}`),
   }));
   }, 10);
 }, 50);

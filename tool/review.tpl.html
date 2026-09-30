@@ -420,6 +420,20 @@
   .tab:hover { color: var(--ink); }
   .tab[aria-selected="true"] { color: var(--ink); border-bottom-color: var(--accent); font-weight: 500; }
   .tab:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+  /* How many questions a tab, a stage or a file holds. Drawn from data-q, so the text a
+     rail entry or a tab carries stays what it names. */
+  .tab[data-q]::after, .commit-btn[data-q] .cb-head::after, .qflag[data-q]::after, .wholefile[data-q]::after {
+    content: attr(data-q); display: inline-block; margin-left: 8px; padding: 1px 7px; border-radius: 9px;
+    font-family: var(--mono); font-size: 10px; font-weight: 500; line-height: 1.5; letter-spacing: .03em;
+    white-space: nowrap; vertical-align: 1px; background: var(--accent); color: var(--on-accent);
+  }
+  .tab[data-quiet="true"]::after, .commit-btn[data-quiet="true"] .cb-head::after,
+  .qflag[data-quiet="true"]::after, .wholefile[data-quiet="true"]::after {
+    background: transparent; color: var(--ink-faint); box-shadow: inset 0 0 0 1px var(--line);
+  }
+  .qflag { flex: none; }
+  .qflag[data-q]::after { margin-left: 0; }
+  .qflag:not([data-q]) { display: none; }
   .filesview { margin-top: 24px; }
   .filesnote { font-family: var(--mono); font-size: 11.5px; color: var(--ink-faint); margin: 0 0 20px; }
   /* Above the board rather than under the rail, because a review with no stages has no
@@ -883,6 +897,16 @@
     return bar;
   }
 
+  /* Where a file's questions are counted, filled in by paintFlags once the threads are
+     known. `where` is the stage whose pane it is in, which counts only the rows that pane
+     draws; without one it is the whole file. */
+  function qflag(f, where) {
+    const n = el("span", "qflag");
+    n.dataset.file = f.path;
+    if (where) n.dataset.where = where;
+    return n;
+  }
+
   function renderFile(f, commitShort, anchored = true) {
     const box = el("section", "file");
     box.dataset.file = f.path;
@@ -896,6 +920,7 @@
     const top = el("span", "file-top");
     top.appendChild(el("span", "chev", "▾"));
     top.appendChild(el("span", "fpath", f.path));
+    if (!commitShort) top.appendChild(qflag(f, null));
     top.appendChild(el("span", "status " + f.status, f.status));
     const stat = el("span", "fstat");
     stat.appendChild(el("span", "plus", "+" + f.additions));
@@ -1332,7 +1357,11 @@
      can be three lines in a file another stage owns, and those three lines are the whole
      of what it did: showing the file entire would bury them, and showing them alone would
      strip the code that gives them meaning. */
-  function renderFileLines(f, runs, gone) {
+  /* Which rows of a file a stage's pane draws: what the stage wrote and what it took out,
+     with a few rows either side. Its own function because the rail counts the questions
+     a pane will show before the pane exists, and a count read off anything else names
+     questions the reader then cannot find. */
+  function stageWindow(f, runs, gone) {
     const own = new Set();
     runs.forEach(([from, to]) => { for (let n = from; n <= to; n++) own.add(n); });
     /* What this stage took out. A removed line has no number in the file as it stands, so
@@ -1358,6 +1387,25 @@
         }
       }
     });
+    return { own, removed, keep };
+  }
+
+  /* The anchor of every row a stage's pane draws in a file, and of every row in it. */
+  const rowKey = (f, r) => ["files", f.path, r.t, String(r.t === "del" ? r.o : r.n)].join("\u0000");
+  const WINDOW_KEYS = new Map();
+  function windowKeys(f, where) {
+    const id = where + "\u0000" + f.path;
+    if (!WINDOW_KEYS.has(id)) {
+      const { keep } = stageWindow(f, (f.runs || {})[where] || [], (f.gone || {})[where] || []);
+      WINDOW_KEYS.set(id, new Set([...keep].map(i => f.rows[i])
+        .filter(r => r.t !== "hunk").map(r => rowKey(f, r))));
+    }
+    return WINDOW_KEYS.get(id);
+  }
+  const fileKeyPrefix = f => ["files", f.path, ""].join("\u0000");
+
+  function renderFileLines(f, runs, gone, where) {
+    const { own, removed, keep } = stageWindow(f, runs, gone);
     if (!keep.size) return null;
 
     /* Closed. A stage can reach a dozen files, and all of them open at once is a wall to
@@ -1374,6 +1422,7 @@
         f.read === "start" ? "start here" : f.read));
     }
     top.appendChild(el("span", "fpath", f.path));
+    top.appendChild(qflag(f, where));
     top.appendChild(el("span", "status " + f.status, f.status));
     head.appendChild(top);
     /* Inside the header, because it answers the question the header asks. Below it, the
@@ -1390,6 +1439,8 @@
        the same file either way, so it is a toggle on the file rather than a view. */
     const whole = el("button", "btn ghost small wholefile", "Show the whole file");
     whole.type = "button";
+    whole.dataset.file = f.path;
+    whole.dataset.where = where;
     let showingAll = false;
     whole.addEventListener("click", () => {
       showingAll = !showingAll;
@@ -1473,7 +1524,7 @@
     here.forEach(f => {
       const runs = (f.runs || {})[where] || [];
       const gone = (f.gone || {})[where] || [];
-      const box = runs.length || gone.length ? renderFileLines(f, runs, gone) : null;
+      const box = runs.length || gone.length ? renderFileLines(f, runs, gone, where) : null;
       if (box) { pane.appendChild(box); drawn += 1; } else { silent.push(f); }
     });
 
@@ -1668,7 +1719,7 @@
       });
       buttons.push(btn);
       rail.appendChild(btn);
-      STAGE_TICKS.push({ files: entry.files, btn });
+      STAGE_TICKS.push({ where: entry.where, files: entry.files, btn });
     });
     refreshProgress();
 
@@ -1815,6 +1866,7 @@
     });
 
     const byAnchor = threadsByAnchor();
+    paintFlags(byAnchor);
     const side = sideMode();
     panes().flatMap(root => [...root.querySelectorAll("table.diff tr[data-line]")]).forEach(tr => {
       const list = byAnchor.get(anchorKey(tr.dataset));
@@ -1837,6 +1889,54 @@
       tr.after(row);
     });
     if (side) paintSide(); else closeSide();
+  }
+
+  /* A question on the files tab is found by reading until a dot turns up in the gutter,
+     and a stage can be a dozen closed files. So each place a reader chooses between says
+     how many questions it holds: the tab, the stage, the file, and the button that shows
+     the rest of a file when some of its questions are outside the stage's rows. Open
+     ones are counted; a place whose questions are all resolved says that, quietly. */
+  function tally(byAnchor, has) {
+    let open = 0, done = 0;
+    byAnchor.forEach((list, key) => {
+      if (has(key)) list.forEach(t => { if (t.resolved) done += 1; else open += 1; });
+    });
+    return { open, done };
+  }
+
+  function flag(node, { open, done }, what = n => n + (n === 1 ? " question" : " questions")) {
+    if (!node) return;
+    if (open || done) {
+      node.dataset.q = open ? what(open) : done + " resolved";
+      node.dataset.quiet = String(!open);
+    } else {
+      delete node.dataset.q;
+      delete node.dataset.quiet;
+    }
+  }
+
+  function paintFlags(byAnchor) {
+    const inFile = f => k => k.startsWith(fileKeyPrefix(f));
+    const inWindow = (f, where) => k => windowKeys(f, where).has(k);
+    const byPath = new Map(FINAL_FILES.map(f => [f.path, f]));
+    flag(document.getElementById("tabFiles"), tally(byAnchor, k => k.startsWith("files\u0000")));
+    flag(document.getElementById("tabCommits"), tally(byAnchor, k => k.startsWith("commits\u0000")));
+    // A stage entry counts what its pane will show. The entry for files no stage claims
+    // shows them whole.
+    STAGE_TICKS.forEach(({ where, files, btn }) => flag(btn, tally(byAnchor,
+      k => files.some(f => (where === null ? inFile(f) : inWindow(f, where))(k)))));
+    const groups = document.getElementById("fileGroups");
+    groups.querySelectorAll("span.qflag").forEach(n => {
+      const f = byPath.get(n.dataset.file);
+      if (f) flag(n, tally(byAnchor, n.dataset.where ? inWindow(f, n.dataset.where) : inFile(f)));
+    });
+    groups.querySelectorAll("button.wholefile").forEach(n => {
+      const f = byPath.get(n.dataset.file);
+      if (!f) return;
+      const rows = inWindow(f, n.dataset.where);
+      flag(n, tally(byAnchor, k => inFile(f)(k) && !rows(k)),
+        c => c + " more outside this stage");
+    });
   }
 
   function renderTurn(turn) {

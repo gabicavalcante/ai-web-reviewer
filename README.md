@@ -71,6 +71,11 @@ on the tip of the range says which commit each surviving line came from, and eac
 belongs to a stage, so a file touched by four stages appears under all four, showing
 different lines each time. No stage has to own a file.
 
+The tab, each stage and each file say how many open questions they hold, so a question
+can be found without opening everything. A stage counts only the rows its pane draws. A
+question elsewhere in the same file is counted on the file's `Show the whole file` button
+instead. A place whose questions are all resolved says so in grey.
+
 A stage lists a file when it accounts for something the final diff still shows: lines that
 survive to the tip, or a file the branch removes. A stage that accounts for nothing is not
 part of that journey, so it is not drawn, and the build says which one it dropped, why, and
