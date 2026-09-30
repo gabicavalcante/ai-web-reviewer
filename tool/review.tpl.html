@@ -1126,8 +1126,7 @@
   function redrawThreads() {
     if (!threadsLive) return;
     /* A pane that has just been rebuilt carries neither the threads that were on it nor
-       the composer that was open in it, and a composer still counted as open stops every
-       later paint. */
+       the composer that was open in it. */
     closeComposer();
     paintThreads();
   }
@@ -1138,7 +1137,6 @@
      across. One thread can have a box in more than one place, and the draft goes back
      into the one it was typed in. */
   let typingAt = null;
-  let repaintPending = false;
   /* The live textarea per place and thread, so a repaint can hand a half-typed reply to
      the element that replaces it. */
   const replyInputs = new Map();
@@ -1164,7 +1162,6 @@
     if (r.t === "hunk") return;
     VALID_ANCHORS.add(["files", f.path, r.t, String(r.t === "del" ? r.o : r.n)].join("\u0000"));
   }));
-  let composerOpen = false;
   /* The diff a question was asked on is part of the anchor, because the same file, side
      and line name two different places depending on it. A row written before the files
      tab could be asked on carries no view, and every one of those is commit anchored. */
@@ -1919,8 +1916,10 @@
     }
   }
 
+  /* Never put off for an open composer. It sits in a row of its own, which this does not
+     touch, and a repaint deferred until it closed was never caught up on: the poll had
+     already taken the new threads, so the next one saw nothing new either. */
   function paintThreads() {
-    if (composerOpen) { repaintPending = true; return; }
     /* A poll must not wipe a half-typed reply, and must not skip the redraw to protect
        one either: a box holding focus would freeze the thread, hiding an answer that
        lands while it is open. Carry the draft across instead. */
@@ -2086,7 +2085,6 @@
     input.addEventListener("blur", () => {
       if (!input.value.trim()) {
         typingAt = null;
-        if (repaintPending) { repaintPending = false; paintThreads(); }
       }
     });
     input.addEventListener("keydown", e => {
@@ -2122,12 +2120,10 @@
 
   function closeComposer() {
     panes().forEach(root => root.querySelectorAll("tr.composer-row").forEach(n => n.remove()));
-    composerOpen = false;
   }
 
   function openComposer(tr) {
     closeComposer();
-    composerOpen = true;
     const row = el("tr", "composer-row");
     const cell = el("td");
     cell.colSpan = 3;

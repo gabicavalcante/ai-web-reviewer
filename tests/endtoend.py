@@ -1781,6 +1781,36 @@ def a_listed_commit_thread_leads_to_its_line():
 
 
 @case
+def an_open_composer_does_not_stop_the_page_repainting():
+    """A repaint used to be put off while a composer was open, and the only thing that
+    ever caught up on it was a reply box losing focus. The poll had already taken the new
+    threads, so later polls saw nothing new either: an answer that landed while a question
+    was being typed stayed off the page after Cancel, and a composer left open on the tab
+    the reader had moved away from froze both."""
+    with sandbox() as (repo, run):
+        rng = files_review(repo, run)
+        landed = {"id": "q9", "view": "files", "file": "a.py", "side": "del", "line": "2",
+                  "code": "DROP ME", "question": "asked elsewhere", "turns": [],
+                  "resolved": False}
+        drew = in_page(paths.page(rng, repo), [], ask={"steps": [
+            {"gutter": "files a.py:3 add"},
+            {"type": "still typing"},
+            {"serve": [landed]},
+            {"tick": True},
+        ]})
+        eq(drew["asked"], ["files a.py:2 del true"], f"drawn with the composer open ({drew['asking']})")
+        eq(drew["composerTexts"], ["still typing"], "and the composer kept")
+        drew = in_page(paths.page(rng, repo), [], ask={"steps": [
+            {"gutter": "files a.py:3 add"},
+            {"serve": [landed]},
+            {"tick": True},
+            {"cancel": True},
+            {"tick": True},
+        ]})
+        eq(drew["asked"], ["files a.py:2 del true"], f"drawn after Cancel ({drew['asking']})")
+
+
+@case
 def the_docked_panel_opens_on_a_commits_tab_row_too():
     """Both tabs carry threads, so the panel has to find its line on either."""
     with sandbox() as (repo, run):
