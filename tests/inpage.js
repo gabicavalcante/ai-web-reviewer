@@ -413,6 +413,8 @@ setTimeout(async () => {
     outdated,
     gutter,
     // Composer rows still on the page. Sending is supposed to take it away.
+    // The files the files tab has drawn, by the path in each header.
+    filesDrawn: queryAll(registry.fileGroups, "span.fpath").map((n) => n.textContent),
     // The commit the rail has selected, by position.
     selectedCommit: (registry.commits ? registry.commits.children : [])
       .findIndex((b) => b["aria-current"] === "true"),

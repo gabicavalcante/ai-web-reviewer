@@ -1939,6 +1939,21 @@ def the_commit_keys_only_move_the_commits_tab():
 
 
 @case
+def the_files_no_stage_claims_are_the_only_ones_listed_under_that_entry():
+    """The rail's last entry is for the files no stage claims, and its count said so.
+    Choosing it listed the whole branch, so a question the entry did not count was on
+    the page beside the ones it did."""
+    with sandbox() as (repo, run):
+        page = one_stage_and_a_loose_file(repo, run)
+        base = {"view": "files", "side": "add", "line": "1", "turns": [], "resolved": False}
+        threads = [{**base, "id": "z", "file": "z.py", "code": "loose", "question": "?"},
+                   {**base, "id": "c", "file": "c.py", "code": "c1", "question": "?"}]
+        drew = in_page(page, threads, ask={"steps": [{"stage": "not in any stage"}]})
+        eq(drew["filesDrawn"], ["z.py"], f"the files listed ({drew['asking']})")
+        eq("stage not in any stage: 1 question" in drew["flags"], True, f"its count ({drew['flags']})")
+
+
+@case
 def the_docked_panel_opens_on_a_commits_tab_row_too():
     """Both tabs carry threads, so the panel has to find its line on either."""
     with sandbox() as (repo, run):

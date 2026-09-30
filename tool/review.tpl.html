@@ -1633,7 +1633,9 @@
     redrawThreads();
   }
 
-  function paintAllFiles() {
+  /* Every file, or only `files`: the rail's last entry lists the files no stage claims,
+     and listing the whole branch under it put questions its count left out on the page. */
+  function paintAllFiles(files = DATA.final.files) {
     const final = DATA.final;
     const groups = document.getElementById("fileGroups");
     const byWhat = new Map((DATA.stages || []).map(s => [s.where, s.what]));
@@ -1644,12 +1646,13 @@
        is not silently attached to whichever group happens to be nearest. */
     /* Grouping orders files. With no more files than stages there is nothing to order,
        and six headings over two files say less than the two files do. */
-    const grouped = final.order.length > 0 && final.files.length > final.order.length;
+    const grouped = files === final.files
+      && final.order.length > 0 && final.files.length > final.order.length;
 
     let current = null;
     let box = null;
     // Grouped, the order is the group's; ungrouped, there is one list and start leads it.
-    (grouped ? final.files : startFirst(final.files)).forEach(f => {
+    (grouped ? files : startFirst(files)).forEach(f => {
       const owner = (f.stages && f.stages[0]) || null;
       if (!grouped) {
         if (!box) { box = el("div", "stagegroup"); groups.appendChild(box); }
@@ -1779,7 +1782,7 @@
       btn.appendChild(body);
       btn.addEventListener("click", () => {
         buttons.forEach((b, j) => b.setAttribute("aria-current", String(j === i)));
-        if (entry.where === null) paintAllFiles(); else paintStage(entry.where);
+        if (entry.where === null) paintAllFiles(entry.files); else paintStage(entry.where);
         document.getElementById("filesNote").textContent = entry.where === null
           ? "Files no stage claims. The narrative does not say where these belong. "
             + "Ask about a line by clicking its number."
@@ -1795,7 +1798,7 @@
 
     buttons[0].setAttribute("aria-current", "true");
     document.getElementById("stageRailNav").hidden = false;
-    if (entries[0].where === null) paintAllFiles(); else paintStage(entries[0].where);
+    if (entries[0].where === null) paintAllFiles(entries[0].files); else paintStage(entries[0].where);
     document.getElementById("filesNote").textContent =
       "Only what " + entries[0].label + " wrote, with a few lines either side. "
       + "Ask about a line by clicking its number, or open a file whole from the "
