@@ -1125,9 +1125,9 @@
   let threadsLive = false;
   function redrawThreads() {
     if (!threadsLive) return;
-    /* A pane that has just been rebuilt carries neither the threads that were on it nor
-       the composer that was open in it. */
-    closeComposer();
+    /* A pane that has just been rebuilt carries none of the threads that were on it. A
+       composer that was in it went with the rows; one anywhere else is untouched by a
+       repaint, and closing it here threw away a question being typed in another file. */
     paintThreads();
   }
   /* Whether a Monitor is tailing the logs. Assumed true until the first poll says

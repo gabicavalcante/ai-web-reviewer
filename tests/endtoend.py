@@ -1887,6 +1887,38 @@ def a_question_on_a_long_line_is_not_outdated_as_soon_as_it_is_asked():
         eq(drew["asked"], ["files c.py:2 add true"], "drawn on its line")
 
 
+def one_stage_and_a_loose_file(repo, run):
+    """A stage whose one commit writes two files, and a later commit no stage claims."""
+    run("checkout", "-qb", "two-files")
+    (repo / "a.py").write_text("a1\na2\n")
+    (repo / "c.py").write_text("c1\nc2\n")
+    run("add", "-A")
+    run("commit", "-qm", "S1 work")
+    (repo / "z.py").write_text("loose\n")
+    run("add", "-A")
+    run("commit", "-qm", "Unclaimed")
+    rng = paths.resolve_range("origin/main...HEAD", repo)
+    paths.narrative(rng, repo, create=True).write_text(
+        json.dumps({"stages": [{"where": "S1", "what": "writes two files", "marks": ["1"]}]})
+    )
+    page, _ = built_page(repo)
+    return page
+
+
+@case
+def opening_one_file_leaves_a_composer_in_another_alone():
+    """Rebuilding one file's rows closed every composer on the page, so pressing "Show
+    the whole file" under one file threw away a question being typed under another."""
+    with sandbox() as (repo, run):
+        page = one_stage_and_a_loose_file(repo, run)
+        drew = in_page(page, [], ask={"steps": [
+            {"gutter": "files c.py:1 add"},
+            {"type": "half a question"},
+            {"wholeOf": "a.py"},
+        ]})
+        eq(drew["composerTexts"], ["half a question"], f"the composer ({drew['asking']})")
+
+
 @case
 def the_docked_panel_opens_on_a_commits_tab_row_too():
     """Both tabs carry threads, so the panel has to find its line on either."""
