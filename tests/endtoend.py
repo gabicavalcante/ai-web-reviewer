@@ -865,23 +865,78 @@ def a_sha_too_short_to_mean_anything_is_orphaned():
         eq(drew["orphans"], ["thread000001"], f"a two character sha ({drew})")
 
 
+def built_page(repo):
+    """The page review.py builds for the branch, and the data it was built with."""
+    rng = paths.resolve_range("origin/main...HEAD", repo)
+    subprocess.run(
+        [sys.executable, str(TOOL / "review.py"), "build", "origin/main...HEAD"],
+        cwd=str(repo),
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    page = paths.page(rng, repo)
+    data = json.loads(re.search(r"const DATA = (\{.*?\});\n", page.read_text(), re.S).group(1))
+    return page, data
+
+
+def ticked(data):
+    """Every file of the branch as it stands, ticked against what it changes now."""
+    return {f["path"]: f["digest"] for f in data["final"]["files"]}
+
+
+def two_files_with_a_fixup(repo, run):
+    make_fixup(repo, run)
+    (repo / "b.txt").write_text("b1\n")
+    run("add", "-A")
+    run("commit", "-qm", "Second file")
+
+
 @case
-def reviewed_ticks_survive_a_wider_sha():
-    """The same bug in the same file, in the other thing keyed by an abbreviated sha. The
-    ticks are stored as short shas and read back with an exact match, so the width change
-    that used to orphan every thread also un-ticks every commit, resets the progress bar,
-    and hides the squash bar, which only appears once every commit is ticked."""
+def a_reviewed_file_survives_its_commits_being_rewritten():
+    """What made a tick on a commit worthless. A squash rewrites every sha in the range,
+    and a reviewer who has read every file and squashed the fixups the review asked for
+    has not read any less. The files are what was read, and they have not changed."""
     with sandbox() as (repo, run):
-        make_fixup(repo, run)
-        page, thread = page_with_a_thread(repo, run, lambda c: c["short"])
-        data = json.loads(
-            re.search(r"const DATA = (\{.*?\});\n", page.read_text(), re.S).group(1)
-        )
-        # The same commits at a wider abbreviation, which is what a repo that has grown
-        # hands back. Not a mutated sha: that is a different commit, and should not tick.
-        ticked = [c["hash"][:12] for c in data["commits"]]
-        drew = in_page(page, [thread], reviewed=ticked)
-        eq(drew["reviewed"], len(ticked), f"commits still ticked ({drew})")
+        two_files_with_a_fixup(repo, run)
+        _, before = built_page(repo)
+        run("-c", "sequence.editor=true", "rebase", "-qi", "--autosquash", "origin/main")
+        page, after = built_page(repo)
+        eq(len(after["commits"]), 2, "commits after the squash")
+        drew = in_page(page, [], reviewed=ticked(before))
+        eq(drew["reviewed"], 2, f"files still reviewed ({drew})")
+        eq(drew["stale"], [], "files said to have changed")
+
+
+@case
+def a_reviewed_file_that_changes_is_said_to_have():
+    """A fixup is what a question leads to, and it changes the file the reviewer ticked.
+    That tick describes code that is no longer on the page, so it stops counting, and the
+    header says why the box is clear rather than leaving it looking never ticked."""
+    with sandbox() as (repo, run):
+        two_files_with_a_fixup(repo, run)
+        _, before = built_page(repo)
+        (repo / "b.txt").write_text("b2\n")
+        run("add", "-A")
+        run("commit", "-qm", "fixup! Second file")
+        page, _ = built_page(repo)
+        drew = in_page(page, [], reviewed=ticked(before))
+        eq(drew["reviewed"], 1, f"files still reviewed ({drew})")
+        eq(drew["stale"], ["b.txt"], "files said to have changed")
+
+
+@case
+def the_squash_bar_waits_for_every_file():
+    """Squashing is what comes after reading everything, and what is read is the files."""
+    with sandbox() as (repo, run):
+        two_files_with_a_fixup(repo, run)
+        page, data = built_page(repo)
+        drew = in_page(page, [], ask={"steps": [{"review": "a.txt"}, {"tick": True}]})
+        eq(drew["reviewed"], 1, f"files reviewed after one tick ({drew})")
+        eq(drew["squash"], False, "the squash bar with a file unread")
+        drew = in_page(page, [], ask={"steps": [{"review": "a.txt"}, {"review": "b.txt"}]})
+        eq(drew["reviewed"], 2, f"files reviewed after both ticks ({drew})")
+        eq(drew["squash"], True, "the squash bar with every file read")
 
 
 @case

@@ -8,6 +8,7 @@ narrative file only adds the editorial layer on top (see narrative.example.json)
 """
 
 import argparse
+import hashlib
 import json
 import pathlib
 import re
@@ -329,6 +330,25 @@ def plain_removal(rows):
     return False
 
 
+def review_digest(entry, blobs):
+    """What a reviewer read in a file, reduced to something a mark can be checked against.
+
+    A mark on a commit said nothing once the commit was rewritten, and a fixup rewrites
+    the commit it is about. What a reviewer read is the file's part of the branch as it
+    stands, so that is what a mark on the files tab records: the lines added and removed,
+    in order, and not their numbers or the context around them. A rebase that moves the
+    change leaves the mark standing; a fixup that changes what the file changes takes it
+    down.
+
+    A binary file has no lines, so it is read by the blobs on either side instead.
+    """
+    body = [entry["status"], entry["was"]]
+    if entry["binary"]:
+        body.append(blobs.get(entry["path"], ""))
+    body += [row["t"] + " " + row["text"] for row in entry["rows"] if row["t"] in ("add", "del")]
+    return hashlib.sha1("\n".join(body).encode()).hexdigest()[:16]
+
+
 def to_runs(numbers):
     """Sorted line numbers as [start, end] runs, which is how they are read and drawn."""
     runs = []
@@ -454,10 +474,19 @@ def final_diff(repo, rng, commits, narrative):
             binary.add(parts[2])
         else:
             stats[parts[2]] = (int(parts[0]), int(parts[1]))
+    # The blobs either side, only for a binary file, which has no rows to read a digest off.
+    blobs = {}
+    if binary:
+        for row in git(repo, "diff", "--raw", "--no-abbrev", rng).strip().split("\n"):
+            meta, _, names = row.partition("\t")
+            parts = meta.split()
+            if len(parts) >= 4 and names:
+                blobs[names.split("\t")[-1]] = parts[2] + ".." + parts[3]
     for entry in files:
         add, dele = stats.get(entry["path"], (0, 0))
         entry["additions"], entry["deletions"] = add, dele
         entry["binary"] = entry["path"] in binary
+        entry["digest"] = review_digest(entry, blobs)
         entry["collapsed"] = entry["status"] == "deleted" and dele > COLLAPSE_DELETIONS_OVER
 
     # Which stages reach a file, and which commit belongs to which stage. A mark is a rail

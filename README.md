@@ -208,7 +208,7 @@ question asked while reading one branch never appears on the other's page.
 | `Wrap lines` | Wrap long lines instead of scrolling sideways |
 | `Hide resolved` | Drop resolved threads out of the page |
 | `Thread at the side` | Threads in a panel beside the diff, or as rows under the line |
-| `Mark reviewed` | Tick a commit off; the squash bar waits until every commit is ticked |
+| `Reviewed` | Tick a file off on Files changed. It closes, and the squash bar waits until every file is ticked |
 | `Commits` / `Files changed` | The two ways of reading, above the rail |
 
 ## Change requests, and why fixups
@@ -228,7 +228,11 @@ The page folds each fixup into the commit it amends and marks it as one, so the 
 stays as long as the change rather than growing with every correction. A fixup whose
 target is outside the range stays a commit of its own.
 
-When every commit is ticked, the page offers to squash. It refuses when:
+A tick is on a file, not a commit, because a commit is what the fixups rewrite. It records
+what the file changes, so a rebase or a squash leaves it standing, and a fixup to that
+file clears it and says `changed since reviewed` in the file's header.
+
+When every file is ticked, the page offers to squash. It refuses when:
 
 | | |
 | --- | --- |

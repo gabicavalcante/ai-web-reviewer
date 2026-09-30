@@ -190,7 +190,8 @@
   .cb-meta { display: flex; align-items: center; gap: 9px; font-family: var(--mono); font-size: 11px; color: var(--ink-faint); }
   .cb-meta .plus { color: var(--add); }
   .cb-meta .minus { color: var(--del); }
-  .cb-meta .done { color: var(--accent); }
+  /* Drawn by the stylesheet so the rail's text stays what the stage is, ticked or not. */
+  .commit-btn.is-reviewed .cb-meta::after { content: "reviewed"; color: var(--accent); }
   .cb-meta .survive { color: var(--ink-faint); }
   .cb-meta .fixups { color: var(--accent); }
   .cb-tag { font-family: var(--mono); font-size: 10px; letter-spacing: .06em; text-transform: uppercase; padding: 1px 5px; border-radius: 2px; border: 1px solid currentColor; }
@@ -259,6 +260,14 @@
   .file-head { width: 100%; display: flex; flex-direction: column; align-items: stretch; gap: 7px; padding: 14px 26px; background: var(--surface-2); border: 0; border-bottom: 1px solid var(--line); font: inherit; color: inherit; cursor: pointer; text-align: left; }
   .file-head:hover { background: var(--accent-soft); }
   .file-top { display: flex; align-items: center; gap: 12px; min-width: 0; }
+  /* The tick is beside the header rather than in it. The header is a button, and a
+     checkbox inside a button is a control inside a control: pressing one can press both. */
+  .file-bar { display: flex; align-items: flex-start; background: var(--surface-2); border-bottom: 1px solid var(--line); }
+  .file-bar .file-head { flex: 1; min-width: 0; border-bottom: 0; background: transparent; }
+  .file-bar:hover { background: var(--accent-soft); }
+  .file-bar .viewed { flex: none; padding: 14px 26px 0 12px; line-height: 20px; font-family: var(--mono); font-size: 11px; white-space: nowrap; }
+  .viewed .cb-tag.changed { color: var(--del); margin-right: 4px; }
+  .file.is-viewed .fpath { color: var(--ink-faint); }
   .file-head:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
   .chev { font-family: var(--mono); font-size: 10px; color: var(--ink-faint); width: 10px; flex: none; transition: transform .14s; }
   .file[data-open="false"] .chev { transform: rotate(-90deg); }
@@ -407,6 +416,10 @@
   .tab:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
   .filesview { margin-top: 24px; }
   .filesnote { font-family: var(--mono); font-size: 11.5px; color: var(--ink-faint); margin: 0 0 20px; }
+  /* Above the board rather than under the rail, because a review with no stages has no
+     rail, and it has files to tick all the same. */
+  .files-progress { margin: -8px 0 20px; max-width: 420px; }
+  .files-progress[hidden] { display: none; }
   .stagegroup { margin-bottom: 30px; }
   .stagegroup:last-child { margin-bottom: 0; }
   .stagepane { padding: 22px 24px; }
@@ -481,6 +494,10 @@
 
   <section class="filesview" id="filesView" hidden>
     <p class="filesnote" id="filesNote"></p>
+    <div class="progress files-progress" id="filesProgress" hidden>
+      <span id="progressText"></span>
+      <span class="track"><i id="progressBar" style="width:0%"></i></span>
+    </div>
     <div class="board" id="filesBoard">
       <nav class="rail" id="stageRailNav" aria-label="Stages">
         <h2>Read by stage</h2>
@@ -492,12 +509,8 @@
 
   <div class="board" id="board">
     <nav class="rail" aria-label="Commits">
-      <h2>Review in order</h2>
+      <h2>Read in order</h2>
       <div class="commits" id="commits"></div>
-      <div class="progress">
-        <span id="progressText">0 of 5 reviewed</span>
-        <span class="track"><i id="progressBar" style="width:0%"></i></span>
-      </div>
     </nav>
 
     <main class="pane" id="pane" aria-live="polite"></main>
@@ -560,18 +573,29 @@
     return found || sha;
   };
 
-  const STORE = `web-reviewer/${DATA.repo}/${DATA.range}/reviewed`;
-  const reviewed = new Set();
+  /* What has been read is a file, not a commit. A commit is what a fixup rewrites, so a
+     tick on one stopped meaning anything at exactly the moment the review had changed
+     something. A file is ticked against the digest of what it changes, which a rebase
+     leaves alone and a fixup to that file does not: the tick stands while it describes
+     what is on the page, and says so when it no longer does. */
+  const STORE = `web-reviewer/${DATA.repo}/${DATA.range}/viewed`;
+  const viewed = new Map();
   try {
-    const saved = JSON.parse(localStorage.getItem(STORE) || "[]");
-      // Through the same resolver the anchors use, so a tick survives the width it was
-      // written at. The squash bar depends on every commit being ticked.
-      if (Array.isArray(saved)) saved.forEach(s => reviewed.add(canonicalSha(s)));
+    const saved = JSON.parse(localStorage.getItem(STORE) || "{}");
+    if (saved && typeof saved === "object" && !Array.isArray(saved)) {
+      Object.entries(saved).forEach(([path, digest]) => {
+        if (typeof digest === "string") viewed.set(path, digest);
+      });
+    }
   } catch (e) { /* private window or blocked storage: start empty */ }
 
   const save = () => {
-    try { localStorage.setItem(STORE, JSON.stringify([...reviewed])); } catch (e) { /* nothing to do */ }
+    try { localStorage.setItem(STORE, JSON.stringify(Object.fromEntries(viewed))); } catch (e) { /* nothing to do */ }
   };
+  const FINAL_FILES = (DATA.final && DATA.final.files) || [];
+  const isViewed = f => viewed.get(f.path) === f.digest;
+  // Ticked once, and the file has changed since: the case the tick exists to catch.
+  const isStale = f => viewed.has(f.path) && !isViewed(f);
 
   const el = (tag, cls, text) => {
     const n = document.createElement(tag);
@@ -769,21 +793,25 @@
       meta.appendChild(el("span", "fixups",
         folded === 1 ? "1 fixup inside" : folded + " fixups inside"));
     }
-    const doneTag = el("span", "done", "reviewed");
-    doneTag.hidden = !reviewed.has(c.short);
-    meta.appendChild(doneTag);
     body.appendChild(meta);
     btn.appendChild(body);
     btn.addEventListener("click", () => select(i));
     railWrap.appendChild(btn);
-    c._btn = btn; c._doneTag = doneTag;
+    c._btn = btn;
   });
 
+  /* The stage rail's own ticks, one per stage, set when paintFiles builds it. */
+  let STAGE_TICKS = [];
+
   function refreshProgress() {
-    const n = DATA.commits.filter(c => reviewed.has(c.short)).length;
-    document.getElementById("progressText").textContent = n + " of " + DATA.commits.length + " reviewed";
-    document.getElementById("progressBar").style.width = (n / DATA.commits.length * 100) + "%";
-    DATA.commits.forEach(c => { c._doneTag.hidden = !reviewed.has(c.short); });
+    const n = FINAL_FILES.filter(isViewed).length;
+    document.getElementById("filesProgress").hidden = !FINAL_FILES.length;
+    document.getElementById("progressText").textContent =
+      n + " of " + FINAL_FILES.length + " files reviewed";
+    document.getElementById("progressBar").style.width =
+      (FINAL_FILES.length ? n / FINAL_FILES.length * 100 : 0) + "%";
+    STAGE_TICKS.forEach(({ files, btn }) =>
+      btn.classList.toggle("is-reviewed", files.length > 0 && files.every(isViewed)));
     refreshSquash(n);
   }
 
@@ -791,7 +819,9 @@
   const FIXUP_TARGETS = DATA.commits.filter(c => (c.followups || []).length).length;
 
   /* Squashing is what you do after reading everything, so the bar waits until every
-     commit is ticked. Before that it would be one more thing to ignore. */
+     file is ticked. Before that it would be one more thing to ignore. A squash leaves the
+     branch's final state as it was, so the ticks that let it appear are still standing
+     after it has run. */
   /* Why the server would refuse a squash right now, from the poll. null until it has
      answered once, so the button is not disabled on a guess. */
   let SQUASH_BLOCK = null;
@@ -799,7 +829,9 @@
   function refreshSquash(reviewedCount) {
     const bar = document.getElementById("squash");
     const button = document.getElementById("squashRun");
-    if (!FIXUP_COUNT || reviewedCount < DATA.commits.length) { bar.hidden = true; return; }
+    if (!FIXUP_COUNT || !FINAL_FILES.length || reviewedCount < FINAL_FILES.length) {
+      bar.hidden = true; return;
+    }
     if (button.dataset.done === "true") { bar.hidden = false; return; }
     /* The reason comes from the same guards the press runs, so the button is unavailable
        for a stated reason rather than available and then refusing. Being told after the
@@ -808,12 +840,43 @@
     button.disabled = !!SQUASH_BLOCK;
     document.getElementById("squashText").textContent = SQUASH_BLOCK
       ? "Cannot squash yet: " + SQUASH_BLOCK
-      : "Every commit reviewed. " + FIXUP_COUNT + (FIXUP_COUNT === 1 ? " fixup" : " fixups")
+      : "Every file reviewed. " + FIXUP_COUNT + (FIXUP_COUNT === 1 ? " fixup" : " fixups")
         + " can be squashed into " + FIXUP_TARGETS + (FIXUP_TARGETS === 1 ? " commit." : " commits.");
     bar.hidden = false;
   }
 
   /* ---------- diff rendering ---------- */
+
+  /* A file's header with its tick beside it, on the files tab. Ticking closes the file,
+     because a file that has been read is one less thing to scroll past. A tick left from
+     before the file changed is not a tick: the box is clear, and says why. */
+  function fileBar(head, f, box) {
+    const bar = el("div", "file-bar");
+    bar.appendChild(head);
+    const lab = el("label", "toggle viewed");
+    const changed = el("span", "cb-tag changed", "changed since reviewed");
+    const cb = el("input");
+    cb.type = "checkbox";
+    const sync = () => {
+      cb.checked = isViewed(f);
+      changed.hidden = !isStale(f);
+      box.classList.toggle("is-viewed", cb.checked);
+    };
+    cb.addEventListener("change", () => {
+      if (cb.checked) viewed.set(f.path, f.digest); else viewed.delete(f.path);
+      save();
+      if (cb.checked) box.dataset.open = "false";
+      sync();
+      refreshProgress();
+    });
+    sync();
+    lab.appendChild(changed);
+    lab.appendChild(cb);
+    lab.appendChild(document.createTextNode("Reviewed"));
+    bar.appendChild(lab);
+    return bar;
+  }
+
   function renderFile(f, commitShort, anchored = true) {
     const box = el("section", "file");
     box.dataset.file = f.path;
@@ -834,7 +897,8 @@
     stat.appendChild(el("span", "minus", "−" + f.deletions));
     top.appendChild(stat);
     head.appendChild(top);
-    box.appendChild(head);
+    // A commit is rewritten by the fixups a review asks for, so it is not what gets ticked.
+    box.appendChild(commitShort ? head : fileBar(head, f, box));
 
     /* A closed file builds nothing until it is opened. Hiding rows with CSS still costs
        the DOM for them, and a view holding every file of a branch pays that cost before
@@ -965,19 +1029,6 @@
     tools.appendChild(mkToggle("Hide resolved", "hide-resolved", document.body.classList.contains("hide-resolved")));
     tools.appendChild(mkToggle("Thread at the side", "side-threads",
       document.body.classList.contains("side-threads"), () => { closeSide(); paintThreads(); }));
-
-    const done = el("label", "toggle");
-    const donecb = el("input");
-    donecb.type = "checkbox";
-    donecb.checked = reviewed.has(c.short);
-    donecb.addEventListener("change", () => {
-      if (donecb.checked) reviewed.add(c.short); else reviewed.delete(c.short);
-      save();
-      refreshProgress();
-    });
-    done.appendChild(donecb);
-    done.appendChild(document.createTextNode("Mark reviewed"));
-    tools.appendChild(done);
     pane.appendChild(tools);
 
     const files = el("div", "files");
@@ -1326,7 +1377,7 @@
     head.addEventListener("click", () => {
       box.dataset.open = box.dataset.open === "true" ? "false" : "true";
     });
-    box.appendChild(head);
+    box.appendChild(fileBar(head, f, box));
 
     /* The windows are what this stage wrote. Reading the file whole is the other thing a
        reviewer wants, and it used to be a second copy of the branch in its own tab. It is
@@ -1570,7 +1621,7 @@
          guessed at. */
       const removed = files.filter(f => f.status === "deleted").length;
       entries.push({
-        where, label: where, spent: false,
+        where, label: where, spent: false, files,
         meta: lines
           ? files.length + " file(s) · " + lines + " line(s)"
           : removed
@@ -1582,7 +1633,7 @@
        narrative, and the one thing the stages cannot show between them. */
     const orphanFiles = final.files.filter(f => !(f.stages || []).length);
     if (orphanFiles.length) {
-      entries.push({ where: null, label: "not in any stage",
+      entries.push({ where: null, label: "not in any stage", files: orphanFiles,
                      meta: orphanFiles.length + " file(s)" });
     }
 
@@ -1611,7 +1662,9 @@
       });
       buttons.push(btn);
       rail.appendChild(btn);
+      STAGE_TICKS.push({ files: entry.files, btn });
     });
+    refreshProgress();
 
     buttons[0].setAttribute("aria-current", "true");
     document.getElementById("stageRailNav").hidden = false;

@@ -173,7 +173,8 @@ const anchorOf = (n) => {
 
    Steps: {open} expand every file box, {gutter} click a line's number, {type} fill the
    composer, {send} press the button, {stage} click a rail entry, {whole} press "Show the
-   whole file", {closeSide} press the panel's X, {tick} run the poll. */
+   whole file", {closeSide} press the panel's X, {tick} run the poll, {review} tick the
+   file at that path as reviewed. */
 function drive(steps) {
   // getElementById hands out standalone nodes, so the page's subtrees hang off those
   // rather than off body. A search from body alone found nothing at all.
@@ -217,6 +218,14 @@ function drive(steps) {
     } else if (step.closeSide) {
       press(registry.sideClose);
       done.push("closed");
+    } else if (step.review !== undefined) {
+      const bar = all("div.file-bar")
+        .find((b) => queryAll(b, "span.fpath").some((n) => n.textContent === step.review));
+      const box = bar && queryAll(bar, "input")[0];
+      if (!box) return [...done, `no reviewed box on ${step.review}`];
+      box.checked = true;
+      box._on.change();
+      done.push(`reviewed ${step.review}`);
     } else if (step.serve !== undefined) {
       served = step.serve;
       done.push(`serving ${served.length}`);
@@ -320,6 +329,11 @@ setTimeout(() => {
     status: registry.qnaStatus ? registry.qnaStatus.textContent : "",
     rail: (registry.stageRail ? registry.stageRail.children : []).map(text),
     reviewed: (registry.progressText ? registry.progressText.textContent : "").split(" ")[0],
+    // The files whose tick is from before they changed, which the header says out loud.
+    stale: queryAll(registry.fileGroups, "div.file-bar")
+      .filter((b) => queryAll(b, "span.changed").some((n) => !n.hidden))
+      .map((b) => queryAll(b, "span.fpath")[0].textContent),
+    squash: !!registry.squash && registry.squash.hidden === false,
   }));
   }, 10);
 }, 50);

@@ -383,6 +383,37 @@ def parse_patch_keeps_a_deleted_line_that_looks_like_a_header():
 
 
 @case
+def review_digest_reads_what_changed_and_not_where():
+    """A tick on the files tab is checked against this, so it has to move with what a
+    reviewer read and nothing else. Rebasing onto a main that grew above the change
+    renumbers every row and changes the context; the reviewer has read nothing new."""
+    entry = lambda rows, **kw: dict(status="modified", was="a.py", binary=False, rows=rows, **kw)
+    read = [
+        dict(t="hunk", text="@@ -1,2 +1,2 @@"),
+        dict(t="ctx", o=1, n=1, text="import os"),
+        dict(t="del", o=2, text="x = 1"),
+        dict(t="add", n=2, text="x = 2"),
+    ]
+    moved = [
+        dict(t="hunk", text="@@ -9,2 +9,2 @@ def f():"),
+        dict(t="ctx", o=9, n=9, text="import sys"),
+        dict(t="del", o=10, text="x = 1"),
+        dict(t="add", n=10, text="x = 2"),
+    ]
+    changed = [*read[:3], dict(t="add", n=2, text="x = 3")]
+    digest = lambda rows: build_data.review_digest(entry(rows), {})
+    eq(digest(moved), digest(read), "the same change further down the file")
+    if digest(changed) == digest(read):
+        raise Failed("a different added line left the digest where it was")
+    # A binary file has no rows, so the blobs either side are all there is to go on.
+    bin_entry = lambda blobs: build_data.review_digest(
+        dict(status="modified", was="logo.png", binary=True, rows=[], path="logo.png"), blobs
+    )
+    if bin_entry({"logo.png": "a..b"}) == bin_entry({"logo.png": "a..c"}):
+        raise Failed("a binary file that changed kept its digest")
+
+
+@case
 def parse_patch_keeps_old_line_numbers_straight():
     """Dropping a row without counting it shifts every old-side number after it, so a
     thread anchored below that point records a line the reviewer never clicked."""

@@ -239,6 +239,9 @@ def build_stderr(repo, rng, narrative=None):
 def in_page(page, threads, reviewed=None, ask=None):
     """Hand a built page some threads and ticks, and report what it made of them.
 
+    `reviewed` is what localStorage holds for the review: a path to the digest it was
+    ticked against.
+
     Fails without node rather than returning quietly: a case that returns early counts as
     passed, and a check that can skip itself is not a check. CI installs node for exactly
     this reason.
@@ -282,6 +285,7 @@ def in_page(page, threads, reviewed=None, ask=None):
     drew.setdefault("gutter", [])
     drew.setdefault("outdated", [])
     drew.setdefault("composers", 0)
+    drew.setdefault("stale", [])
     return drew
 
 
