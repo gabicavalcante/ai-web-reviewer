@@ -1695,6 +1695,36 @@ def the_files_tab_says_where_its_questions_are():
 
 
 @case
+def a_half_typed_reply_survives_a_repaint():
+    """The poll repaints every thread whenever any of them changes, so an answer landing
+    on one thread rebuilt the reply box being typed in on another. The draft was saved
+    before the repaint and never put back, and the reader lost what they had written."""
+    with sandbox() as (repo, run):
+        rng = files_review(repo, run)
+        base = {"turns": [], "view": "files", "resolved": False}
+        asked = {**base, "id": "q1", "file": "a.py", "side": "del", "line": "2",
+                 "code": "DROP ME", "question": "why did this go?"}
+        # On a line that is not in the diff, so it is drawn in the orphan list: the other
+        # place a reply box lives, which the poll repaints just the same.
+        gone = {**base, "id": "q2", "file": "a.py", "side": "add", "line": "90",
+                "code": "not here", "question": "where did this go?"}
+        answered = {**gone, "turns": [{"role": "claude", "text": "into b.py"}]}
+        drew = in_page(paths.page(rng, repo), [asked, gone], ask={"steps": [
+            {"gutter": "files a.py:2 del"},
+            {"reply": {"id": "q1", "text": "half a thought"}},
+            {"serve": [asked, answered]},
+            {"tick": True},
+        ]})
+        eq(drew["replies"], ["q1: half a thought"], f"the drafts after the poll ({drew['asking']})")
+        drew = in_page(paths.page(rng, repo), [asked, gone], ask={"steps": [
+            {"reply": {"id": "q2", "text": "the other half"}},
+            {"serve": [{**asked, "turns": [{"role": "claude", "text": "it moved"}]}, gone]},
+            {"tick": True},
+        ]})
+        eq(drew["replies"], ["q2: the other half"], f"an orphan's draft ({drew['asking']})")
+
+
+@case
 def the_docked_panel_opens_on_a_commits_tab_row_too():
     """Both tabs carry threads, so the panel has to find its line on either."""
     with sandbox() as (repo, run):

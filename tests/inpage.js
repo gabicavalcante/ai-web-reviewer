@@ -163,6 +163,24 @@ try {
   process.exit(1);
 }
 
+// Every reply box on the page, wherever it was drawn, with the thread it answers. The
+// panel, the orphan list and the sections hang off their own registry nodes, so a search
+// from the boards alone would miss them.
+const replyBoxes = () => {
+  const out = [];
+  const seen = new Set();
+  const walk = (n, thread) => {
+    if (seen.has(n)) return;
+    seen.add(n);
+    const id = (n.dataset || {}).thread || thread;
+    if (n.tagName === "TEXTAREA" && id) out.push({ thread: id, input: n });
+    (n.children || []).forEach((c) => walk(c, id));
+  };
+  [registry.board, registry.fileGroups, registry.sideBody, registry.orphanList,
+   registry.commitThreadList].filter(Boolean).forEach((r) => walk(r, null));
+  return out;
+};
+
 const anchorOf = (n) => {
   const d = n.dataset || {};
   return `${d.view || "commits"} ${d.file}:${d.line} ${d.side}`;
@@ -174,7 +192,8 @@ const anchorOf = (n) => {
    Steps: {open} expand every file box, {gutter} click a line's number, {type} fill the
    composer, {send} press the button, {stage} click a rail entry, {whole} press "Show the
    whole file", {closeSide} press the panel's X, {tick} run the poll, {review} tick the
-   file at that path as reviewed. */
+   file at that path as reviewed, {reply} type into the first reply box of the thread with
+   that id, the way a reader does: focus, then text. */
 function drive(steps) {
   // getElementById hands out standalone nodes, so the page's subtrees hang off those
   // rather than off body. A search from body alone found nothing at all.
@@ -218,6 +237,12 @@ function drive(steps) {
     } else if (step.closeSide) {
       press(registry.sideClose);
       done.push("closed");
+    } else if (step.reply !== undefined) {
+      const box = replyBoxes().find((b) => b.thread === step.reply.id);
+      if (!box) return [...done, `no reply box on ${step.reply.id}`];
+      box.input._on.focus();
+      box.input.value = step.reply.text;
+      done.push(`typing in ${step.reply.id}`);
     } else if (step.review !== undefined) {
       const bar = all("div.file-bar")
         .find((b) => queryAll(b, "span.fpath").some((n) => n.textContent === step.review));
@@ -339,6 +364,9 @@ setTimeout(() => {
       .filter((b) => queryAll(b, "span.changed").some((n) => !n.hidden))
       .map((b) => queryAll(b, "span.fpath")[0].textContent),
     squash: !!registry.squash && registry.squash.hidden === false,
+    // What each reply box holds, so a case can tell a draft that survived a repaint from
+    // one the repaint wiped.
+    replies: replyBoxes().filter((b) => b.input.value).map((b) => `${b.thread}: ${b.input.value}`),
     // The question counts, as the page wrote them into data-q: where each is drawn, what
     // it says, and whether it is the quiet kind that only has resolved questions behind it.
     flags: [

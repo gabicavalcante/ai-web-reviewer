@@ -1120,11 +1120,13 @@
   /* Whether a Monitor is tailing the logs. Assumed true until the first poll says
      otherwise, so a live review never flashes the detached state on load. */
   let WATCHER_LIVE = true;
-  /* The thread whose reply box has focus, so a repaint can carry its draft across. */
-  let typingIn = null;
+  /* The reply box being typed in, by place and thread, so a repaint can carry its draft
+     across. One thread can have a box in more than one place, and the draft goes back
+     into the one it was typed in. */
+  let typingAt = null;
   let repaintPending = false;
-  /* The live textarea per thread, so a repaint can hand a half-typed reply to the
-     element that replaces it. */
+  /* The live textarea per place and thread, so a repaint can hand a half-typed reply to
+     the element that replaces it. */
   const replyInputs = new Map();
 
   /* Declines written before the reply carried a kind. Matched on the exact text the
@@ -1233,7 +1235,7 @@
     box.appendChild(q);
     (t.turns || []).forEach(turn => box.appendChild(renderTurn(turn)));
     if (!t.resolved) {
-      box.appendChild(replyBox(t.id));
+      box.appendChild(replyBox(t.id, "orphan"));
     } else {
       box.appendChild(el("div", "where", "resolved"));
     }
@@ -1827,11 +1829,12 @@
     paintSide();
   }
 
-  function captureDraft(threadId) {
-    const input = replyInputs.get(threadId);
+  function captureDraft(key) {
+    const input = replyInputs.get(key);
     if (!input) return null;
     return {
-      threadId,
+      key,
+      focused: document.activeElement === input,
       value: input.value || "",
       start: input.selectionStart,
       end: input.selectionEnd,
@@ -1841,10 +1844,12 @@
   function restoreDraft(draft) {
     // The thread can leave the page under us: another commit selected, or resolved.
     // The draft goes with it.
-    const input = replyInputs.get(draft.threadId);
+    const input = replyInputs.get(draft.key);
     if (!input) return;
     input.value = draft.value;
-    if (typeof input.focus === "function") input.focus();
+    // Back where the reader was, but only if they were there: a draft left in a box they
+    // have since clicked away from must not take the focus back from what they are doing.
+    if (draft.focused && typeof input.focus === "function") input.focus();
     if (typeof draft.start === "number" && typeof input.setSelectionRange === "function") {
       input.setSelectionRange(draft.start, draft.end);
     }
@@ -1855,7 +1860,7 @@
     /* A poll must not wipe a half-typed reply, and must not skip the redraw to protect
        one either: a box holding focus would freeze the thread, hiding an answer that
        lands while it is open. Carry the draft across instead. */
-    const draft = typingIn ? captureDraft(typingIn) : null;
+    const draft = typingAt ? captureDraft(typingAt) : null;
     replyInputs.clear();
     panes().forEach(root => {
       root.querySelectorAll("tr.thread-row").forEach(n => n.remove());
@@ -1891,6 +1896,11 @@
       tr.after(row);
     });
     if (side) paintSide(); else closeSide();
+    /* Here rather than beside this call, so its reply boxes exist by the time the draft
+       is put back. Captured and never restored, a reply being typed was wiped by the
+       next answer to land on any thread. */
+    paintOrphans();
+    if (draft) restoreDraft(draft);
   }
 
   /* A question on the files tab is found by reading until a dot turns up in the gutter,
@@ -1975,7 +1985,7 @@
         body: JSON.stringify({ thread_id: threadId, text, kind: kind || "answer" })
       });
       if (!res.ok) throw new Error("HTTP " + res.status);
-      typingIn = null;
+      typingAt = null;
       await refresh();
       return true;
     } catch (err) {
@@ -1984,8 +1994,9 @@
     }
   }
 
-  function replyBox(threadId) {
+  function replyBox(threadId, place = "diff") {
     const box = el("div", "reply");
+    box.dataset.thread = threadId;
     const input = el("textarea");
     input.placeholder = "Reply in this thread…";
     const send = el("button", "btn small", "Reply");
@@ -2004,11 +2015,12 @@
       }
     };
 
-    replyInputs.set(threadId, input);
-    input.addEventListener("focus", () => { typingIn = threadId; });
+    const key = place + "\u0000" + threadId;
+    replyInputs.set(key, input);
+    input.addEventListener("focus", () => { typingAt = key; });
     input.addEventListener("blur", () => {
       if (!input.value.trim()) {
-        typingIn = null;
+        typingAt = null;
         if (repaintPending) { repaintPending = false; paintThreads(); }
       }
     });
@@ -2137,7 +2149,6 @@
       if (next !== JSON.stringify(THREADS) || WATCHER_LIVE !== watcherWas) {
         THREADS = body.threads;
         paintThreads();
-        paintOrphans();
       }
       const here = THREADS;
       const open = here.filter(t => !t.resolved).length;
