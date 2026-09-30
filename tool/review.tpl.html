@@ -1167,6 +1167,13 @@
     ? ["files", d.file, d.side, d.line]
     : ["commits", canonicalSha(d.commit), d.file, d.side, d.line]).join("\u0000");
 
+  /* The server keeps the first CODE_KEPT characters of the line a question names
+     (tool/server.py), so a line is compared by that much of it. By characters, the way
+     Python counts them, not by UTF-16 units: an emoji early in a long line would
+     otherwise cut in a different place on each side. */
+  const CODE_KEPT = 400;
+  const kept = text => text.length <= CODE_KEPT ? text : Array.from(text).slice(0, CODE_KEPT).join("");
+
   /* The final diff by position and by text, so a thread can be found again after the
      branch moves under it. */
   const FINAL_AT = new Map();
@@ -1174,8 +1181,8 @@
   ((DATA.final || {}).files || []).forEach(f => f.rows.forEach(r => {
     if (r.t === "hunk") return;
     const line = String(r.t === "del" ? r.o : r.n);
-    FINAL_AT.set([f.path, r.t, line].join("\u0000"), r.text);
-    const byText = [f.path, r.t, r.text].join("\u0000");
+    FINAL_AT.set([f.path, r.t, line].join("\u0000"), kept(r.text));
+    const byText = [f.path, r.t, kept(r.text)].join("\u0000");
     if (!FINAL_BY_TEXT.has(byText)) FINAL_BY_TEXT.set(byText, []);
     FINAL_BY_TEXT.get(byText).push(line);
   }));

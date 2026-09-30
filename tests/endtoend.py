@@ -1867,6 +1867,27 @@ def a_question_or_reply_sent_twice_from_the_keyboard_goes_once():
 
 
 @case
+def a_question_on_a_long_line_is_not_outdated_as_soon_as_it_is_asked():
+    """The server keeps the first 400 characters of the line a question was asked on, and
+    the page compared those with the whole line. So every question on a longer line said
+    its line had changed since, the moment it was asked. The emoji is there because git
+    counts characters and a page slicing by UTF-16 units would cut it in half."""
+    with sandbox() as (repo, run):
+        long = "x = '" + "\U0001F600" + "y" * 440 + "'"
+        (repo / "c.py").write_text("short\n" + long + "\n")
+        run("checkout", "-qb", "long")
+        run("add", "-A")
+        run("commit", "-qm", "A long line")
+        page, _ = built_page(repo)
+        stored = long[:400]  # what tool/server.py writes to questions.jsonl
+        thread = {"id": "q1", "view": "files", "file": "c.py", "side": "add", "line": "2",
+                  "code": stored, "question": "why so long?", "turns": [], "resolved": False}
+        drew = in_page(page, [thread], ask={"steps": [{"open": True}]})
+        eq(drew["outdated"], [], "said to be outdated")
+        eq(drew["asked"], ["files c.py:2 add true"], "drawn on its line")
+
+
+@case
 def the_docked_panel_opens_on_a_commits_tab_row_too():
     """Both tabs carry threads, so the panel has to find its line on either."""
     with sandbox() as (repo, run):
