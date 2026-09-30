@@ -169,6 +169,12 @@
      the pane fell into the 340px column meant for the rail and rendered a full-width
      diff in a third of the width. By id, to beat the side-thread column rules above. */
   #filesBoard.norail { grid-template-columns: minmax(0, 1fr); }
+  /* The same board still needs the panel's column. The rule above beat the one that
+     makes it, so the panel wrapped onto a row of its own under the diff. */
+  body.side-threads.side-open #filesBoard.norail { grid-template-columns: minmax(0, 1fr) minmax(380px, 460px); }
+  @media (max-width: 1080px) {
+    body.side-threads.side-open #filesBoard.norail { grid-template-columns: minmax(0, 1fr); }
+  }
 
   /* The rail is taller than the screen on a long branch, so sticky alone does nothing:
      reaching commit 20 scrolls the page, and the pane goes with it. The column is held
@@ -1692,8 +1698,13 @@
       "Commits " + DATA.commits.length;
     document.getElementById("tabFiles").textContent =
       "Files changed " + DATA.final.files.length;
-    document.getElementById("tabCommits").addEventListener("click", () => showTab("commits"));
+    /* A thread open in the panel is on a line of the tab being left, so it closes. */
+    document.getElementById("tabCommits").addEventListener("click", () => {
+      closeSide();
+      showTab("commits");
+    });
     document.getElementById("tabFiles").addEventListener("click", () => {
+      closeSide();
       // Built on the first visit, not at load. Most readings never leave the commits tab.
       if (!filesPainted) { paintFiles(); filesPainted = true; }
       showTab("files");
@@ -1748,7 +1759,13 @@
     body.replaceChildren();
     body.appendChild(buildThread(list).thread);
 
-    document.getElementById("side").hidden = false;
+    /* In the board of the tab the line is on. The panel was written into the commits
+       board, which is hidden while Files changed is open, so a thread there marked its
+       line, opened a column for the panel, and left the column empty. */
+    const side = document.getElementById("side");
+    const host = document.getElementById(tr.dataset.view === "files" ? "filesBoard" : "board");
+    if (side.parentNode !== host) { side.remove(); host.appendChild(side); }
+    side.hidden = false;
     document.body.classList.add("side-open");
   }
 

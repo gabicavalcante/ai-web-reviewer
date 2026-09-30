@@ -313,6 +313,11 @@ setTimeout(() => {
     side: registry.sideAnchor ? registry.sideAnchor.textContent : "",
     // Hidden is what closing does; the anchor text is left where it was.
     sideOpen: !!(registry.side && registry.side.hidden === false),
+    // Which board holds the panel. Each tab hides the other's, so a panel in the wrong
+    // one is open and visible to nobody.
+    sideIn: !registry.side ? ""
+      : registry.side.parentNode === registry.filesBoard ? "filesBoard"
+      : registry.side.parentNode === registry.board ? "board" : "?",
     cards: cards.length,
     orphanCards: cards,
     pane,

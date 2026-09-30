@@ -1350,6 +1350,7 @@ def the_docked_panel_opens_on_a_files_tab_row():
         )
         eq("side" in drew["asking"], True, f"the panel opened ({drew['asking']})")
         eq("a.py" in drew["side"], True, f"the panel points at the line ({drew['side']!r})")
+        eq(drew["sideIn"], "filesBoard", "the panel is on the tab its line is on")
         eq(drew["sideOpen"], False, "closing hides the panel")
         marked = [row for row in drew["pane"] if "side-open-row" in row]
         eq(marked, [], f"and puts the row it marked back ({marked})")
@@ -1686,6 +1687,7 @@ def the_docked_panel_opens_on_a_commits_tab_row_too():
         )
         eq("side" in drew["asking"], True, f"the panel opened ({drew['asking']})")
         eq("a.py" in drew["side"], True, f"pointing at the line ({drew['side']!r})")
+        eq(drew["sideIn"], "board", "the panel is on the tab its line is on")
 
 
 @case
