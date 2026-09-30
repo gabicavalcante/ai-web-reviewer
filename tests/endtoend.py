@@ -1972,6 +1972,25 @@ def the_files_tab_has_the_view_toggles_too():
 
 
 @case
+def an_older_poll_landing_late_does_not_undo_a_newer_one():
+    """The four second poll and the refresh after a send or a resolve can overlap. The
+    one that was asked first but answered last put its older threads back on the page,
+    so a thread just resolved looked open again until the next poll."""
+    with sandbox() as (repo, run):
+        rng = files_review(repo, run)
+        open_ = {"id": "q1", "view": "files", "file": "a.py", "side": "del", "line": "2",
+                 "code": "DROP ME", "question": "?", "turns": [], "resolved": False}
+        drew = in_page(paths.page(rng, repo), [open_], ask={"steps": [
+            {"slowNext": 60},
+            {"tick": True},
+            {"serve": [{**open_, "resolved": True}]},
+            {"tick": True},
+            {"wait": 120},
+        ]})
+        eq(drew["asked"], ["files a.py:2 del resolved"], f"the thread ({drew['asking']})")
+
+
+@case
 def the_docked_panel_opens_on_a_commits_tab_row_too():
     """Both tabs carry threads, so the panel has to find its line on either."""
     with sandbox() as (repo, run):

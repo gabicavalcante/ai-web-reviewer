@@ -138,13 +138,19 @@ const threads = JSON.parse(fs.readFileSync(process.argv[3], "utf8"));
 const plan = process.argv[5] ? JSON.parse(fs.readFileSync(process.argv[5], "utf8")) : null;
 const posted = [];
 let served = threads;
+let slowNext = 0;
 // The page reads its threads from /thread on the first poll, so that is where they go in.
 globalThis.fetch = (url, init) => {
   if (String(url).startsWith("/thread")) {
-    return Promise.resolve({
+    // What was being served when the request went out, answered after `slowNext`
+    // milliseconds if a case asked for that, so two polls can finish out of order.
+    const threads = served;
+    const delay = slowNext;
+    slowNext = 0;
+    return new Promise((answer) => setTimeout(() => answer({
       ok: true,
-      json: () => Promise.resolve({ threads: served, revision: "", watcher: true }),
-    });
+      json: () => Promise.resolve({ threads, revision: "", watcher: true }),
+    }), delay));
   }
   if (String(url) === "/ask") {
     posted.push(JSON.parse((init || {}).body || "{}"));
@@ -203,7 +209,8 @@ const anchorOf = (n) => {
    send the composer twice from the keyboard, {replyEnterTwice} the same in a reply box,
    {yes} press "Yes, investigate", {tab} press a tab, {openFile} open a file by its path,
    {wholeOf} press "Show the whole file" under that file, {toggle} flip a toggle on the
-   files tab's toolbar by its label.
+   files tab's toolbar by its label, {slowNext} answer the next /thread that many
+   milliseconds late, {wait} let that many milliseconds pass.
 
    A few milliseconds pass after each step, so a poll or a send can settle between two
    presses the way it does between a reader's clicks. */
@@ -262,6 +269,12 @@ async function drive(steps) {
       if (!btn) return [...done, `no way to the commits tab from ${step.showOnCommits}`];
       press(btn);
       done.push(`to commits from ${step.showOnCommits}`);
+    } else if (step.slowNext !== undefined) {
+      slowNext = step.slowNext;
+      done.push(`next poll slow by ${step.slowNext}`);
+    } else if (step.wait !== undefined) {
+      await new Promise((settle) => setTimeout(settle, step.wait));
+      done.push(`waited ${step.wait}`);
     } else if (step.toggle !== undefined) {
       // A toggle on the files tab's own toolbar, by its label.
       const lab = queryAll(registry.filesTools || mk("div"), "label.toggle")

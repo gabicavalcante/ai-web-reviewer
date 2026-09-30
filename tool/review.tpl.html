@@ -2210,7 +2210,14 @@
     document.getElementById("qnaStatus").textContent = text;
   }
 
+  /* The four second poll and the refresh after a send or a resolve can overlap, and the
+     one asked first can be answered last. Its threads are older, so it is dropped rather
+     than painted over the newer ones. */
+  let pollsAsked = 0;
+  let pollShown = 0;
+
   async function refresh() {
+    const asked = ++pollsAsked;
     try {
       // The squash guards cost a git status, so they are asked for only while the bar
       // that needs them is on screen.
@@ -2218,6 +2225,8 @@
       const res = await fetch("/thread" + (wantSquash ? "?squash=1" : ""), { cache: "no-store" });
       if (!res.ok) throw new Error("HTTP " + res.status);
       const body = await res.json();
+      if (asked < pollShown) return;
+      pollShown = asked;
       setStale(body.revision);
       if (body.squash) {
         const was = SQUASH_BLOCK;
