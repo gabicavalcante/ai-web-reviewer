@@ -202,7 +202,8 @@ const anchorOf = (n) => {
    {cancel} press the composer's Cancel, {key} press a key on the page, {ctrlEnterTwice}
    send the composer twice from the keyboard, {replyEnterTwice} the same in a reply box,
    {yes} press "Yes, investigate", {tab} press a tab, {openFile} open a file by its path,
-   {wholeOf} press "Show the whole file" under that file.
+   {wholeOf} press "Show the whole file" under that file, {toggle} flip a toggle on the
+   files tab's toolbar by its label.
 
    A few milliseconds pass after each step, so a poll or a send can settle between two
    presses the way it does between a reader's clicks. */
@@ -261,6 +262,15 @@ async function drive(steps) {
       if (!btn) return [...done, `no way to the commits tab from ${step.showOnCommits}`];
       press(btn);
       done.push(`to commits from ${step.showOnCommits}`);
+    } else if (step.toggle !== undefined) {
+      // A toggle on the files tab's own toolbar, by its label.
+      const lab = queryAll(registry.filesTools || mk("div"), "label.toggle")
+        .find((l) => (l.children || []).some((c) => c.nodeValue === step.toggle));
+      const cb = lab && (lab.children || []).find((c) => c.tagName === "INPUT");
+      if (!cb) return [...done, `no toggle ${step.toggle} on the files tab`];
+      cb.checked = !cb.checked;
+      cb._on.change();
+      done.push(`toggled ${step.toggle}`);
     } else if (step.reply !== undefined) {
       const box = replyBoxes().find((b) => b.thread === step.reply.id);
       if (!box) return [...done, `no reply box on ${step.reply.id}`];
@@ -413,6 +423,10 @@ setTimeout(async () => {
     outdated,
     gutter,
     // Composer rows still on the page. Sending is supposed to take it away.
+    // Threads drawn as a row under their line, which is the inline layout.
+    threadRows: queryAll(registry.fileGroups, "tr.thread-row").length,
+    // Classes on body, which is where every view toggle keeps its state.
+    body: [...document.body.classList._s].sort(),
     // The files the files tab has drawn, by the path in each header.
     filesDrawn: queryAll(registry.fileGroups, "span.fpath").map((n) => n.textContent),
     // The commit the rail has selected, by position.

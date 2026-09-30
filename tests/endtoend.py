@@ -1954,6 +1954,24 @@ def the_files_no_stage_claims_are_the_only_ones_listed_under_that_entry():
 
 
 @case
+def the_files_tab_has_the_view_toggles_too():
+    """Wrap lines, Hide resolved and Thread at the side lived in the Commits pane only,
+    which is read only now. The tab a reviewer asks on had no way to change them."""
+    with sandbox() as (repo, run):
+        rng = files_review(repo, run)
+        thread = {"id": "q1", "view": "files", "file": "a.py", "side": "del", "line": "2",
+                  "code": "DROP ME", "question": "?", "turns": [], "resolved": False}
+        drew = in_page(paths.page(rng, repo), [thread], ask={"steps": [
+            {"toggle": "Thread at the side"},
+            {"toggle": "Hide resolved"},
+        ]})
+        eq("side-threads" in drew["body"], False, f"threads at the side ({drew['asking']})")
+        eq("hide-resolved" in drew["body"], True, "resolved threads hidden")
+        # Inline now, so the thread is a row under its line rather than in the panel.
+        eq(drew["threadRows"], 1, "the thread drawn inline")
+
+
+@case
 def the_docked_panel_opens_on_a_commits_tab_row_too():
     """Both tabs carry threads, so the panel has to find its line on either."""
     with sandbox() as (repo, run):

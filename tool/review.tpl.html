@@ -532,7 +532,7 @@
         <h2>Read by stage</h2>
         <div class="commits" id="stageRail"></div>
       </nav>
-      <main class="pane" id="filePane"><div id="fileGroups"></div></main>
+      <main class="pane" id="filePane"><div class="difftools" id="filesTools"></div><div id="fileGroups"></div></main>
     </div>
     <section class="orphans legacy" id="commitThreads" hidden>
       <h2 id="commitThreadsTitle">Asked on the commits view</h2>
@@ -1028,6 +1028,34 @@
   }
 
 
+  /* How the diffs are drawn. Each is a class on body, so it holds on both tabs, and each
+     tab has its own copy of the toggles, kept in step: the tab a reviewer asks on is the
+     one they need them on. */
+  function viewToggles() {
+    const mk = (label, cls, after) => {
+      const lab = el("label", "toggle");
+      const cb = el("input");
+      cb.type = "checkbox";
+      cb.dataset.toggle = cls;
+      cb.checked = document.body.classList.contains(cls);
+      cb.addEventListener("change", () => {
+        document.body.classList.toggle(cls, cb.checked);
+        document.querySelectorAll('input[data-toggle="' + cls + '"]')
+          .forEach(other => { other.checked = cb.checked; });
+        if (after) after();
+      });
+      lab.appendChild(cb);
+      lab.appendChild(document.createTextNode(label));
+      return lab;
+    };
+    return [
+      mk("Changes only", "only-changes"),
+      mk("Wrap lines", "wrap"),
+      mk("Hide resolved", "hide-resolved"),
+      mk("Thread at the side", "side-threads", () => { closeSide(); paintThreads(); }),
+    ];
+  }
+
   function select(i) {
     selected = i;
     const c = DATA.commits[i];
@@ -1058,24 +1086,7 @@
     const spacer = el("span", "spacer");
     tools.appendChild(spacer);
 
-    const mkToggle = (label, cls, initial, after) => {
-      const lab = el("label", "toggle");
-      const cb = el("input");
-      cb.type = "checkbox";
-      cb.checked = initial;
-      cb.addEventListener("change", () => {
-        document.body.classList.toggle(cls, cb.checked);
-        if (after) after();
-      });
-      lab.appendChild(cb);
-      lab.appendChild(document.createTextNode(label));
-      return lab;
-    };
-    tools.appendChild(mkToggle("Changes only", "only-changes", document.body.classList.contains("only-changes")));
-    tools.appendChild(mkToggle("Wrap lines", "wrap", document.body.classList.contains("wrap")));
-    tools.appendChild(mkToggle("Hide resolved", "hide-resolved", document.body.classList.contains("hide-resolved")));
-    tools.appendChild(mkToggle("Thread at the side", "side-threads",
-      document.body.classList.contains("side-threads"), () => { closeSide(); paintThreads(); }));
+    viewToggles().forEach(n => tools.appendChild(n));
     pane.appendChild(tools);
 
     const files = el("div", "files");
@@ -1837,6 +1848,9 @@
        commits are how it got there, which is the second question and sometimes not one at
        all. A line here is asked about in the branch's own numbering, the way a pull
        request comment is anchored. */
+    const filesTools = document.getElementById("filesTools");
+    filesTools.appendChild(el("span", "spacer"));
+    viewToggles().forEach(n => filesTools.appendChild(n));
     paintFiles();
     filesPainted = true;
     showTab("files");
