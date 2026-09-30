@@ -377,10 +377,12 @@
   .btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
   .composer .hint, .reply .hint { font-family: var(--mono); font-size: 10.5px; color: var(--ink-faint); }
   /* A thread whose line has changed under it. Muted rather than alarming: the question
-     is still worth reading, it just no longer describes what is on that line. */
-  .stale { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; font-family: var(--sans); font-size: 12px; color: var(--ink-faint); }
-  .stale .tag { font-family: var(--mono); font-size: 10px; letter-spacing: .06em; text-transform: uppercase; color: var(--ink-faint); border: 1px solid var(--line); border-radius: 3px; padding: 1px 5px; }
-  .stale .snippet { flex: 1 0 100%; font-family: var(--mono); font-size: 11.5px; color: var(--ink-soft); background: var(--surface-2); border-radius: 3px; padding: 5px 8px; overflow-x: auto; white-space: pre; }
+     is still worth reading, it just no longer describes what is on that line. Not
+     .stale, which is the page's own banner: sharing it made the note sticky, so in the
+     panel it pinned itself to the top and covered the conversation scrolling under it. */
+  .outdated-note { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 10px; font-family: var(--sans); font-size: 12px; color: var(--ink-faint); }
+  .outdated-note .tag { font-family: var(--mono); font-size: 10px; letter-spacing: .06em; text-transform: uppercase; color: var(--ink-faint); border: 1px solid var(--line); border-radius: 3px; padding: 1px 5px; }
+  .outdated-note .snippet { flex: 1 0 100%; font-family: var(--mono); font-size: 11.5px; color: var(--ink-soft); background: var(--surface-2); border-radius: 3px; padding: 5px 8px; white-space: pre-wrap; overflow-wrap: anywhere; }
   table.diff tr[data-outdated] .gut { box-shadow: inset 3px 0 0 var(--ink-faint); }
   table.diff tr[data-outdated] .gut::before { background: transparent; box-shadow: inset 0 0 0 1px var(--ink-faint); }
   .thread.done { opacity: .58; }
@@ -1288,7 +1290,7 @@
       if (outdatedThreads.has(t.id)) {
         /* The line is still numbered the same and holds something else now. Saying so
            beats drawing the question against code the reviewer never asked about. */
-        const stale = el("div", "stale");
+        const stale = el("div", "outdated-note");
         stale.appendChild(el("span", "tag", "outdated"));
         stale.appendChild(document.createTextNode(
           "the line this was asked on has changed since"));
