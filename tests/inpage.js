@@ -193,7 +193,8 @@ const anchorOf = (n) => {
    composer, {send} press the button, {stage} click a rail entry, {whole} press "Show the
    whole file", {closeSide} press the panel's X, {tick} run the poll, {review} tick the
    file at that path as reviewed, {reply} type into the first reply box of the thread with
-   that id, the way a reader does: focus, then text. */
+   that id, the way a reader does: focus, then text, {commit} click that commit on the
+   rail, {showOnCommits} press the way to the Commits tab on a listed commit thread. */
 function drive(steps) {
   // getElementById hands out standalone nodes, so the page's subtrees hang off those
   // rather than off body. A search from body alone found nothing at all.
@@ -237,6 +238,17 @@ function drive(steps) {
     } else if (step.closeSide) {
       press(registry.sideClose);
       done.push("closed");
+    } else if (step.commit !== undefined) {
+      const btn = (registry.commits ? registry.commits.children : [])[step.commit];
+      if (!btn) return [...done, `no commit ${step.commit} on the rail`];
+      press(btn);
+      done.push(`commit ${step.commit}`);
+    } else if (step.showOnCommits !== undefined) {
+      const btn = queryAll(registry.commitThreadList || mk("div"), "button.showoncommits")
+        .find((b) => b.dataset.thread === step.showOnCommits);
+      if (!btn) return [...done, `no way to the commits tab from ${step.showOnCommits}`];
+      press(btn);
+      done.push(`to commits from ${step.showOnCommits}`);
     } else if (step.reply !== undefined) {
       const box = replyBoxes().find((b) => b.thread === step.reply.id);
       if (!box) return [...done, `no reply box on ${step.reply.id}`];
@@ -364,6 +376,10 @@ setTimeout(() => {
       .filter((b) => queryAll(b, "span.changed").some((n) => !n.hidden))
       .map((b) => queryAll(b, "span.fpath")[0].textContent),
     squash: !!registry.squash && registry.squash.hidden === false,
+    // The threads listed as asked on the commits view, by the text of each card.
+    commitCards: (registry.commitThreadList ? registry.commitThreadList.children : []).map(text),
+    tab: registry.board && registry.board.hidden === false ? "commits"
+      : registry.filesView && registry.filesView.hidden === false ? "files" : "?",
     // What each reply box holds, so a case can tell a draft that survived a repaint from
     // one the repaint wiped.
     replies: replyBoxes().filter((b) => b.input.value).map((b) => `${b.thread}: ${b.input.value}`),

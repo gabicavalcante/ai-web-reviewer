@@ -1725,6 +1725,62 @@ def a_half_typed_reply_survives_a_repaint():
 
 
 @case
+def a_line_on_the_commits_tab_cannot_be_asked_about():
+    """A commit's diff numbers a line in that commit's version of the file, and the fixup
+    a question leads to rewrites the commit. So a question asked there loses its line at
+    exactly the moment it is answered. Questions are asked on Files changed."""
+    with sandbox() as (repo, run):
+        rng = files_review(repo, run)
+        drew = in_page(paths.page(rng, repo), [],
+                       ask={"steps": [{"gutter": "commits a.py:3 add"}]})
+        eq(drew["composers"], 0, f"a composer on the commits tab ({drew['asking']})")
+        drew = in_page(paths.page(rng, repo), [],
+                       ask={"steps": [{"gutter": "files a.py:3 add"}]})
+        eq(drew["composers"], 1, f"a composer on the files tab ({drew['asking']})")
+
+
+def commit_thread(short, **kw):
+    return {"id": "c1", "view": "commits", "commit": short, "file": "b.py", "side": "add",
+            "line": "1", "code": "fresh", "question": "asked on a commit", "turns": [],
+            "resolved": False, **kw}
+
+
+@case
+def threads_asked_on_commits_are_listed_on_the_files_tab():
+    """They name a line in a commit's own version of the file, and translating that into
+    the branch as it stands is a guess. So they are listed rather than moved onto a line,
+    answerable where they are. One whose commit has gone is an orphan, not one of these."""
+    with sandbox() as (repo, run):
+        rng = files_review(repo, run)
+        short = run("log", "--format=%h", "-1", "HEAD").stdout.strip()
+        files = {"id": "f1", "view": "files", "file": "a.py", "side": "add", "line": "3",
+                 "code": "added by A", "question": "asked on the branch", "turns": [],
+                 "resolved": False}
+        gone = commit_thread("deadbee", id="c2", question="asked on a commit since squashed")
+        drew = in_page(paths.page(rng, repo), [commit_thread(short), files, gone],
+                       ask={"steps": [{"commit": 1}]})
+        eq(len(drew["commitCards"]), 1, f"threads listed ({drew['commitCards']})")
+        eq("asked on a commit" in drew["commitCards"][0], True, "the one listed")
+        eq(drew["orphans"], ["c2"], "the one whose commit has gone")
+        # Still under its line on the Commits tab, where it was asked.
+        eq("commits b.py:1 add true" in drew["asked"], True, f"drawn on its line ({drew['asked']})")
+
+
+@case
+def a_listed_commit_thread_leads_to_its_line():
+    """Listed without the code around it, a thread needs a way back to where it was asked."""
+    with sandbox() as (repo, run):
+        rng = files_review(repo, run)
+        short = run("log", "--format=%h", "-1", "HEAD").stdout.strip()
+        drew = in_page(paths.page(rng, repo), [commit_thread(short)],
+                       ask={"steps": [{"tick": True}, {"showOnCommits": "c1"}]})
+        eq(drew["tab"], "commits", f"the tab shown ({drew['asking']})")
+        eq(drew["sideOpen"], True, "the thread open beside its line")
+        eq(drew["sideIn"], "board", "on the commits board")
+        eq("b.py" in drew["side"] and "line 1" in drew["side"], True, f"at the line ({drew['side']!r})")
+
+
+@case
 def the_docked_panel_opens_on_a_commits_tab_row_too():
     """Both tabs carry threads, so the panel has to find its line on either."""
     with sandbox() as (repo, run):

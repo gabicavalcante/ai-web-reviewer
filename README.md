@@ -45,8 +45,11 @@ question about line 161 has been answered beside the code it is about.](docs/scr
 ## Two ways to read a branch
 
 **Commits** is the rail down the left: one commit at a time, in order, with its diff
-beside it. A line here has a commit behind it, so a question asked on it is anchored to
-that commit's own numbering of the file.
+beside it. It is read only. A commit's diff numbers a line in that commit's version of the
+file, and the fixup a question leads to rewrites the commit, so a question asked here would
+lose its line at the moment it was answered. Questions are asked on Files changed. The ones
+asked here before that stay under their lines, and are listed at the end of Files changed,
+where they can still be answered and resolved.
 
 Later commits often rewrite what earlier ones wrote. `git blame` tells you, for the branch
 as it stands now, which commit each line came from, so the page can count how much of each
@@ -205,7 +208,7 @@ question asked while reading one branch never appears on the other's page.
 
 | | |
 | --- | --- |
-| Click a line | Ask about it, or open the thread it already has |
+| Click a line number | On Files changed, ask about it. On either tab, open the thread a line already has |
 | `j` `k` or arrows | Move between commits |
 | `⌘/Ctrl + Enter` | Send the question or reply you are typing |
 | `Esc` | Close the thread panel or the question box |
@@ -226,8 +229,10 @@ git commit --fixup=b7aab66          # the reviewed commit keeps its sha
 git rebase -i --autosquash e8e4bb6  # once the review is over
 ```
 
-A thread is anchored to a commit's sha, so amending a reviewed commit changes that sha and
-orphans every thread on it. A fixup leaves the reviewed commits alone.
+A question on Files changed is anchored to the branch as it stands, so a fixup moves it
+only by changing its line, and then the thread says it is out of date. A thread asked on
+the commits view is anchored to a commit's sha, and amending that commit orphans it. A
+fixup leaves the reviewed commits alone.
 
 The page folds each fixup into the commit it amends and marks it as one, so the rail
 stays as long as the change rather than growing with every correction. A fixup whose
@@ -296,7 +301,7 @@ while reading it.
 
 | File | What it holds |
 | --- | --- |
-| `questions.jsonl` | One row per thread: the question, the branch it was asked on, and the commit, file, side and line it is anchored to |
+| `questions.jsonl` | One row per thread: the question, the branch it was asked on, the view it was asked on, and the file, side and line it is anchored to. A thread asked on the commits view also names the commit |
 | `messages.jsonl` | Every turn after the opening question, with who wrote it and what kind it is: an answer, a question back to the reviewer, a change that was made, or the reviewer's yes or no to one |
 | `resolved.jsonl` | One row each time a thread is resolved or reopened |
 | `answers.jsonl` | An older reply format. Nothing writes it now, and it is still read, so old reviews still render |
@@ -448,7 +453,7 @@ worse.
 | `reference/narrative.md` | The optional editorial layer |
 | `reference/voice.md` | How the page's own copy is written |
 | `reference/gotchas.md` | Operational traps worth not rediscovering |
-| `reference/plan-threads-on-files.md` | Asking a question on the Files changed tab. Not built |
+| `reference/plan-threads-on-files.md` | Why a question is asked on the Files changed tab and only there |
 | `tool/review.py` | Build and serve |
 | `tool/build_data.py` | Git range to page data |
 | `tool/paths.py` | Where the repo is and where state lives |

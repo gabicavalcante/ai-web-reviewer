@@ -288,6 +288,7 @@ def in_page(page, threads, reviewed=None, ask=None):
     drew.setdefault("stale", [])
     drew.setdefault("flags", [])
     drew.setdefault("replies", [])
+    drew.setdefault("commitCards", [])
     return drew
 
 

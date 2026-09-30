@@ -334,8 +334,11 @@
   footer .sep { color: var(--line); }
 
   /* ---------- inline Q&A ---------- */
-  .gut { cursor: pointer; position: relative; }
-  table.diff tr:hover .gut::after { content: "?"; position: absolute; right: 2px; top: 0; font-size: 10px; color: var(--accent); }
+  .gut { position: relative; }
+  /* Only a line on Files changed can be asked about. The Commits tab numbers a line in
+     that commit's version of the file, which a fixup rewrites, so it is read only. */
+  table.diff tr[data-view="files"] .gut { cursor: pointer; }
+  table.diff tr[data-view="files"]:hover .gut::after { content: "?"; position: absolute; right: 2px; top: 0; font-size: 10px; color: var(--accent); }
   /* A 5px dot was easy to miss and hard to aim at. A line carrying threads gets a bar
      down the gutter and a badge with the number of them, and the whole line is clickable. */
   table.diff tr[data-asked] .gut { box-shadow: inset 3px 0 0 var(--accent); }
@@ -416,6 +419,10 @@
   .did .into { font-family: var(--mono); font-size: 11px; color: var(--accent); }
   .did .stat { font-family: var(--mono); font-size: 11px; color: var(--ink-faint); }
   .orphans { margin-top: 40px; padding-top: 26px; border-top: 1px solid var(--line); }
+  /* Not lost, only asked somewhere else, so not the orphans' red. */
+  .legacy .orphan { border-left-color: var(--accent); }
+  .legacy .orphan.done { border-left-color: var(--line); opacity: .7; }
+  .legacy .acts { display: flex; gap: 8px; }
   .orphan { background: var(--surface); border: 1px solid var(--line); border-left: 2px solid var(--del); border-radius: 3px; padding: 15px 18px; display: flex; flex-direction: column; gap: 9px; }
   .tabs { display: flex; gap: 2px; margin: 26px 0 0; border-bottom: 1px solid var(--line); }
   .tab { font-family: var(--sans); font-size: 13.5px; color: var(--ink-soft); background: none; border: none; border-bottom: 2px solid transparent; padding: 9px 14px; cursor: pointer; margin-bottom: -1px; }
@@ -527,6 +534,12 @@
       </nav>
       <main class="pane" id="filePane"><div id="fileGroups"></div></main>
     </div>
+    <section class="orphans legacy" id="commitThreads" hidden>
+      <h2 id="commitThreadsTitle">Asked on the commits view</h2>
+      <p class="filesnote">Anchored to a commit rather than to the branch as it stands, so they
+        are listed here instead of on a line. Each still sits under its line on the Commits tab.</p>
+      <div class="orphan-list" id="commitThreadList"></div>
+    </section>
   </section>
 
   <div class="board" id="board">
@@ -1041,6 +1054,7 @@
     const tools = el("div", "difftools");
     const paneFiles = withFollowups(c).reduce((n, src) => n + src.files.length, 0);
     tools.appendChild(el("span", null, paneFiles === 1 ? "1 file" : paneFiles + " files"));
+    tools.appendChild(el("span", null, "read only · ask on Files changed"));
     const spacer = el("span", "spacer");
     tools.appendChild(spacer);
 
@@ -1221,7 +1235,7 @@
     return map;
   }
 
-  function orphanCard(t, why) {
+  function orphanCard(t, why, place = "orphan") {
     const box = el("div", "orphan");
     /* A question asked on the files tab has no commit, and printing one anyway named a
        commit that does not exist and blamed it for not being in the diff. */
@@ -1235,7 +1249,7 @@
     box.appendChild(q);
     (t.turns || []).forEach(turn => box.appendChild(renderTurn(turn)));
     if (!t.resolved) {
-      box.appendChild(replyBox(t.id, "orphan"));
+      box.appendChild(replyBox(t.id, place));
     } else {
       box.appendChild(el("div", "where", "resolved"));
     }
@@ -1254,6 +1268,56 @@
     orphans.forEach(t => list.appendChild(orphanCard(t, t.view === "files"
       ? "no line of the branch as it stands is at this anchor any more"
       : "this commit is not part of the diff shown here")));
+  }
+
+  /* Threads asked on the Commits tab, before questions moved to Files changed. They name
+     a line in a commit's own version of the file, and translating that into the branch as
+     it stands is right for 78% of added lines and 45% of removed ones: a guess standing
+     between the reviewer and something a person wrote. So they are not moved onto a line
+     here. They are listed, answerable where they are, with a way to the line they were
+     asked on. One whose commit has gone is an orphan, and is listed with those. */
+  function paintCommitThreads() {
+    const section = document.getElementById("commitThreads");
+    const list = document.getElementById("commitThreadList");
+    const asked = THREADS.filter(t => t.view !== "files" && placeThread(t));
+    section.hidden = asked.length === 0;
+    list.replaceChildren();
+    const open = asked.filter(t => !t.resolved).length;
+    document.getElementById("commitThreadsTitle").textContent = "Asked on the commits view"
+      + (open ? " · " + open + " open" : "");
+    [...asked.filter(t => !t.resolved), ...asked.filter(t => t.resolved)].forEach(t => {
+      const card = orphanCard(t, "asked on the Commits tab", "legacy");
+      if (t.resolved) card.classList.add("done");
+      const acts = el("div", "acts");
+      const go = el("button", "btn ghost small showoncommits", "Show on the Commits tab");
+      go.type = "button";
+      go.dataset.thread = t.id;
+      go.addEventListener("click", () => showOnCommits(t));
+      acts.appendChild(go);
+      card.appendChild(acts);
+      list.appendChild(card);
+    });
+  }
+
+  /* To the line a commit thread was asked on: its tab, its commit, its file opened, and
+     the thread drawn there the way the reader has threads drawn. */
+  function showOnCommits(t) {
+    const sha = canonicalSha(t.commit);
+    const at = DATA.commits.findIndex(c => withFollowups(c).some(src => src.short === sha));
+    if (at < 0) return;
+    closeSide();
+    showTab("commits");
+    select(at);
+    const box = [...document.getElementById("pane").querySelectorAll("section.file")]
+      .find(n => n.dataset.file === t.file && n.dataset.commit === sha);
+    if (box && box.dataset.open !== "true") {
+      const head = box.querySelector("button.file-head");
+      if (head && typeof head.click === "function") head.click();
+    }
+    const tr = rowForKey(anchorKey(t));
+    if (!tr) return;
+    if (sideMode()) openSide(tr);
+    if (typeof tr.scrollIntoView === "function") tr.scrollIntoView({ block: "center" });
   }
 
   /* One thread renderer for both layouts: the row under the line, and the docked panel.
@@ -1900,6 +1964,7 @@
        is put back. Captured and never restored, a reply being typed was wiped by the
        next answer to land on any thread. */
     paintOrphans();
+    paintCommitThreads();
     if (draft) restoreDraft(draft);
   }
 
@@ -2186,7 +2251,8 @@
       openSide(tr);
       return;
     }
-    if (e.target.closest("td.gut")) openComposer(tr);
+    // A thread already on a commit's line still opens above, to be read and answered.
+    if (e.target.closest("td.gut") && tr.dataset.view === "files") openComposer(tr);
   });
 
   document.getElementById("sideClose").addEventListener("click", closeSide);

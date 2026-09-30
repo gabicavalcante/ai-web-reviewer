@@ -6,8 +6,9 @@ description: Serve a branch's diff as a local web page the reviewer reads in a b
 # Web reviewer
 
 A local page that renders `git` commits as a readable diff and carries the reviewer's
-questions back to you. Threads anchor to a specific commit, file and line, so neither of
-you has to describe which code is under discussion.
+questions back to you. Threads anchor to a file, side and line of the branch as it stands,
+the way a pull request comment does, so neither of you has to describe which code is under
+discussion.
 
 ## Run it
 
@@ -61,8 +62,8 @@ A request in a thread is a request: make it. Commit it as `git commit --fixup=<s
 the reviewed commits keep their hashes, then report it with `--did`. Squash with
 `git rebase --autosquash` only once the review is finished.
 
-Amending a reviewed commit changes its hash and shifts its line numbers, which orphans
-every thread anchored to it. The page surfaces orphans in their own section rather than
+Amending a reviewed commit changes its hash, which orphans every thread asked on the
+commits view before questions moved to Files changed. The page surfaces orphans in their own section rather than
 hiding them, but the anchor is still lost. Do not amend mid-review unless asked, and say
 what it will cost when you do.
 

@@ -1,10 +1,10 @@
 # Moving questions to the Files changed tab
 
-Not built. This is the design, and the measurements it rests on.
+Built. This is the design, and the measurements it rests on.
 
-Files changed is the tab that opens and the one a reviewer reads. Questions can only be
-asked on Commits, because a thread anchors to `(commit, file, side, line)` and a line there
-has a commit behind it. So the reader is in one place and the asking is in another.
+Files changed is the tab that opens and the one a reviewer reads. Questions could only be
+asked on Commits, because a thread anchored to `(commit, file, side, line)` and a line there
+has a commit behind it. So the reader was in one place and the asking in another.
 
 ## Threads live on one tab, not two
 
@@ -141,7 +141,10 @@ layer that is a heuristic in both directions.
    matches.~~ Done. The anchoring came with step 2; what step 3 added is the placing:
    a thread follows its text where there is one of it, and says it is out of date where
    there is not.
-4. Move the existing threads into their own section.
+4. ~~Move the existing threads into their own section.~~ Done. The Commits tab is read
+   only now: one tab holds the asking, so there is one coordinate system. Its threads are
+   listed at the end of Files changed with a way to the line they were asked on, and still
+   drawn on that line; one whose commit has gone is an orphan, as before.
 
 ## What this costs
 
