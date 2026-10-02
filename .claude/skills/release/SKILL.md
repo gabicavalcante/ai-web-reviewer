@@ -50,17 +50,22 @@ claude plugin tag -m "ai-web-reviewer %s" --push
 ## Before tagging, once
 
 ```bash
+uvx black --check .
+uvx pyflakes tool tests
 python3 tests/run.py
 claude plugin validate .
 python3 tool/review.py build HEAD~3..HEAD
 ```
 
-The first runs the tool's own checks, each one holding down a bug that shipped. The second
-checks both manifests. The third builds a page and runs `smoke.js` over it, so a page that
-throws is caught before it is tagged rather than after. That third check is how the crash
-on a branch containing a PNG was found, one commit before it would have been tagged.
+The first two are formatting and undefined names. CI runs them before anything else, so a
+file black would reformat stops every check after it, and 2.2.0 was tagged on a commit that
+failed exactly that. The third runs the tool's own checks, each one holding down a bug that
+shipped. The fourth checks both manifests. The fifth builds a page and runs `smoke.js` over
+it, so a page that throws is caught before it is tagged rather than after. That check is
+how the crash on a branch containing a PNG was found, one commit before it would have been
+tagged.
 
-GitHub Actions runs the same three on every push and pull request, so a red tag is the
+GitHub Actions runs the same five on every push and pull request, so a red tag is the
 second place you hear about it rather than the first.
 
 ## What a release does not include
