@@ -148,9 +148,12 @@ layer that is a heuristic in both directions.
 
 ## What this costs
 
-The anchor format changes, so this is a major version. `questions.jsonl` gains rows that
-mean something different from the ones already in it, and every reader of that file has to
-tell them apart.
+The anchor format changes. `questions.jsonl` gains rows that mean something different from
+the ones already in it, and every reader of that file has to tell them apart. That file is
+in the state directory, which the version does not cover, and every row already on disk
+still reads, so it shipped as a minor version rather than the major one this section
+first called for.
 
 The risk is in `paintThreads`, which runs every four seconds and which two separate reviews
-have already found bugs in. It should get its own QA round.
+have already found bugs in. It got its own QA round, which found seven more, each fixed
+with a check that fails without the fix.
