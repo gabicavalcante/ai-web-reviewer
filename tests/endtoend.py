@@ -1672,10 +1672,26 @@ def the_files_tab_says_where_its_questions_are():
         rng = files_review(repo, run)
         base = {"turns": [], "view": "files"}
         threads = [
-            {**base, "id": "q1", "file": "a.py", "side": "del", "line": "2",
-             "code": "DROP ME", "question": "why did this go?", "resolved": False},
-            {**base, "id": "q2", "file": "b.py", "side": "add", "line": "1",
-             "code": "fresh", "question": "is this new?", "resolved": True},
+            {
+                **base,
+                "id": "q1",
+                "file": "a.py",
+                "side": "del",
+                "line": "2",
+                "code": "DROP ME",
+                "question": "why did this go?",
+                "resolved": False,
+            },
+            {
+                **base,
+                "id": "q2",
+                "file": "b.py",
+                "side": "add",
+                "line": "1",
+                "code": "fresh",
+                "question": "is this new?",
+                "resolved": True,
+            },
         ]
         drew = in_page(paths.page(rng, repo), threads)
         eq(
@@ -1689,8 +1705,9 @@ def the_files_tab_says_where_its_questions_are():
             "the counts the page drew",
         )
         # The other stage's pane holds the resolved one, and its file says so.
-        drew = in_page(paths.page(rng, repo), threads,
-                       ask={"steps": [{"stage": "the new file"}]})
+        drew = in_page(
+            paths.page(rng, repo), threads, ask={"steps": [{"stage": "the new file"}]}
+        )
         eq("file b.py: 1 resolved (quiet)" in drew["flags"], True, f"b.py ({drew['flags']})")
 
 
@@ -1702,25 +1719,60 @@ def a_half_typed_reply_survives_a_repaint():
     with sandbox() as (repo, run):
         rng = files_review(repo, run)
         base = {"turns": [], "view": "files", "resolved": False}
-        asked = {**base, "id": "q1", "file": "a.py", "side": "del", "line": "2",
-                 "code": "DROP ME", "question": "why did this go?"}
+        asked = {
+            **base,
+            "id": "q1",
+            "file": "a.py",
+            "side": "del",
+            "line": "2",
+            "code": "DROP ME",
+            "question": "why did this go?",
+        }
         # On a line that is not in the diff, so it is drawn in the orphan list: the other
         # place a reply box lives, which the poll repaints just the same.
-        gone = {**base, "id": "q2", "file": "a.py", "side": "add", "line": "90",
-                "code": "not here", "question": "where did this go?"}
+        gone = {
+            **base,
+            "id": "q2",
+            "file": "a.py",
+            "side": "add",
+            "line": "90",
+            "code": "not here",
+            "question": "where did this go?",
+        }
         answered = {**gone, "turns": [{"role": "claude", "text": "into b.py"}]}
-        drew = in_page(paths.page(rng, repo), [asked, gone], ask={"steps": [
-            {"gutter": "files a.py:2 del"},
-            {"reply": {"id": "q1", "text": "half a thought"}},
-            {"serve": [asked, answered]},
-            {"tick": True},
-        ]})
-        eq(drew["replies"], ["q1: half a thought"], f"the drafts after the poll ({drew['asking']})")
-        drew = in_page(paths.page(rng, repo), [asked, gone], ask={"steps": [
-            {"reply": {"id": "q2", "text": "the other half"}},
-            {"serve": [{**asked, "turns": [{"role": "claude", "text": "it moved"}]}, gone]},
-            {"tick": True},
-        ]})
+        drew = in_page(
+            paths.page(rng, repo),
+            [asked, gone],
+            ask={
+                "steps": [
+                    {"gutter": "files a.py:2 del"},
+                    {"reply": {"id": "q1", "text": "half a thought"}},
+                    {"serve": [asked, answered]},
+                    {"tick": True},
+                ]
+            },
+        )
+        eq(
+            drew["replies"],
+            ["q1: half a thought"],
+            f"the drafts after the poll ({drew['asking']})",
+        )
+        drew = in_page(
+            paths.page(rng, repo),
+            [asked, gone],
+            ask={
+                "steps": [
+                    {"reply": {"id": "q2", "text": "the other half"}},
+                    {
+                        "serve": [
+                            {**asked, "turns": [{"role": "claude", "text": "it moved"}]},
+                            gone,
+                        ]
+                    },
+                    {"tick": True},
+                ]
+            },
+        )
         eq(drew["replies"], ["q2: the other half"], f"an orphan's draft ({drew['asking']})")
 
 
@@ -1731,18 +1783,30 @@ def a_line_on_the_commits_tab_cannot_be_asked_about():
     exactly the moment it is answered. Questions are asked on Files changed."""
     with sandbox() as (repo, run):
         rng = files_review(repo, run)
-        drew = in_page(paths.page(rng, repo), [],
-                       ask={"steps": [{"gutter": "commits a.py:3 add"}]})
+        drew = in_page(
+            paths.page(rng, repo), [], ask={"steps": [{"gutter": "commits a.py:3 add"}]}
+        )
         eq(drew["composers"], 0, f"a composer on the commits tab ({drew['asking']})")
-        drew = in_page(paths.page(rng, repo), [],
-                       ask={"steps": [{"gutter": "files a.py:3 add"}]})
+        drew = in_page(
+            paths.page(rng, repo), [], ask={"steps": [{"gutter": "files a.py:3 add"}]}
+        )
         eq(drew["composers"], 1, f"a composer on the files tab ({drew['asking']})")
 
 
 def commit_thread(short, **kw):
-    return {"id": "c1", "view": "commits", "commit": short, "file": "b.py", "side": "add",
-            "line": "1", "code": "fresh", "question": "asked on a commit", "turns": [],
-            "resolved": False, **kw}
+    return {
+        "id": "c1",
+        "view": "commits",
+        "commit": short,
+        "file": "b.py",
+        "side": "add",
+        "line": "1",
+        "code": "fresh",
+        "question": "asked on a commit",
+        "turns": [],
+        "resolved": False,
+        **kw,
+    }
 
 
 @case
@@ -1753,17 +1817,32 @@ def threads_asked_on_commits_are_listed_on_the_files_tab():
     with sandbox() as (repo, run):
         rng = files_review(repo, run)
         short = run("log", "--format=%h", "-1", "HEAD").stdout.strip()
-        files = {"id": "f1", "view": "files", "file": "a.py", "side": "add", "line": "3",
-                 "code": "added by A", "question": "asked on the branch", "turns": [],
-                 "resolved": False}
+        files = {
+            "id": "f1",
+            "view": "files",
+            "file": "a.py",
+            "side": "add",
+            "line": "3",
+            "code": "added by A",
+            "question": "asked on the branch",
+            "turns": [],
+            "resolved": False,
+        }
         gone = commit_thread("deadbee", id="c2", question="asked on a commit since squashed")
-        drew = in_page(paths.page(rng, repo), [commit_thread(short), files, gone],
-                       ask={"steps": [{"commit": 1}]})
+        drew = in_page(
+            paths.page(rng, repo),
+            [commit_thread(short), files, gone],
+            ask={"steps": [{"commit": 1}]},
+        )
         eq(len(drew["commitCards"]), 1, f"threads listed ({drew['commitCards']})")
         eq("asked on a commit" in drew["commitCards"][0], True, "the one listed")
         eq(drew["orphans"], ["c2"], "the one whose commit has gone")
         # Still under its line on the Commits tab, where it was asked.
-        eq("commits b.py:1 add true" in drew["asked"], True, f"drawn on its line ({drew['asked']})")
+        eq(
+            "commits b.py:1 add true" in drew["asked"],
+            True,
+            f"drawn on its line ({drew['asked']})",
+        )
 
 
 @case
@@ -1772,12 +1851,19 @@ def a_listed_commit_thread_leads_to_its_line():
     with sandbox() as (repo, run):
         rng = files_review(repo, run)
         short = run("log", "--format=%h", "-1", "HEAD").stdout.strip()
-        drew = in_page(paths.page(rng, repo), [commit_thread(short)],
-                       ask={"steps": [{"tick": True}, {"showOnCommits": "c1"}]})
+        drew = in_page(
+            paths.page(rng, repo),
+            [commit_thread(short)],
+            ask={"steps": [{"tick": True}, {"showOnCommits": "c1"}]},
+        )
         eq(drew["tab"], "commits", f"the tab shown ({drew['asking']})")
         eq(drew["sideOpen"], True, "the thread open beside its line")
         eq(drew["sideIn"], "board", "on the commits board")
-        eq("b.py" in drew["side"] and "line 1" in drew["side"], True, f"at the line ({drew['side']!r})")
+        eq(
+            "b.py" in drew["side"] and "line 1" in drew["side"],
+            True,
+            f"at the line ({drew['side']!r})",
+        )
 
 
 @case
@@ -1789,24 +1875,48 @@ def an_open_composer_does_not_stop_the_page_repainting():
     the reader had moved away from froze both."""
     with sandbox() as (repo, run):
         rng = files_review(repo, run)
-        landed = {"id": "q9", "view": "files", "file": "a.py", "side": "del", "line": "2",
-                  "code": "DROP ME", "question": "asked elsewhere", "turns": [],
-                  "resolved": False}
-        drew = in_page(paths.page(rng, repo), [], ask={"steps": [
-            {"gutter": "files a.py:3 add"},
-            {"type": "still typing"},
-            {"serve": [landed]},
-            {"tick": True},
-        ]})
-        eq(drew["asked"], ["files a.py:2 del true"], f"drawn with the composer open ({drew['asking']})")
+        landed = {
+            "id": "q9",
+            "view": "files",
+            "file": "a.py",
+            "side": "del",
+            "line": "2",
+            "code": "DROP ME",
+            "question": "asked elsewhere",
+            "turns": [],
+            "resolved": False,
+        }
+        drew = in_page(
+            paths.page(rng, repo),
+            [],
+            ask={
+                "steps": [
+                    {"gutter": "files a.py:3 add"},
+                    {"type": "still typing"},
+                    {"serve": [landed]},
+                    {"tick": True},
+                ]
+            },
+        )
+        eq(
+            drew["asked"],
+            ["files a.py:2 del true"],
+            f"drawn with the composer open ({drew['asking']})",
+        )
         eq(drew["composerTexts"], ["still typing"], "and the composer kept")
-        drew = in_page(paths.page(rng, repo), [], ask={"steps": [
-            {"gutter": "files a.py:3 add"},
-            {"serve": [landed]},
-            {"tick": True},
-            {"cancel": True},
-            {"tick": True},
-        ]})
+        drew = in_page(
+            paths.page(rng, repo),
+            [],
+            ask={
+                "steps": [
+                    {"gutter": "files a.py:3 add"},
+                    {"serve": [landed]},
+                    {"tick": True},
+                    {"cancel": True},
+                    {"tick": True},
+                ]
+            },
+        )
         eq(drew["asked"], ["files a.py:2 del true"], f"drawn after Cancel ({drew['asking']})")
 
 
@@ -1820,27 +1930,60 @@ def every_half_typed_reply_survives_a_repaint():
         base = {"turns": [], "view": "files", "resolved": False}
         # Both on lines that are not in the diff, so both are drawn in the orphan list at
         # once, each with a reply box.
-        one = {**base, "id": "q1", "file": "a.py", "side": "add", "line": "80",
-               "code": "gone", "question": "first?"}
-        two = {**base, "id": "q2", "file": "a.py", "side": "add", "line": "90",
-               "code": "gone too", "question": "second?"}
+        one = {
+            **base,
+            "id": "q1",
+            "file": "a.py",
+            "side": "add",
+            "line": "80",
+            "code": "gone",
+            "question": "first?",
+        }
+        two = {
+            **base,
+            "id": "q2",
+            "file": "a.py",
+            "side": "add",
+            "line": "90",
+            "code": "gone too",
+            "question": "second?",
+        }
         changed = {**two, "turns": [{"role": "claude", "text": "an answer"}]}
-        drew = in_page(paths.page(rng, repo), [one, two], ask={"steps": [
-            {"reply": {"id": "q1", "text": "started here"}},
-            {"reply": {"id": "q2", "text": "then here"}},
-            {"serve": [one, changed]},
-            {"tick": True},
-        ]})
-        eq(sorted(drew["replies"]), ["q1: started here", "q2: then here"],
-           f"the drafts after a poll ({drew['asking']})")
-        drew = in_page(paths.page(rng, repo), [one, two], ask={"steps": [
-            {"reply": {"id": "q1", "text": "kept"}},
-            {"reply": {"id": "q2", "text": "sent"}},
-            {"replyEnterTwice": "q2"},
-            {"serve": [one, changed]},
-            {"tick": True},
-        ]})
-        eq(drew["replies"], ["q1: kept"], f"the drafts after sending another ({drew['asking']})")
+        drew = in_page(
+            paths.page(rng, repo),
+            [one, two],
+            ask={
+                "steps": [
+                    {"reply": {"id": "q1", "text": "started here"}},
+                    {"reply": {"id": "q2", "text": "then here"}},
+                    {"serve": [one, changed]},
+                    {"tick": True},
+                ]
+            },
+        )
+        eq(
+            sorted(drew["replies"]),
+            ["q1: started here", "q2: then here"],
+            f"the drafts after a poll ({drew['asking']})",
+        )
+        drew = in_page(
+            paths.page(rng, repo),
+            [one, two],
+            ask={
+                "steps": [
+                    {"reply": {"id": "q1", "text": "kept"}},
+                    {"reply": {"id": "q2", "text": "sent"}},
+                    {"replyEnterTwice": "q2"},
+                    {"serve": [one, changed]},
+                    {"tick": True},
+                ]
+            },
+        )
+        eq(
+            drew["replies"],
+            ["q1: kept"],
+            f"the drafts after sending another ({drew['asking']})",
+        )
 
 
 @case
@@ -1849,19 +1992,40 @@ def a_question_or_reply_sent_twice_from_the_keyboard_goes_once():
     pressed twice, it asked the same question twice, and Claude answered it twice."""
     with sandbox() as (repo, run):
         rng = files_review(repo, run)
-        drew = in_page(paths.page(rng, repo), [], ask={"steps": [
-            {"gutter": "files a.py:3 add"},
-            {"type": "once, please"},
-            {"ctrlEnterTwice": True},
-        ]})
+        drew = in_page(
+            paths.page(rng, repo),
+            [],
+            ask={
+                "steps": [
+                    {"gutter": "files a.py:3 add"},
+                    {"type": "once, please"},
+                    {"ctrlEnterTwice": True},
+                ]
+            },
+        )
         asks = [row for row in drew["posted"] if "url" not in row]
         eq(len(asks), 1, f"questions posted ({drew['posted']})")
-        orphan = {"id": "q1", "view": "files", "file": "a.py", "side": "add", "line": "80",
-                  "code": "gone", "question": "?", "turns": [], "resolved": False}
-        drew = in_page(paths.page(rng, repo), [orphan], ask={"steps": [
-            {"reply": {"id": "q1", "text": "once"}},
-            {"replyEnterTwice": "q1"},
-        ]})
+        orphan = {
+            "id": "q1",
+            "view": "files",
+            "file": "a.py",
+            "side": "add",
+            "line": "80",
+            "code": "gone",
+            "question": "?",
+            "turns": [],
+            "resolved": False,
+        }
+        drew = in_page(
+            paths.page(rng, repo),
+            [orphan],
+            ask={
+                "steps": [
+                    {"reply": {"id": "q1", "text": "once"}},
+                    {"replyEnterTwice": "q1"},
+                ]
+            },
+        )
         replies = [row for row in drew["posted"] if row.get("url") == "/reply"]
         eq(len(replies), 1, f"replies posted ({drew['posted']})")
 
@@ -1873,15 +2037,24 @@ def a_question_on_a_long_line_is_not_outdated_as_soon_as_it_is_asked():
     its line had changed since, the moment it was asked. The emoji is there because git
     counts characters and a page slicing by UTF-16 units would cut it in half."""
     with sandbox() as (repo, run):
-        long = "x = '" + "\U0001F600" + "y" * 440 + "'"
+        long = "x = '" + "\U0001f600" + "y" * 440 + "'"
         (repo / "c.py").write_text("short\n" + long + "\n")
         run("checkout", "-qb", "long")
         run("add", "-A")
         run("commit", "-qm", "A long line")
         page, _ = built_page(repo)
         stored = long[:400]  # what tool/server.py writes to questions.jsonl
-        thread = {"id": "q1", "view": "files", "file": "c.py", "side": "add", "line": "2",
-                  "code": stored, "question": "why so long?", "turns": [], "resolved": False}
+        thread = {
+            "id": "q1",
+            "view": "files",
+            "file": "c.py",
+            "side": "add",
+            "line": "2",
+            "code": stored,
+            "question": "why so long?",
+            "turns": [],
+            "resolved": False,
+        }
         drew = in_page(page, [thread], ask={"steps": [{"open": True}]})
         eq(drew["outdated"], [], "said to be outdated")
         eq(drew["asked"], ["files c.py:2 add true"], "drawn on its line")
@@ -1911,11 +2084,17 @@ def opening_one_file_leaves_a_composer_in_another_alone():
     the whole file" under one file threw away a question being typed under another."""
     with sandbox() as (repo, run):
         page = one_stage_and_a_loose_file(repo, run)
-        drew = in_page(page, [], ask={"steps": [
-            {"gutter": "files c.py:1 add"},
-            {"type": "half a question"},
-            {"wholeOf": "a.py"},
-        ]})
+        drew = in_page(
+            page,
+            [],
+            ask={
+                "steps": [
+                    {"gutter": "files c.py:1 add"},
+                    {"type": "half a question"},
+                    {"wholeOf": "a.py"},
+                ]
+            },
+        )
         eq(drew["composerTexts"], ["half a question"], f"the composer ({drew['asking']})")
 
 
@@ -1926,15 +2105,36 @@ def the_commit_keys_only_move_the_commits_tab():
     kept the arrows from scrolling the page."""
     with sandbox() as (repo, run):
         rng = files_review(repo, run)
-        thread = {"id": "q1", "view": "files", "file": "a.py", "side": "del", "line": "2",
-                  "code": "DROP ME", "question": "?", "turns": [], "resolved": False}
-        drew = in_page(paths.page(rng, repo), [thread], ask={"steps": [
-            {"gutter": "files a.py:2 del"},
-            {"key": "ArrowDown"},
-        ]})
-        eq(drew["sideOpen"], True, f"the panel after ArrowDown on Files changed ({drew['asking']})")
+        thread = {
+            "id": "q1",
+            "view": "files",
+            "file": "a.py",
+            "side": "del",
+            "line": "2",
+            "code": "DROP ME",
+            "question": "?",
+            "turns": [],
+            "resolved": False,
+        }
+        drew = in_page(
+            paths.page(rng, repo),
+            [thread],
+            ask={
+                "steps": [
+                    {"gutter": "files a.py:2 del"},
+                    {"key": "ArrowDown"},
+                ]
+            },
+        )
+        eq(
+            drew["sideOpen"],
+            True,
+            f"the panel after ArrowDown on Files changed ({drew['asking']})",
+        )
         eq(drew["selectedCommit"], 0, "the commit selected")
-        drew = in_page(paths.page(rng, repo), [], ask={"steps": [{"tab": "commits"}, {"key": "j"}]})
+        drew = in_page(
+            paths.page(rng, repo), [], ask={"steps": [{"tab": "commits"}, {"key": "j"}]}
+        )
         eq(drew["selectedCommit"], 1, f"j on the Commits tab ({drew['asking']})")
 
 
@@ -1946,11 +2146,17 @@ def the_files_no_stage_claims_are_the_only_ones_listed_under_that_entry():
     with sandbox() as (repo, run):
         page = one_stage_and_a_loose_file(repo, run)
         base = {"view": "files", "side": "add", "line": "1", "turns": [], "resolved": False}
-        threads = [{**base, "id": "z", "file": "z.py", "code": "loose", "question": "?"},
-                   {**base, "id": "c", "file": "c.py", "code": "c1", "question": "?"}]
+        threads = [
+            {**base, "id": "z", "file": "z.py", "code": "loose", "question": "?"},
+            {**base, "id": "c", "file": "c.py", "code": "c1", "question": "?"},
+        ]
         drew = in_page(page, threads, ask={"steps": [{"stage": "not in any stage"}]})
         eq(drew["filesDrawn"], ["z.py"], f"the files listed ({drew['asking']})")
-        eq("stage not in any stage: 1 question" in drew["flags"], True, f"its count ({drew['flags']})")
+        eq(
+            "stage not in any stage: 1 question" in drew["flags"],
+            True,
+            f"its count ({drew['flags']})",
+        )
 
 
 @case
@@ -1959,12 +2165,27 @@ def the_files_tab_has_the_view_toggles_too():
     which is read only now. The tab a reviewer asks on had no way to change them."""
     with sandbox() as (repo, run):
         rng = files_review(repo, run)
-        thread = {"id": "q1", "view": "files", "file": "a.py", "side": "del", "line": "2",
-                  "code": "DROP ME", "question": "?", "turns": [], "resolved": False}
-        drew = in_page(paths.page(rng, repo), [thread], ask={"steps": [
-            {"toggle": "Thread at the side"},
-            {"toggle": "Hide resolved"},
-        ]})
+        thread = {
+            "id": "q1",
+            "view": "files",
+            "file": "a.py",
+            "side": "del",
+            "line": "2",
+            "code": "DROP ME",
+            "question": "?",
+            "turns": [],
+            "resolved": False,
+        }
+        drew = in_page(
+            paths.page(rng, repo),
+            [thread],
+            ask={
+                "steps": [
+                    {"toggle": "Thread at the side"},
+                    {"toggle": "Hide resolved"},
+                ]
+            },
+        )
         eq("side-threads" in drew["body"], False, f"threads at the side ({drew['asking']})")
         eq("hide-resolved" in drew["body"], True, "resolved threads hidden")
         # Inline now, so the thread is a row under its line rather than in the panel.
@@ -1978,15 +2199,30 @@ def an_older_poll_landing_late_does_not_undo_a_newer_one():
     so a thread just resolved looked open again until the next poll."""
     with sandbox() as (repo, run):
         rng = files_review(repo, run)
-        open_ = {"id": "q1", "view": "files", "file": "a.py", "side": "del", "line": "2",
-                 "code": "DROP ME", "question": "?", "turns": [], "resolved": False}
-        drew = in_page(paths.page(rng, repo), [open_], ask={"steps": [
-            {"slowNext": 60},
-            {"tick": True},
-            {"serve": [{**open_, "resolved": True}]},
-            {"tick": True},
-            {"wait": 120},
-        ]})
+        open_ = {
+            "id": "q1",
+            "view": "files",
+            "file": "a.py",
+            "side": "del",
+            "line": "2",
+            "code": "DROP ME",
+            "question": "?",
+            "turns": [],
+            "resolved": False,
+        }
+        drew = in_page(
+            paths.page(rng, repo),
+            [open_],
+            ask={
+                "steps": [
+                    {"slowNext": 60},
+                    {"tick": True},
+                    {"serve": [{**open_, "resolved": True}]},
+                    {"tick": True},
+                    {"wait": 120},
+                ]
+            },
+        )
         eq(drew["asked"], ["files a.py:2 del resolved"], f"the thread ({drew['asking']})")
 
 

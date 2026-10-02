@@ -345,7 +345,9 @@ def review_digest(entry, blobs):
     body = [entry["status"], entry["was"]]
     if entry["binary"]:
         body.append(blobs.get(entry["path"], ""))
-    body += [row["t"] + " " + row["text"] for row in entry["rows"] if row["t"] in ("add", "del")]
+    body += [
+        row["t"] + " " + row["text"] for row in entry["rows"] if row["t"] in ("add", "del")
+    ]
     return hashlib.sha1("\n".join(body).encode()).hexdigest()[:16]
 
 

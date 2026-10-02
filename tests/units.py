@@ -387,7 +387,9 @@ def review_digest_reads_what_changed_and_not_where():
     """A tick on the files tab is checked against this, so it has to move with what a
     reviewer read and nothing else. Rebasing onto a main that grew above the change
     renumbers every row and changes the context; the reviewer has read nothing new."""
-    entry = lambda rows, **kw: dict(status="modified", was="a.py", binary=False, rows=rows, **kw)
+    entry = lambda rows, **kw: dict(
+        status="modified", was="a.py", binary=False, rows=rows, **kw
+    )
     read = [
         dict(t="hunk", text="@@ -1,2 +1,2 @@"),
         dict(t="ctx", o=1, n=1, text="import os"),
