@@ -2,6 +2,95 @@
 
 Dates are the day the change landed. Versions follow [semver](https://semver.org).
 
+## 2.2.0
+
+Two things to do on upgrade. A review that is already running keeps the code it started
+with: its server writes questions in the old shape and its page has no Files changed
+questions at all. So stop each running review and start it again, which rebuilds its page.
+And a commit you ticked as reviewed is no longer ticked, because ticks are on files now.
+Which files a tick on a commit covered is not something the tick recorded.
+
+No prompt, narrative key or command-line argument changed. Every narrative on disk still
+builds, and every thread on disk still reads.
+
+### Questions are asked on Files changed
+
+Click a line number on Files changed to ask about it. The question is anchored to the file,
+the side and the line in the branch as it stands, the way a pull request comment is, with
+no commit in it. `questions.jsonl` records which view a question was asked on; a row
+without one was asked on Commits, as every row before this was.
+
+The watcher works out which commit a files question should be fixed up into when it reads
+the question, from `git blame` on the tip of the range. It names none for a removed line,
+which blame cannot see, or for a line older than the branch, whose fixup would rewrite
+history nobody asked about.
+
+The Commits tab is read only. A commit's diff numbers a line in that commit's version of
+the file, and the fixup a question leads to rewrites the commit, so a question asked there
+lost its line at the moment it was answered. Threads already asked there stay under their
+lines, and are listed at the end of Files changed with a way to the line each was asked on.
+One whose commit has gone is an orphan, as before.
+
+### A thread follows its line through a fixup, or says it cannot
+
+A fixup changes the branch as it stands, which is what a files anchor points into. So where
+a thread belongs is worked out each time rather than assumed:
+
+| After the change | The thread |
+| --- | --- |
+| Its line still holds what was asked about | stays |
+| That text is now on one other line of the file | moves there |
+| That text is gone, and the line is still there | stays, marked outdated |
+| The line is gone | goes to the orphans |
+
+An outdated thread carries the text it was asked about, since the line no longer shows it,
+and its dot in the gutter is hollow.
+
+### A stage draws the lines it removed
+
+A stage pane showed what a stage wrote, so "why did you drop this" had nothing to click.
+Removed lines are drawn under the stage that removed them now, found by reverse blame along
+the branch's first parents. A stage that empties a file out says so instead of drawing the
+whole of it back.
+
+### Reviewed is a file, not a commit
+
+Tick a file off with the box beside its header on Files changed. It closes, its stage says
+`reviewed` once every file in it is, and the squash bar waits until every file is ticked. A
+tick records what the file changes, so a rebase or a squash leaves it standing, and a fixup
+to that file clears it and says `changed since reviewed`.
+
+### Where the questions are
+
+The Files changed tab, each stage and each file say how many open questions they hold, so
+a question can be found without opening everything. A stage counts only what its pane
+draws; one elsewhere in the same file is counted on its `Show the whole file` button. A
+place whose questions are all resolved says so in grey. Files changed has its own Changes
+only, Wrap lines, Hide resolved and Thread at the side toggles too.
+
+### Fixed
+
+- A thread opened from Files changed showed an empty panel: the panel was inside the hidden
+  Commits board.
+- An answer that landed while a question was being typed stayed off the page after Cancel,
+  and a composer left open on the other tab froze both.
+- A half-typed reply was wiped by the next answer to land on any thread.
+- Ctrl+Enter pressed twice sent the question or reply twice.
+- A question on a line longer than 400 characters said it was outdated as soon as it was
+  asked.
+- Opening a file or pressing `Show the whole file` threw away a question being typed under
+  another file.
+- j, k and the arrows moved the hidden Commits tab while you read Files changed, and closed
+  your panel.
+- `not in any stage` listed every file in the branch, not only the ones it counted.
+- A slow poll could put back threads older than the ones on the page.
+- Threads disappeared from a stage pane once it was rebuilt, and a composer left in one
+  stopped the page drawing threads at all.
+- A question written by a server that was running before the files tab could record its
+  view was filed with the orphans.
+- The outdated note pinned itself over the thread in the panel.
+- A commit's file header put each of its parts on a line of its own.
+
 ## 2.1.0
 
 Nothing to do on upgrade. Files changed is the tab that opens now, and a stage only appears
