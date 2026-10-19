@@ -150,18 +150,27 @@
   /* Below this width a third column would squeeze the diff past reading, so the panel
      floats instead. It covers the code, which is the thing this layout exists to avoid,
      so the inline mode is the better choice on a narrow screen. */
-  /* Three columns stop fitting before the panel does. The commit list is the one you are
-     not reading while a thread is open, so it gives up its column first and comes back on
-     Close. */
+  /* Three columns stop fitting before the panel does, so the rail gives up its width
+     first: down to its numbers, still in order and still to be clicked, and back in full
+     on Close. Hidden outright, it took the narrative with it, since on Files changed the
+     rail is the stages and the walk through them is the reason to read in that order. */
   @media (max-width: 1660px) {
-    body.side-threads.side-open .board { grid-template-columns: minmax(0, 1fr) minmax(380px, 460px); }
-    body.side-threads.side-open .rail { display: none; }
+    body.side-threads.side-open .board { grid-template-columns: 52px minmax(0, 1fr) minmax(380px, 460px); }
+    body.side-threads.side-open .rail h2, body.side-threads.side-open .rail .cb-body { display: none; }
+    body.side-threads.side-open .rail .commit-btn { grid-template-columns: 1fr; padding: 10px 0; text-align: center; }
+    body.side-threads.side-open .rail .cb-num { padding-top: 0; }
+    /* The count of open questions is in the hidden body, so a dot under the number says
+       there are some. */
+    body.side-threads.side-open .rail .commit-btn[data-q]:not([data-quiet="true"]) .cb-num::after {
+      content: ""; display: block; width: 6px; height: 6px; margin: 4px auto 0; border-radius: 50%; background: var(--accent);
+    }
   }
   /* Narrower than this the diff itself stops being readable beside a panel, so the panel
      floats. It covers the code, which is what this layout exists to avoid, so the inline
      toggle is the better choice at this width. */
   @media (max-width: 1080px) {
     body.side-threads.side-open .board { grid-template-columns: minmax(0, 1fr); }
+    body.side-threads.side-open .rail { display: none; }
     .side { position: fixed; top: 0; right: 0; bottom: 0; width: min(420px, 92vw); max-height: none; border-radius: 0; z-index: 30; }
   }
   @media (max-width: 940px) { .board { grid-template-columns: 1fr; } }
@@ -788,6 +797,8 @@
   DATA.commits.forEach((c, i) => {
     const btn = el("button", "commit-btn");
     btn.type = "button";
+    // What the button is called when the rail is down to its numbers.
+    btn.title = c.headline || c.subject || c.short;
     btn.appendChild(el("span", "cb-num", String(i + 1)));
     const body = el("div", "cb-body");
     /* The mark rides above the diff numbers, because it is what decides whether the
@@ -1783,6 +1794,8 @@
     entries.forEach((entry, i) => {
       const btn = el("button", "commit-btn" + (entry.spent ? " is-skim" : ""));
       btn.type = "button";
+      // What the button is called when the rail is down to its numbers.
+      btn.title = entry.label;
       btn.appendChild(el("span", "cb-num", entry.where === null ? "·" : String(i + 1)));
       const body = el("div", "cb-body");
       body.appendChild(el("span", "cb-head", entry.label));
