@@ -5,11 +5,14 @@ failing says what is about to go wrong rather than only that something did.
 """
 
 import json
+import subprocess
+import sys
 
 import build_data
 import paths
+import review
 
-from harness import build, build_stderr, case, commit, eq, Failed, sandbox
+from harness import build, build_stderr, case, commit, eq, Failed, sandbox, TOOL
 
 # --------------------------------------------------------------------------- paths
 
@@ -345,6 +348,42 @@ def is_placeholder_only_matches_an_untouched_scaffold():
         False,
         "half filled",
     )
+
+
+def scaffold(repo, run):
+    """The narrative `narrate` writes for a one-commit branch, untouched."""
+    (repo / "a.txt").write_text("a\n")
+    run("add", "-A")
+    run("commit", "-qm", "Add a")
+    subprocess.run(
+        [sys.executable, str(TOOL / "review.py"), "narrate", "origin/main...HEAD"],
+        cwd=str(repo),
+        capture_output=True,
+        check=True,
+    )
+    return paths.narrative(paths.resolve_range("origin/main...HEAD", repo), repo)
+
+
+@case
+def narrated_ignores_an_untouched_scaffold():
+    """serve warns when a review has no narrative. The scaffold is a file with every
+    commit's subject in it, so a check for the file, or for a file with something in it,
+    let `narrate` with nothing filled in silence the warning."""
+    with sandbox() as (repo, run):
+        written = scaffold(repo, run)
+        eq(written.exists(), True, "the scaffold was written")
+        eq(review.narrated(written), False, "an untouched scaffold")
+        eq(review.narrated(written.with_name("missing.json")), False, "no file at all")
+
+
+@case
+def narrated_counts_one_filled_field():
+    with sandbox() as (repo, run):
+        written = scaffold(repo, run)
+        data = json.loads(written.read_text())
+        data["stages"][0]["what"] = "Add a"
+        written.write_text(json.dumps(data))
+        eq(review.narrated(written), True, "one stage filled in")
 
 
 # ------------------------------------------------------------------- reading a patch

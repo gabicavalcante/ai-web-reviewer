@@ -136,6 +136,27 @@ def written_by_hand(folder):
     return ", ".join(said)
 
 
+def narrated(path):
+    """Whether a narrative says anything, which is not the same as there being one.
+
+    `narrate` writes a scaffold with every field empty, and a page built from it is the
+    plain page. Counting the file would let an untouched scaffold silence the warning that
+    exists for exactly that page. A commit's `subject` is filled in by the scaffold and
+    never read, so it says nothing either.
+    """
+    if not path.exists():
+        return False
+
+    def says(value):
+        if isinstance(value, dict):
+            return any(says(v) for k, v in value.items() if k != "subject")
+        if isinstance(value, list):
+            return any(says(v) for v in value)
+        return bool(value)
+
+    return says(json.loads(path.read_text()))
+
+
 def announce_siblings(rng):
     """Name the other reviews in this checkout when this one holds nothing written.
 
@@ -287,6 +308,16 @@ def main():
     build(args.range, args.narrative)
     if args.action == "build":
         return
+
+    # A reviewer who asks for the web reviewer is asking for the narrative too. Said here,
+    # in the output the session reads, because an instruction to write one first is easy
+    # to skip and the plain page gives no sign that anything is missing.
+    narrative = pathlib.Path(args.narrative) if args.narrative else paths.narrative(args.range)
+    if not narrated(narrative):
+        print(
+            f"no narrative for {args.range}, so the page is the plain diff. Read the "
+            f"branch, run `review.py narrate {args.range}`, fill it in, and rebuild."
+        )
 
     port = free_port(args.port)
     print(f"review page on http://localhost:{port}")

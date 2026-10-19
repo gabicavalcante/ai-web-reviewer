@@ -155,9 +155,10 @@ it.
 
 | What you want | Something that gets it |
 | --- | --- |
-| Start a review | `review this branch in the browser` |
+| Start a review, narrative included | `review this branch in the browser` |
 | A different base | `open the web reviewer for my branch against develop` |
-| A narrative, after it has read the branch | `now write the narrative and rebuild the page` |
+| The plain diff, no narrative | `open the web reviewer without a narrative` |
+| A narrative written again | `rewrite the narrative and rebuild the page` |
 | A change you asked for in a thread | `do it` in the thread, or `yes, apply that` |
 | Rebuild after new commits | `rebuild the review page` |
 | Threads from an older layout | `move my old threads into the right review` |
@@ -398,12 +399,15 @@ Nothing removes them either, and they are yours to delete once you trust the res
 With no configuration the page takes its title from the branch, its figures from git, and
 each commit's rationale from that commit's own message.
 
-Ask for it once the branch has been read: `now write the narrative and rebuild the page`.
-Claude Code runs `review.py narrate <range>`, which writes a scaffold next to the review's
-state: every commit keyed by sha with its subject, every file in the range by path, and
-every field empty.
-Fill in what you know and rebuild. Every later build reads that file without a flag.
-`--narrative FILE` points at one kept elsewhere.
+Claude Code writes one every time you start a review, before it gives you the link. It
+reads the branch and runs `review.py narrate <range>`, which writes a scaffold next to the
+review's state: every commit keyed by sha with its subject, every file in the range by
+path, and every field empty. It fills in what it worked out and then serves the page.
+Every later build reads that file without a flag. `--narrative FILE` points at one kept
+elsewhere.
+
+Running the scripts yourself, the page works without one, and `serve` says when a review
+has no narrative or only the empty scaffold.
 
 It adds a data-flow strip, per-commit rationale, verification tables and a list of open
 questions. It also carries the two things the tool cannot determine: where to start, and
@@ -450,7 +454,7 @@ worse.
 | `SKILL.md` | Instructions for the agent |
 | `.claude-plugin/` | The plugin and marketplace manifests |
 | `.claude/skills/release/` | How to cut a release. Loads when working in this repo, and is not shipped to users |
-| `reference/narrative.md` | The optional editorial layer |
+| `reference/narrative.md` | The editorial layer: keys, marks and limits |
 | `reference/voice.md` | How the page's own copy is written |
 | `reference/gotchas.md` | Operational traps worth not rediscovering |
 | `reference/plan-threads-on-files.md` | Why a question is asked on the Files changed tab and only there |

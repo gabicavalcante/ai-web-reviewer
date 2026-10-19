@@ -17,12 +17,24 @@ when the skill loads. Installed as a user skill that is:
 
 ```bash
 TOOL="$HOME/.claude/skills/web-reviewer/tool"
-python3 $TOOL/review.py serve                      # origin/main...HEAD
+python3 $TOOL/review.py narrate <range>             # scaffold the narrative, then fill it in
+python3 $TOOL/review.py serve                       # origin/main...HEAD
 python3 $TOOL/review.py serve <base>..HEAD          # any range
 python3 $TOOL/review.py where                       # print the state directory
 ```
 
-It prints the URL, picking the next free port when 8777 is taken. Run it with
+**Write the narrative before you serve.** Someone who asks for the web reviewer is asking
+for the page with its narrative: the stages, where to start, what each file is for. So
+read the branch, run `narrate` on the range you will serve, fill in what you worked out
+(see [The narrative layer](#the-narrative-layer)), and only then serve it. This holds when
+they did not mention a narrative, and when the branch is small. Skip it only when they
+say they want the plain diff.
+
+`serve` prints a line starting `no narrative for` when the review has none, or only the
+untouched scaffold. If you see it, you skipped the step above: write the narrative, run
+`review.py build <range>`, and tell the reviewer to reload before you hand them the link.
+
+`serve` prints the URL, picking the next free port when 8777 is taken. Run it with
 `run_in_background: true` so it survives the turn, then **arm the watcher** or no question
 will ever reach you:
 
@@ -98,13 +110,15 @@ cut.
 
 ## The narrative layer
 
-With no narrative the page is a good diff reader: title from the branch, figures from
-`git`, each commit's "why" from its own message, and the editorial sections hidden.
+Every review gets one, written before the page is served. Without it the page is a plain
+diff reader: title from the branch, figures from `git`, each commit's "why" from its own
+message, and the editorial sections hidden. That is the page someone gets from the tool
+without you, not the one they asked you for.
 
-After you have actually reviewed the branch, `python3 $TOOL/review.py narrate <range>`
-writes a scaffold into the state directory: every commit keyed by sha with its subject,
-and every field empty. Fill in what you worked out and rebuild. Every later build reads it
-without a flag, so `--narrative FILE` is only for keeping one somewhere else.
+Read the branch first, then `python3 $TOOL/review.py narrate <range>` writes a scaffold
+into the state directory: every commit keyed by sha with its subject, and every field
+empty. Fill in what you worked out. Every later build reads it without a flag, so
+`--narrative FILE` is only for keeping one somewhere else.
 
 Fill in nothing you have not worked out. Every field falls back to git when left empty, so
 a scaffold you only half understand renders as the plain page, which is the honest one. A
